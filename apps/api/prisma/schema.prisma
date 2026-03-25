@@ -1,0 +1,344 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  PLATFORM_ADMIN
+  ORG_OWNER
+  ORG_ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum SourceType {
+  USER_INPUT
+  IMPORT
+  GIS_CADASTRE
+  PLANNING_DOCUMENT
+  THIRD_PARTY_API
+  SYSTEM_DERIVED
+  MANUAL_OVERRIDE
+}
+
+enum StrategyType {
+  FREE_MARKET_RENTAL
+  SUBSIDIZED_RENTAL
+  STUDENT_HOUSING
+  BUILD_TO_SELL
+  MIXED_STRATEGY
+}
+
+enum AcquisitionType {
+  BUY
+  LEASE
+  OPTION
+}
+
+enum OptimizationTarget {
+  MIN_BREAK_EVEN_RENT
+  MIN_BREAK_EVEN_SALES_PRICE
+  MIN_REQUIRED_EQUITY
+  MAX_SUBSIDY_ADJUSTED_IRR
+  MAX_UNIT_COUNT
+}
+
+enum ScenarioStatus {
+  DRAFT
+  READY
+  RUNNING
+  COMPLETED
+  FAILED
+  ARCHIVED
+}
+
+enum ScenarioRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum ScenarioReadinessStatus {
+  READY
+  READY_WITH_WARNINGS
+  BLOCKED
+}
+
+enum PlanningParameterType {
+  NUMBER
+  BOOLEAN
+  JSON
+  GEOMETRY
+}
+
+enum PlanningParameterKey {
+  GRZ
+  GFZ
+  MAX_BGF_SQM
+  MAX_HEIGHT_M
+  MAX_FLOORS
+  MAX_UNITS
+  BUILDABLE_WINDOW
+  PARKING_SPACES_PER_UNIT
+  SUBSIDY_ELIGIBILITY
+  RENT_CAP_EUR_SQM
+  LOAN_CAP_PCT
+}
+
+enum FinancingSourceType {
+  STATE_SUBSIDY
+  KFW
+  FREE_FINANCING
+  GRANT
+  EQUITY
+}
+
+enum FundingProviderType {
+  COMMERCIAL_BANK
+  STATE_SUBSIDY_BANK
+  KFW
+}
+
+enum FundingCategory {
+  FREE_LOAN
+  STATE_SUBSIDY_LOAN
+  KFW_LOAN
+}
+
+model User {
+  id            String                   @id @default(uuid())
+  email         String                   @unique
+  memberships   OrganizationMembership[]
+  scenarios     Scenario[]
+  triggeredRuns ScenarioRun[]
+}
+
+model Organization {
+  id          String                   @id @default(uuid())
+  slug        String                   @unique
+  name        String
+  memberships OrganizationMembership[]
+  parcels     Parcel[]
+  planningParameters PlanningParameter[]
+  scenarios   Scenario[]
+  runs        ScenarioRun[]
+}
+
+model OrganizationMembership {
+  id             String       @id @default(uuid())
+  userId         String
+  organizationId String
+  role           UserRole
+  isDefault      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model Parcel {
+  id               String              @id @default(uuid())
+  organizationId   String
+  name             String?
+  cadastralId      String?
+  addressLine1     String?
+  city             String?
+  postalCode       String?
+  stateCode        String?
+  countryCode      String?             @default("DE")
+  municipalityName String?
+  districtName     String?
+  landAreaSqm      Decimal?
+  sourceType       SourceType
+  sourceReference  String?
+  confidenceScore  Int?
+  geom             Json?
+  centroid         Json?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  organization     Organization        @relation(fields: [organizationId], references: [id])
+  planningParameters PlanningParameter[]
+  scenarios        Scenario[]
+}
+
+model PlanningParameter {
+  id                String               @id @default(uuid())
+  organizationId    String
+  parcelId          String?
+  planningDocumentId String?
+  parcelGroupId     String?
+  parameterKey      PlanningParameterKey?
+  customKey         String?
+  keyNamespace      String
+  keySlug           String
+  parameterType     PlanningParameterType
+  label             String
+  unit              String?
+  valueText         String?
+  valueNumber       Decimal?
+  valueBoolean      Boolean?
+  valueJson         Json?
+  geom              Json?
+  sourceType        SourceType
+  sourceReference   String?
+  confidenceScore   Int?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  organization      Organization         @relation(fields: [organizationId], references: [id])
+  parcel            Parcel?              @relation(fields: [parcelId], references: [id])
+}
+
+model FundingProgram {
+  id                   String                 @id @default(uuid())
+  organizationId       String?
+  code                 String                 @unique
+  name                 String
+  providerName         String
+  providerType         FundingProviderType
+  category             FundingCategory
+  stateCode            String?
+  isGlobal             Boolean                @default(true)
+  isActive             Boolean                @default(true)
+  description          String?
+  sourceType           SourceType
+  sourceReference      String?
+  confidenceScore      Int?
+  metadata             Json?
+  variants             FundingProgramVariant[]
+}
+
+model FundingProgramVariant {
+  id                       String             @id @default(uuid())
+  fundingProgramId         String
+  code                     String             @unique
+  name                     String
+  termMonths               Int?
+  interestRatePct          Decimal?
+  maxLoanPct               Decimal?
+  maxLoanPerSqm            Decimal?
+  rentCapEurSqm            Decimal?
+  loanCapPct               Decimal?
+  subsidyEligibleSharePct  Decimal?
+  eligibleStrategyTypes    StrategyType[]
+  allowsKfwCombination     Boolean            @default(false)
+  metadata                 Json?
+  fundingProgram           FundingProgram     @relation(fields: [fundingProgramId], references: [id])
+  scenarioFundingVariants  ScenarioFundingVariant[]
+}
+
+model Scenario {
+  id                        String                   @id @default(uuid())
+  organizationId            String
+  createdById               String
+  parcelId                  String?
+  parcelGroupId             String?
+  name                      String
+  description               String?
+  status                    ScenarioStatus           @default(DRAFT)
+  strategyType              StrategyType
+  acquisitionType           AcquisitionType
+  optimizationTarget        OptimizationTarget
+  strategyMixJson           Json?
+  avgUnitSizeSqm            Decimal?
+  targetMarketRentEurSqm    Decimal?
+  targetSubsidizedRentEurSqm Decimal?
+  targetSalesPriceEurSqm    Decimal?
+  subsidizedSharePct        Decimal?
+  hardCostPerBgfSqm         Decimal?
+  softCostPct               Decimal?
+  parkingCostPerSpace       Decimal?
+  landCost                  Decimal?
+  equityTargetPct           Decimal?
+  inputsJson                Json?
+  latestRunAt               DateTime?
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
+  organization              Organization             @relation(fields: [organizationId], references: [id])
+  createdBy                 User                     @relation(fields: [createdById], references: [id])
+  parcel                    Parcel?                  @relation(fields: [parcelId], references: [id])
+  fundingVariants           ScenarioFundingVariant[]
+  runs                      ScenarioRun[]
+}
+
+model ScenarioFundingVariant {
+  id                      String               @id @default(uuid())
+  scenarioId              String
+  fundingProgramVariantId String?
+  label                   String
+  financingSourceType     FinancingSourceType
+  stackOrder              Int
+  isEnabled               Boolean              @default(true)
+  amountOverride          Decimal?
+  sharePctOverride        Decimal?
+  interestRateOverridePct Decimal?
+  termMonthsOverride      Int?
+  notes                   String?
+  scenario                Scenario             @relation(fields: [scenarioId], references: [id])
+  fundingProgramVariant   FundingProgramVariant? @relation(fields: [fundingProgramVariantId], references: [id])
+}
+
+model ScenarioRun {
+  id                    String                  @id @default(uuid())
+  organizationId        String
+  scenarioId            String
+  triggeredById         String?
+  status                ScenarioRunStatus
+  readinessStatus       ScenarioReadinessStatus?
+  readinessIssuesJson   Json?
+  queueJobId            String?
+  engineVersion         String?
+  inputSnapshot         Json?
+  warningsJson          Json?
+  missingDataFlagsJson  Json?
+  confidenceReasonsJson Json?
+  inputConfidencePct    Int?
+  outputConfidencePct   Int?
+  errorMessage          String?
+  requestedAt           DateTime                @default(now())
+  startedAt             DateTime?
+  finishedAt            DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  organization          Organization            @relation(fields: [organizationId], references: [id])
+  scenario              Scenario                @relation(fields: [scenarioId], references: [id])
+  triggeredBy           User?                   @relation(fields: [triggeredById], references: [id])
+  financialResult       FinancialResult?
+}
+
+model FinancialResult {
+  id                                   String      @id @default(uuid())
+  scenarioRunId                        String      @unique
+  buildableFootprintSqm                Decimal?
+  buildableBgfSqm                      Decimal?
+  effectiveFloors                      Int?
+  estimatedUnitCount                   Int?
+  requiredParkingSpaces                Int?
+  hardCost                             Decimal?
+  softCost                             Decimal?
+  parkingCost                          Decimal?
+  totalDevelopmentCost                 Decimal?
+  freeFinancingAmount                  Decimal?
+  stateSubsidyAmount                   Decimal?
+  kfwAmount                            Decimal?
+  grantAmount                          Decimal?
+  equityAmount                         Decimal?
+  requiredEquity                       Decimal?
+  breakEvenRentEurSqm                  Decimal?
+  breakEvenSalesPriceEurSqm            Decimal?
+  subsidyAdjustedBreakEvenRentEurSqm   Decimal?
+  subsidyAdjustedProfitPct             Decimal?
+  subsidyAdjustedIrrPct                Decimal?
+  warningsJson                         Json?
+  missingDataFlagsJson                 Json?
+  confidenceReasonsJson                Json?
+  outputConfidencePct                  Int?
+  outputsJson                          Json?
+  createdAt                            DateTime    @default(now())
+  updatedAt                            DateTime    @updatedAt
+  scenarioRun                          ScenarioRun @relation(fields: [scenarioRunId], references: [id])
+}

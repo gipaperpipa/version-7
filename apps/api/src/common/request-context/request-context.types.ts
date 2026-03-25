@@ -1,0 +1,19 @@
+import type { Request } from "express";
+import type { UserRole } from "@repo/contracts";
+
+export interface JwtPrincipal {
+  sub: string;
+  email: string;
+}
+
+export interface TenantRequestContext {
+  userId: string;
+  organizationId: string;
+  organizationSlug: string;
+  role: UserRole;
+}
+
+export interface AuthenticatedRequest extends Request {
+  user?: JwtPrincipal;
+  tenantContext?: TenantRequestContext;
+}
