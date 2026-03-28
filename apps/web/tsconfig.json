@@ -15,6 +15,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@repo/contracts": [
+        "./src/generated-contracts/index.ts"
       ]
     },
     "lib": [

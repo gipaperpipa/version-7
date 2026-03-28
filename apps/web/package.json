@@ -3,10 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "wait-on ../../packages/contracts/dist/index.js && next dev -p 3001",
-    "build": "pnpm --filter @repo/contracts build && next build",
+    "dev": "pnpm --filter @repo/contracts build && node scripts/sync-contracts-source.cjs && next dev -p 3001",
+    "build": "pnpm --filter @repo/contracts build && node scripts/sync-contracts-source.cjs && next build",
     "start": "next start -p 3001",
-    "typecheck": "pnpm --filter @repo/contracts build && tsc -p tsconfig.json --noEmit"
+    "typecheck": "pnpm --filter @repo/contracts build && node scripts/sync-contracts-source.cjs && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@repo/contracts": "workspace:*",
@@ -15,6 +15,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4"
