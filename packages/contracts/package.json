@@ -2,18 +2,16 @@
   "name": "@repo/contracts",
   "version": "0.0.0",
   "private": true,
-  "main": "./index.js",
-  "types": "./index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
-      "default": "./index.js"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     }
   },
   "files": [
-    "dist",
-    "index.js",
-    "index.d.ts"
+    "dist"
   ],
   "scripts": {
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",

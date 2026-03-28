@@ -6,7 +6,7 @@
     "moduleResolution": "Node",
     "paths": {
       "@repo/contracts": [
-        "../../packages/contracts"
+        "../../packages/contracts/dist/index.d.ts"
       ],
       "@repo/contracts/*": [
         "../../packages/contracts/dist/*"
