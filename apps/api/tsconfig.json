@@ -4,6 +4,14 @@
     "baseUrl": ".",
     "module": "CommonJS",
     "moduleResolution": "Node",
+    "paths": {
+      "@repo/contracts": [
+        "../../packages/contracts/dist/index"
+      ],
+      "@repo/contracts/*": [
+        "../../packages/contracts/dist/*"
+      ]
+    },
     "rootDir": "src",
     "outDir": "dist",
     "experimentalDecorators": true,

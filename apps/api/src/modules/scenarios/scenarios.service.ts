@@ -134,7 +134,7 @@ export class ScenariosService {
         where: { scenarioId },
       }),
       this.prisma.scenarioFundingVariant.createMany({
-        data: dto.items.map((item) => ({
+        data: dto.items.map((item: UpsertScenarioFundingStackRequestDto["items"][number]) => ({
           scenarioId,
           fundingProgramVariantId: item.fundingProgramVariantId ?? null,
           label: item.label,
