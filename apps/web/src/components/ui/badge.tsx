@@ -1,8 +1,18 @@
 import type { HTMLAttributes, PropsWithChildren } from "react";
+import { cx } from "@/lib/ui/cx";
 
-export function Badge({ children, className = "", ...props }: PropsWithChildren<HTMLAttributes<HTMLSpanElement>>) {
+export type BadgeVariant = "neutral" | "surface" | "accent" | "success" | "warning" | "danger" | "info";
+
+export function Badge({
+  children,
+  className,
+  variant = "neutral",
+  ...props
+}: PropsWithChildren<HTMLAttributes<HTMLSpanElement>> & {
+  variant?: BadgeVariant;
+}) {
   return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${className}`} {...props}>
+    <span className={cx("badge", `badge--${variant}`, className)} {...props}>
       {children}
     </span>
   );

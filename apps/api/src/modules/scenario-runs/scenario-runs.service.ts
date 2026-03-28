@@ -3,7 +3,7 @@ import { Injectable, NotFoundException, Scope, UnprocessableEntityException } fr
 import { Queue } from "bullmq";
 import { ScenarioRunStatus } from "@prisma/client";
 import type { FinancialResultDto, ScenarioRunDto } from "@repo/contracts";
-import { toApiDate, toApiDecimal, toApiJson } from "../../common/prisma/api-mappers";
+import { toApiDate, toApiDecimal, toApiJson, toPrismaJson } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";
 import { ScenarioInputBuilderService } from "../scenarios/scenario-input-builder.service";
@@ -42,11 +42,11 @@ export class ScenarioRunsService {
         triggeredById: this.requestContext.userId,
         status: ScenarioRunStatus.QUEUED,
         readinessStatus: readiness.readiness.status,
-        inputSnapshot: this.scenarioInputBuilderService.buildSnapshot(scenario),
-        readinessIssuesJson: readiness.readiness.issues,
-        warningsJson: readiness.readiness.issues.filter((item) => item.severity === "WARNING"),
-        missingDataFlagsJson: [],
-        confidenceReasonsJson: readiness.confidenceReasons,
+        inputSnapshot: toPrismaJson(this.scenarioInputBuilderService.buildSnapshot(scenario)),
+        readinessIssuesJson: toPrismaJson(readiness.readiness.issues),
+        warningsJson: toPrismaJson(readiness.readiness.issues.filter((item) => item.severity === "WARNING")),
+        missingDataFlagsJson: toPrismaJson([]),
+        confidenceReasonsJson: toPrismaJson(readiness.confidenceReasons),
         inputConfidencePct: readiness.inputConfidencePct,
       },
     });

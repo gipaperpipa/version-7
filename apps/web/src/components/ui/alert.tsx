@@ -1,24 +1,32 @@
 import type { HTMLAttributes, PropsWithChildren } from "react";
+import { cx } from "@/lib/ui/cx";
 
-export function Alert({ children, className = "", ...props }: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) {
+export function Alert({
+  children,
+  className,
+  tone = "neutral",
+  ...props
+}: PropsWithChildren<HTMLAttributes<HTMLDivElement>> & {
+  tone?: "neutral" | "info" | "success" | "warning" | "danger";
+}) {
   return (
-    <div className={`rounded-lg border px-4 py-3 ${className}`} {...props}>
+    <div className={cx("alert", `alert--${tone}`, className)} {...props}>
       {children}
     </div>
   );
 }
 
-export function AlertTitle({ children, className = "", ...props }: PropsWithChildren<HTMLAttributes<HTMLHeadingElement>>) {
+export function AlertTitle({ children, className, ...props }: PropsWithChildren<HTMLAttributes<HTMLHeadingElement>>) {
   return (
-    <h3 className={`font-semibold ${className}`} {...props}>
+    <h3 className={cx("alert__title", className)} {...props}>
       {children}
     </h3>
   );
 }
 
-export function AlertDescription({ children, className = "", ...props }: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) {
+export function AlertDescription({ children, className, ...props }: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) {
   return (
-    <div className={`mt-1 text-sm ${className}`} {...props}>
+    <div className={cx("alert__description", className)} {...props}>
       {children}
     </div>
   );

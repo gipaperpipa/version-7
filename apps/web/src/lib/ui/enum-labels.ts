@@ -1,4 +1,4 @@
-import { AcquisitionType, OptimizationTarget, StrategyType } from "@repo/contracts";
+import { AcquisitionType, OptimizationTarget, ScenarioStatus, StrategyType } from "@repo/contracts";
 
 export const strategyTypeLabels: Record<StrategyType, string> = {
   [StrategyType.FREE_MARKET_RENTAL]: "Free-Market Rental",
@@ -21,6 +21,23 @@ export const optimizationTargetLabels: Record<OptimizationTarget, string> = {
   [OptimizationTarget.MAX_SUBSIDY_ADJUSTED_IRR]: "Maximize Subsidy-Adjusted IRR",
   [OptimizationTarget.MAX_UNIT_COUNT]: "Maximize Unit Count",
 };
+
+export const scenarioStatusLabels: Record<ScenarioStatus, string> = {
+  [ScenarioStatus.DRAFT]: "Draft",
+  [ScenarioStatus.READY]: "Ready",
+  [ScenarioStatus.RUNNING]: "Running",
+  [ScenarioStatus.COMPLETED]: "Completed",
+  [ScenarioStatus.FAILED]: "Failed",
+  [ScenarioStatus.ARCHIVED]: "Archived",
+};
+
+export function humanizeTokenLabel(token: string) {
+  return token
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 export const strategyFieldHints: Record<
   StrategyType,

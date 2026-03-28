@@ -6,7 +6,7 @@ import type {
   UpdateParcelRequestDto,
 } from "@repo/contracts";
 import { normalizePolygonGeometryToMultiPolygon } from "../../common/geo/polygon-normalization";
-import { toApiDate, toApiDecimal, toApiJson } from "../../common/prisma/api-mappers";
+import { toApiDate, toApiDecimal, toApiJson, toPrismaJson } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";
 
@@ -58,7 +58,7 @@ export class ParcelsService {
         sourceType: dto.sourceType,
         sourceReference: dto.sourceReference ?? null,
         confidenceScore: dto.confidenceScore ?? null,
-        geom: normalizePolygonGeometryToMultiPolygon(dto.geom) ?? null,
+        geom: toPrismaJson(normalizePolygonGeometryToMultiPolygon(dto.geom) ?? null),
       },
     });
 
@@ -98,7 +98,9 @@ export class ParcelsService {
         landAreaSqm: dto.landAreaSqm === undefined ? undefined : dto.landAreaSqm,
         sourceReference: dto.sourceReference,
         confidenceScore: dto.confidenceScore,
-        geom: "geom" in dto ? normalizePolygonGeometryToMultiPolygon(dto.geom) : undefined,
+        geom: "geom" in dto
+          ? toPrismaJson(normalizePolygonGeometryToMultiPolygon(dto.geom))
+          : undefined,
       },
     });
 
@@ -153,8 +155,8 @@ export class ParcelsService {
       sourceType: parcel.sourceType,
       sourceReference: parcel.sourceReference,
       confidenceScore: parcel.confidenceScore,
-      geom: toApiJson(parcel.geom),
-      centroid: toApiJson(parcel.centroid),
+      geom: toApiJson(parcel.geom as never),
+      centroid: toApiJson(parcel.centroid as never),
       createdAt: toApiDate(parcel.createdAt)!,
       updatedAt: toApiDate(parcel.updatedAt)!,
     };

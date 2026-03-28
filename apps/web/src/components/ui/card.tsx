@@ -1,32 +1,60 @@
 import type { HTMLAttributes, PropsWithChildren } from "react";
+import { cx } from "@/lib/ui/cx";
 
-export function Card({ children, className = "", ...props }: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) {
+export function Card({
+  children,
+  className,
+  tone = "default",
+  ...props
+}: PropsWithChildren<HTMLAttributes<HTMLDivElement>> & {
+  tone?: "default" | "muted" | "accent";
+}) {
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`} {...props}>
+    <div className={cx("card", tone !== "default" && `card--${tone}`, className)} {...props}>
       {children}
     </div>
   );
 }
 
-export function CardHeader({ children, className = "", ...props }: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) {
+export function CardHeader({ children, className, ...props }: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) {
   return (
-    <div className={`border-b border-slate-100 px-5 py-4 ${className}`} {...props}>
+    <div className={cx("card__header", className)} {...props}>
       {children}
     </div>
   );
 }
 
-export function CardTitle({ children, className = "", ...props }: PropsWithChildren<HTMLAttributes<HTMLHeadingElement>>) {
+export function CardEyebrow({ children, className, ...props }: PropsWithChildren<HTMLAttributes<HTMLParagraphElement>>) {
   return (
-    <h2 className={`text-base font-semibold text-slate-950 ${className}`} {...props}>
+    <p className={cx("card__eyebrow", className)} {...props}>
+      {children}
+    </p>
+  );
+}
+
+export function CardTitle({ children, className, ...props }: PropsWithChildren<HTMLAttributes<HTMLHeadingElement>>) {
+  return (
+    <h2 className={cx("card__title", className)} {...props}>
       {children}
     </h2>
   );
 }
 
-export function CardContent({ children, className = "", ...props }: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) {
+export function CardDescription({
+  children,
+  className,
+  ...props
+}: PropsWithChildren<HTMLAttributes<HTMLParagraphElement>>) {
   return (
-    <div className={`px-5 py-4 ${className}`} {...props}>
+    <p className={cx("card__description", className)} {...props}>
+      {children}
+    </p>
+  );
+}
+
+export function CardContent({ children, className, ...props }: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) {
+  return (
+    <div className={cx("card__content", className)} {...props}>
       {children}
     </div>
   );

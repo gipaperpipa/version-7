@@ -1,0 +1,113 @@
+
+> @repo/web@0.0.0 dev C:\Users\Arlind\Desktop\Projects\Version 7\apps\web
+> wait-on ../../packages/contracts/dist/index.js && next dev -p 3001
+
+   ▲ Next.js 15.5.14
+   - Local:        http://localhost:3001
+   - Network:      http://192.168.0.108:3001
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1290ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1250ms (590 modules)
+ GET / 200 in 1450ms
+ ✓ Compiled /[orgSlug]/scenarios in 164ms (607 modules)
+ GET /demo/scenarios 200 in 607ms
+ GET / 200 in 35ms
+ GET /demo/scenarios 200 in 46ms
+ GET / 200 in 55ms
+ GET / 200 in 36ms
+ GET / 200 in 37ms
+ GET / 200 in 39ms
+ ✓ Compiled /_not-found in 289ms (596 modules)
+ GET /parcel 404 in 516ms
+ GET /parcels 404 in 34ms
+ GET / 200 in 80ms
+ ✓ Compiled /[orgSlug]/scenarios in 136ms (389 modules)
+ GET /demo/scenarios 200 in 477ms
+ ✓ Compiled /[orgSlug]/parcels in 329ms (618 modules)
+ GET /demo/parcels 200 in 761ms
+ ○ Compiling /[orgSlug]/parcels/new ...
+ ✓ Compiled /[orgSlug]/parcels/new in 549ms (646 modules)
+ GET /demo/parcels/new 200 in 1008ms
+ ✓ Compiled /[orgSlug]/parcels/[parcelId] in 401ms (648 modules)
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 200 in 870ms
+ POST /demo/parcels/new 303 in 935ms
+ ○ Compiling /_error ...
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 500 in 2566ms
+ GET /demo/scenarios 500 in 2564ms
+ GET /demo/scenarios 500 in 12ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 500 in 18ms
+ GET /demo/scenarios 500 in 13ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 500 in 18ms
+ GET /demo/scenarios 500 in 109ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 500 in 38ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 500 in 123ms
+ GET /demo/scenarios 500 in 68ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 500 in 107ms
+ GET /demo/scenarios 500 in 83ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 500 in 346ms
+ GET /demo/scenarios 500 in 346ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 200 in 69ms
+ GET /demo/scenarios 500 in 250ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 500 in 258ms
+ ✓ Compiled /_error in 448ms (1039 modules)
+ GET /demo/scenarios 200 in 432ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 200 in 401ms
+ ✓ Compiled in 227ms (941 modules)
+ GET /demo/scenarios 200 in 134ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 200 in 137ms
+ ✓ Compiled in 122ms (549 modules)
+ GET /demo/scenarios 200 in 124ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 200 in 130ms
+ ✓ Compiled in 265ms (940 modules)
+ GET /demo/scenarios 200 in 118ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 200 in 123ms
+ ✓ Compiled in 203ms (549 modules)
+ GET /demo/scenarios 200 in 113ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 200 in 117ms
+ ✓ Compiled in 290ms (955 modules)
+ GET /demo/scenarios 200 in 94ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 200 in 96ms
+ ✓ Compiled in 181ms (955 modules)
+ GET /demo/scenarios 200 in 97ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 200 in 100ms
+ ✓ Compiled in 161ms (549 modules)
+ GET /demo/scenarios 200 in 100ms
+ GET /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 200 in 103ms
+ POST /demo/parcels/886f5d92-80c9-4c92-bde2-19496502ec27 500 in 310ms
+ GET / 500 in 218ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1008ms (1042 modules)
+ ✓ Compiled in 1ms (645 modules)
+ ✓ Compiled in 470ms (1042 modules)
+ GET /demo/scenarios 500 in 1210ms
+ GET /demo/scenarios 500 in 31ms
+ GET / 500 in 119ms
+ GET / 500 in 31ms
+ GET /demo/scenarios 500 in 205ms
+ GET /demo/scenarios 500 in 34ms
+ GET /parcel 404 in 33ms
+ ✓ Compiled in 718ms (953 modules)
+ ✓ Compiled /_not-found in 321ms (958 modules)
+ ✓ Compiled /_error in 254ms (1054 modules)
+ GET /parcel 500 in 712ms
+ GET /parcel 500 in 45ms
+ GET / 500 in 99ms
+ GET / 500 in 34ms
+ GET / 500 in 110ms
+ GET / 500 in 43ms
+ GET / 500 in 91ms
+ GET / 500 in 29ms
+ GET / 500 in 103ms
+ GET / 500 in 31ms
+ GET / 500 in 102ms
+ GET / 500 in 29ms
+ GET / 500 in 120ms
+ GET / 500 in 50ms
+ GET / 500 in 97ms
+ GET / 500 in 32ms
+C:\Users\Arlind\Desktop\Projects\Version 7\apps\web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @repo/web@0.0.0 dev: `wait-on ../../packages/contracts/dist/index.js && next dev -p 3001`
+Exit status 3221225786

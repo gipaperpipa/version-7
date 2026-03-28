@@ -1,33 +1,40 @@
 import type { ScenarioResultExplanationDto } from "@repo/contracts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DiagnosticGroup } from "@/components/ui/diagnostic-group";
+import { SectionCard } from "@/components/ui/section-card";
 
 export function ResultExplanationCard({ explanation }: { explanation: ScenarioResultExplanationDto | null }) {
   if (!explanation) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Result Explanation</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <p className="text-slate-600">{explanation.summary}</p>
-        <div>
-          <div className="mb-2 font-medium">Dominant drivers</div>
-          <div className="space-y-2">
+    <SectionCard
+      eyebrow="Result explanation"
+      title="Why the engine landed here"
+      description={`Heuristic version ${explanation.heuristicVersion}`}
+      tone="accent"
+    >
+      <div className="content-stack">
+        <div className="insight-item">{explanation.summary}</div>
+
+        <div className="dual-grid">
+          <DiagnosticGroup title="Dominant drivers" emptyLabel="No dominant drivers were returned.">
             {explanation.dominantDrivers.map((item) => (
-              <div key={item} className="rounded-md border border-slate-200 p-3">{item}</div>
+              <div key={item} className="insight-item">{item}</div>
             ))}
-          </div>
-        </div>
-        <div>
-          <div className="mb-2 font-medium">Fallback assumptions</div>
-          <div className="space-y-2">
+          </DiagnosticGroup>
+
+          <DiagnosticGroup title="Fallback assumptions" emptyLabel="No fallback assumptions were recorded.">
             {explanation.fallbackAssumptions.map((item) => (
-              <div key={item} className="rounded-md border border-slate-200 p-3 text-slate-600">{item}</div>
+              <div key={item} className="insight-item">{item}</div>
             ))}
-          </div>
+          </DiagnosticGroup>
         </div>
-      </CardContent>
-    </Card>
+
+        <DiagnosticGroup title="Capital stack narrative" emptyLabel="No capital stack narrative was returned.">
+          {explanation.capitalStackNarrative.map((item) => (
+            <div key={item} className="insight-item">{item}</div>
+          ))}
+        </DiagnosticGroup>
+      </div>
+    </SectionCard>
   );
 }

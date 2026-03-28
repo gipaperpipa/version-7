@@ -1,14 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { PlanningParameterDto } from "@repo/contracts";
-import type { PlanningFieldDefinition } from "@/lib/ui/planning-field-definitions";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ActionRow } from "@/components/ui/action-row";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonClasses } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProvenanceConfidence } from "@/components/ui/provenance-confidence";
-import { Badge } from "@/components/ui/badge";
+import { SectionCard } from "@/components/ui/section-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { cx } from "@/lib/ui/cx";
+import type { PlanningFieldDefinition } from "@/lib/ui/planning-field-definitions";
 
 type FieldValue = string;
 
@@ -33,119 +37,169 @@ function buildInitialState(definitions: PlanningFieldDefinition[], items: Planni
   return state;
 }
 
+function getFieldState(definition: PlanningFieldDefinition, existing: PlanningParameterDto | undefined, currentValue: string) {
+  if (definition.storageKind === "readonlyValueNumber") {
+    return { label: "Derived", tone: "info" as const, isCleared: false };
+  }
+
+  if (definition.storageKind === "valueBoolean") {
+    if (currentValue === "unspecified") {
+      return existing
+        ? { label: "Cleared", tone: "warning" as const, isCleared: true }
+        : { label: "Empty", tone: "neutral" as const, isCleared: false };
+    }
+
+    return { label: "Filled", tone: "success" as const, isCleared: false };
+  }
+
+  if (currentValue.trim()) {
+    return { label: "Filled", tone: "success" as const, isCleared: false };
+  }
+
+  if (existing) {
+    return { label: "Cleared", tone: "warning" as const, isCleared: true };
+  }
+
+  return { label: "Empty", tone: "neutral" as const, isCleared: false };
+}
+
+const sectionDescriptions: Record<string, string> = {
+  Buildability: "These inputs explain what can be built and carry the most weight in readiness.",
+  Capacity: "These values refine unitization and parking assumptions once buildability is in place.",
+  Policy: "Use these fields when lending or subsidy context materially shapes the case.",
+};
+
 export function PlanningParameterForm({
   action,
   definitions,
   items,
+  continueHref,
 }: {
   action: (formData: FormData) => void | Promise<void>;
   definitions: PlanningFieldDefinition[];
   items: PlanningParameterDto[];
+  continueHref?: string;
 }) {
   const [values, setValues] = useState<Record<string, FieldValue>>(() => buildInitialState(definitions, items));
-  const sections = useMemo(
-    () => ["Buildability", "Capacity", "Policy"] as const,
-    [],
-  );
+  const sections = useMemo(() => ["Buildability", "Capacity", "Policy"] as const, []);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Planning Inputs</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form action={action} className="space-y-8">
-          {sections.map((section) => {
-            const sectionDefinitions = definitions.filter((definition) => definition.section === section);
-            return (
-              <section key={section} className="space-y-4">
-                <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">{section}</div>
-                <div className="space-y-4">
-                  {sectionDefinitions.map((definition) => {
-                    const existing = items.find((item) => item.keySlug === definition.keySlug);
-                    const currentValue = values[definition.keySlug] ?? "";
-                    const isCleared = definition.storageKind === "valueBoolean"
-                      ? Boolean(existing) && existing.valueBoolean !== null && currentValue === "unspecified"
-                      : Boolean(existing) && definition.storageKind === "valueNumber" && currentValue.trim() === "";
+    <form action={action} className="form-stack">
+      {sections.map((section) => {
+        const sectionDefinitions = definitions.filter((definition) => definition.section === section);
 
-                    if (definition.storageKind === "readonlyValueNumber" && !existing) {
-                      return null;
-                    }
+        return (
+          <SectionCard
+            key={section}
+            eyebrow={`Planning / ${section}`}
+            title={section}
+            description={sectionDescriptions[section]}
+          >
+            <div className="field-grid">
+              {sectionDefinitions.map((definition) => {
+                const existing = items.find((item) => item.keySlug === definition.keySlug);
+                const currentValue = values[definition.keySlug] ?? "";
+                const fieldState = getFieldState(definition, existing, currentValue);
 
-                    return (
-                      <div key={definition.keySlug} className="rounded-lg border border-slate-200 p-4">
-                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                          <div className="space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Label htmlFor={definition.keySlug}>{definition.label}</Label>
-                              {definition.unit ? (
-                                <Badge className="border-slate-200 bg-slate-50 text-slate-700">{definition.unit}</Badge>
-                              ) : null}
-                              {definition.affectsReadiness ? (
-                                <Badge className="border-sky-200 bg-sky-50 text-sky-800">
-                                  {definition.readinessUsageLabel}
-                                </Badge>
-                              ) : null}
-                            </div>
-                            <div className="text-sm text-slate-600">{definition.helpText}</div>
-                          </div>
+                if (definition.storageKind === "readonlyValueNumber" && !existing) {
+                  return null;
+                }
 
-                          <ProvenanceConfidence
-                            sourceType={existing?.sourceType}
-                            confidenceScore={existing?.confidenceScore}
-                            sourceReference={existing?.sourceReference}
-                            readOnlyLabel={definition.storageKind === "readonlyValueNumber" ? "Read-only" : null}
-                          />
-                        </div>
-
-                        <div className="mt-4 space-y-2">
-                          {definition.storageKind === "valueNumber" ? (
-                            <Input
-                              id={definition.keySlug}
-                              name={definition.keySlug}
-                              value={currentValue}
-                              onChange={(event) => setValues((state) => ({ ...state, [definition.keySlug]: event.target.value }))}
-                            />
-                          ) : null}
-
-                          {definition.storageKind === "valueBoolean" ? (
-                            <select
-                              id={definition.keySlug}
-                              name={definition.keySlug}
-                              value={currentValue}
-                              onChange={(event) => setValues((state) => ({ ...state, [definition.keySlug]: event.target.value }))}
-                              className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                            >
-                              <option value="unspecified">Unspecified</option>
-                              <option value="true">Eligible</option>
-                              <option value="false">Not eligible</option>
-                            </select>
-                          ) : null}
-
-                          {definition.storageKind === "readonlyValueNumber" ? (
-                            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                              <div className="font-medium">{existing?.valueNumber ?? "n/a"}</div>
-                              <div className="mt-1 text-xs text-slate-500">
-                                Derived/source-backed planning input. Read-only in Sprint 1 web flow.
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {isCleared ? (
-                            <div className="text-xs text-amber-700">Will clear saved value</div>
+                return (
+                  <div
+                    key={definition.keySlug}
+                    className={cx(
+                      "planning-field",
+                      fieldState.isCleared && "planning-field--cleared",
+                      definition.storageKind === "readonlyValueNumber" && "planning-field--derived",
+                    )}
+                  >
+                    <div className="planning-field__header">
+                      <div className="content-stack" style={{ gap: 8 }}>
+                        <div className="action-row">
+                          <Label htmlFor={definition.keySlug}>{definition.label}</Label>
+                          {definition.unit ? <Badge variant="surface">{definition.unit}</Badge> : null}
+                          <StatusBadge tone={fieldState.tone}>{fieldState.label}</StatusBadge>
+                          {definition.affectsReadiness && definition.readinessUsageLabel ? (
+                            <StatusBadge tone="info">{definition.readinessUsageLabel}</StatusBadge>
                           ) : null}
                         </div>
+                        <div className="field-help">{definition.helpText}</div>
                       </div>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
 
-          <Button type="submit">Save Planning Inputs</Button>
-        </form>
-      </CardContent>
-    </Card>
+                      <ProvenanceConfidence
+                        sourceType={existing?.sourceType}
+                        confidenceScore={existing?.confidenceScore}
+                        sourceReference={existing?.sourceReference}
+                        readOnlyLabel={definition.storageKind === "readonlyValueNumber" ? "Read-only" : null}
+                      />
+                    </div>
+
+                    <div className="planning-field__body">
+                      {definition.storageKind === "valueNumber" ? (
+                        <Input
+                          id={definition.keySlug}
+                          name={definition.keySlug}
+                          value={currentValue}
+                          onChange={(event) => setValues((state) => ({ ...state, [definition.keySlug]: event.target.value }))}
+                        />
+                      ) : null}
+
+                      {definition.storageKind === "valueBoolean" ? (
+                        <select
+                          id={definition.keySlug}
+                          name={definition.keySlug}
+                          value={currentValue}
+                          onChange={(event) => setValues((state) => ({ ...state, [definition.keySlug]: event.target.value }))}
+                          className="ui-select"
+                        >
+                          <option value="unspecified">Unspecified</option>
+                          <option value="true">Eligible</option>
+                          <option value="false">Not eligible</option>
+                        </select>
+                      ) : null}
+
+                      {definition.storageKind === "readonlyValueNumber" ? (
+                        <div className="readonly-block">
+                          <div className="readonly-block__value">{existing?.valueNumber ?? "n/a"}</div>
+                          <div className="field-help">
+                            Geometry-linked and source-backed. This value is intentionally read-only in the Sprint 1 web flow.
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {fieldState.isCleared ? (
+                        <div className="field-help field-note-strong">Will clear the saved value when you save planning inputs.</div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </SectionCard>
+        );
+      })}
+
+      <SectionCard
+        eyebrow="Save and continue"
+        title="Commit the planning interpretation"
+        description="Save planning inputs first, then carry this parcel directly into scenario design."
+        tone="muted"
+      >
+        <ActionRow spread className="form-footer">
+          <div className="field-help">
+            Readiness-affecting fields are flagged inline so you can see which values matter immediately.
+          </div>
+          <div className="action-row">
+            {continueHref ? (
+              <Link className={buttonClasses({ variant: "secondary" })} href={continueHref}>
+                Continue to scenario
+              </Link>
+            ) : null}
+            <Button type="submit" size="lg">Save planning inputs</Button>
+          </div>
+        </ActionRow>
+      </SectionCard>
+    </form>
   );
 }

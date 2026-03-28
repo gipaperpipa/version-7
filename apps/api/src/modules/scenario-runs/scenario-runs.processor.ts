@@ -2,10 +2,11 @@ import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Injectable } from "@nestjs/common";
 import type { Job } from "bullmq";
 import { ScenarioRunStatus, ScenarioStatus } from "@prisma/client";
+import { toPrismaJson } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { FeasibilityEngineV0Service } from "../finance/feasibility-engine-v0.service";
 import { ScenarioInputBuilderService } from "../scenarios/scenario-input-builder.service";
-import { ScenarioReadinessService } from "../scenarios/scenario-readiness.service";
+import { ScenarioValidationService } from "../scenarios/scenario-validation.service";
 
 @Injectable()
 @Processor("scenario-runs")
@@ -13,7 +14,7 @@ export class ScenarioRunsProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly feasibilityEngineV0Service: FeasibilityEngineV0Service,
-    private readonly scenarioReadinessService: ScenarioReadinessService,
+    private readonly scenarioValidationService: ScenarioValidationService,
     private readonly scenarioInputBuilderService: ScenarioInputBuilderService,
   ) {
     super();
@@ -34,7 +35,10 @@ export class ScenarioRunsProcessor extends WorkerHost {
     });
 
     try {
-      const scenario = await this.scenarioReadinessService.loadScenarioForValidation(run.scenarioId);
+      const scenario = await this.scenarioValidationService.loadScenarioForOrganization(
+        run.scenarioId,
+        run.organizationId,
+      );
       const result = this.feasibilityEngineV0Service.execute(
         this.scenarioInputBuilderService.buildFeasibilityInput(scenario),
       );
@@ -63,15 +67,15 @@ export class ScenarioRunsProcessor extends WorkerHost {
             subsidyAdjustedBreakEvenRentEurSqm: result.outputs.subsidyAdjustedBreakEvenRentEurSqm,
             subsidyAdjustedProfitPct: result.outputs.subsidyAdjustedProfitPct,
             subsidyAdjustedIrrPct: result.outputs.subsidyAdjustedIrrPct,
-            warningsJson: result.warnings,
-            missingDataFlagsJson: result.missingDataFlags,
-            confidenceReasonsJson: result.confidence.reasons,
+            warningsJson: toPrismaJson(result.warnings),
+            missingDataFlagsJson: toPrismaJson(result.missingDataFlags),
+            confidenceReasonsJson: toPrismaJson(result.confidence.reasons),
             outputConfidencePct: result.confidence.outputConfidencePct,
-            outputsJson: {
+            outputsJson: toPrismaJson({
               heuristicVersion: result.heuristicVersion,
               objectiveValue: result.outputs.objectiveValue,
               explanation: result.explanation,
-            },
+            }),
           },
           create: {
             scenarioRunId: run.id,
@@ -95,15 +99,15 @@ export class ScenarioRunsProcessor extends WorkerHost {
             subsidyAdjustedBreakEvenRentEurSqm: result.outputs.subsidyAdjustedBreakEvenRentEurSqm,
             subsidyAdjustedProfitPct: result.outputs.subsidyAdjustedProfitPct,
             subsidyAdjustedIrrPct: result.outputs.subsidyAdjustedIrrPct,
-            warningsJson: result.warnings,
-            missingDataFlagsJson: result.missingDataFlags,
-            confidenceReasonsJson: result.confidence.reasons,
+            warningsJson: toPrismaJson(result.warnings),
+            missingDataFlagsJson: toPrismaJson(result.missingDataFlags),
+            confidenceReasonsJson: toPrismaJson(result.confidence.reasons),
             outputConfidencePct: result.confidence.outputConfidencePct,
-            outputsJson: {
+            outputsJson: toPrismaJson({
               heuristicVersion: result.heuristicVersion,
               objectiveValue: result.outputs.objectiveValue,
               explanation: result.explanation,
-            },
+            }),
           },
         }),
         this.prisma.scenarioRun.update({
@@ -111,9 +115,9 @@ export class ScenarioRunsProcessor extends WorkerHost {
           data: {
             status: ScenarioRunStatus.SUCCEEDED,
             finishedAt: new Date(),
-            warningsJson: result.warnings,
-            missingDataFlagsJson: result.missingDataFlags,
-            confidenceReasonsJson: result.confidence.reasons,
+            warningsJson: toPrismaJson(result.warnings),
+            missingDataFlagsJson: toPrismaJson(result.missingDataFlags),
+            confidenceReasonsJson: toPrismaJson(result.confidence.reasons),
             outputConfidencePct: result.confidence.outputConfidencePct,
           },
         }),
@@ -134,6 +138,8 @@ export class ScenarioRunsProcessor extends WorkerHost {
           errorMessage: error instanceof Error ? error.message : "Unknown execution error",
         },
       });
+      console.error(`[scenario-runs] Run ${run.id} failed.`);
+      console.error(error);
       throw error;
     }
   }

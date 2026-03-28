@@ -1,21 +1,40 @@
 import type { ButtonHTMLAttributes, PropsWithChildren } from "react";
+import { cx } from "@/lib/ui/cx";
 
-type ButtonProps = PropsWithChildren<ButtonHTMLAttributes<HTMLButtonElement>> & {
-  variant?: "default" | "outline";
-  size?: "default" | "sm";
-};
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "outline";
+export type ButtonSize = "sm" | "default" | "lg";
 
-export function Button({ children, className = "", variant = "default", size = "default", ...props }: ButtonProps) {
-  const variantClass = variant === "outline"
-    ? "border border-slate-300 bg-white text-slate-900"
-    : "bg-slate-900 text-white";
-  const sizeClass = size === "sm" ? "h-9 px-3 text-sm" : "h-10 px-4 text-sm";
+export function buttonClasses({
+  variant = "primary",
+  size = "default",
+  fullWidth = false,
+}: {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  fullWidth?: boolean;
+} = {}) {
+  const normalizedVariant = variant === "outline" ? "secondary" : variant;
 
+  return cx(
+    "button",
+    `button--${normalizedVariant}`,
+    `button--${size}`,
+    fullWidth && "button--full",
+  );
+}
+
+export function Button({
+  children,
+  className,
+  variant = "primary",
+  size = "default",
+  ...props
+}: PropsWithChildren<ButtonHTMLAttributes<HTMLButtonElement>> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+}) {
   return (
-    <button
-      className={`inline-flex items-center justify-center rounded-md ${sizeClass} ${variantClass} ${className}`}
-      {...props}
-    >
+    <button className={cx(buttonClasses({ variant, size }), className)} {...props}>
       {children}
     </button>
   );

@@ -3,7 +3,31 @@
   "private": true,
   "packageManager": "pnpm@10.0.0",
   "scripts": {
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "dev": "concurrently -n contracts,api,web -c cyan,green,magenta \"pnpm --filter @repo/contracts dev\" \"pnpm --filter @repo/api dev\" \"pnpm --filter @repo/web dev\"",
+    "build": "pnpm --filter @repo/contracts build && pnpm --filter @repo/api build && pnpm --filter @repo/web build",
+    "typecheck": "pnpm --filter @repo/contracts build && pnpm --filter @repo/api typecheck && pnpm --filter @repo/web typecheck",
+    "prisma:generate": "pnpm --dir apps/api prisma:generate",
+    "prisma:migrate": "pnpm --dir apps/api prisma:migrate",
+    "prisma:seed": "pnpm --dir apps/api prisma:seed",
+    "verify:health": "node scripts/verify-health.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "dotenv-cli": "^8.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "wait-on": "^8.0.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "@scarf/scarf",
+      "esbuild",
+      "msgpackr-extract",
+      "prisma",
+      "sharp"
+    ]
   }
 }

@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import type { AuthenticatedRequest } from "../request-context/request-context.types";
+import { isLocalDevAuthFallbackEnabled } from "./local-dev-auth";
 
 @Injectable()
 export class OrgScopeGuard implements CanActivate {
@@ -28,6 +29,12 @@ export class OrgScopeGuard implements CanActivate {
     });
 
     if (!memberships.length) {
+      if (isLocalDevAuthFallbackEnabled()) {
+        throw new ForbiddenException(
+          "No organization membership found. Seed the local demo workspace before using the development fallback.",
+        );
+      }
+
       throw new ForbiddenException("No organization membership found.");
     }
 

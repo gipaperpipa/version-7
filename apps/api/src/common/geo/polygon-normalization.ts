@@ -1,9 +1,9 @@
 import { BadRequestException } from "@nestjs/common";
-import type { Geometry, MultiPolygon, Polygon } from "geojson";
+import type { GeometryDto, MultiPolygonDto, PolygonDto } from "@repo/contracts";
 
 export function normalizePolygonGeometryToMultiPolygon(
-  geom: Geometry | null | undefined,
-): MultiPolygon | null | undefined {
+  geom: GeometryDto | null | undefined,
+): MultiPolygonDto | null | undefined {
   if (geom === undefined || geom === null) return geom;
 
   if (geom.type === "MultiPolygon") {
@@ -13,8 +13,8 @@ export function normalizePolygonGeometryToMultiPolygon(
   if (geom.type === "Polygon") {
     return {
       type: "MultiPolygon",
-      coordinates: [geom.coordinates],
-    };
+      coordinates: [geom.coordinates as PolygonDto["coordinates"]],
+    } as MultiPolygonDto;
   }
 
   throw new BadRequestException(

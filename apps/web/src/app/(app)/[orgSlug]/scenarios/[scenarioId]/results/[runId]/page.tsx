@@ -1,55 +1,250 @@
-import { getScenarioRun } from "@/lib/api/scenarios";
+import Link from "next/link";
+import { isApiUnavailableError } from "@/lib/api/errors";
+import { getScenario, getScenarioRun } from "@/lib/api/scenarios";
+import { humanizeTokenLabel } from "@/lib/ui/enum-labels";
+import { getRunVerdict } from "@/lib/ui/verdicts";
+import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
+import { buttonClasses } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { NextStepPanel } from "@/components/ui/next-step-panel";
+import { PageHeader } from "@/components/ui/page-header";
 import { ResultExplanationCard } from "@/components/scenarios/result-explanation-card";
 import { RunDiagnosticsPanel } from "@/components/scenarios/run-diagnostics-panel";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SectionCard } from "@/components/ui/section-card";
+import { StatBlock } from "@/components/ui/stat-block";
+import { StatusBadge, getRunStatusTone } from "@/components/ui/status-badge";
+import { VerdictPanel } from "@/components/ui/verdict-panel";
+import { WorkflowSteps } from "@/components/ui/workflow-steps";
 
-function MetricCard({ title, value }: { title: string; value: string | number | null | undefined }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="text-2xl font-semibold">{value ?? "n/a"}</CardContent>
-    </Card>
-  );
+function getNextActionCopy(runId: string, scenarioId: string, verdictTitle: string, hasPlanningLink: boolean) {
+  if (verdictTitle === "Run failed") {
+    return {
+      title: "Return to the builder and fix the failing input path",
+      description: `Run ${runId} surfaced a concrete failure. Review the diagnostics first, then return to scenario ${scenarioId} to correct the upstream issue before retrying.`,
+    };
+  }
+
+  if (verdictTitle === "Needs planning refinement") {
+    return {
+      title: "Refine planning before trusting the result",
+      description: hasPlanningLink
+        ? "The output exists, but planning-critical buildability inputs are still too weak or too heuristic for a stronger directional decision."
+        : "The output exists, but the planning context is still too thin for a stronger directional decision.",
+    };
+  }
+
+  if (verdictTitle === "Not ready for decision") {
+    return {
+      title: "Tighten assumptions before treating this as a decision signal",
+      description: "Use the diagnostics to improve planning, funding, or scenario assumptions before relying on the current output.",
+    };
+  }
+
+  if (verdictTitle === "Run in progress") {
+    return {
+      title: "Wait for the engine to complete, then review the output",
+      description: "This run is still moving through the queue or engine. Once it finishes, return here to review the decision summary and diagnostics.",
+    };
+  }
+
+  return {
+    title: "Use this result as a directional decision page",
+    description: "The output is still heuristic, but it is coherent enough to guide the next discussion about planning assumptions, funding structure, and viability.",
+  };
 }
 
 export default async function ScenarioResultPage({
   params,
 }: {
-  params: { orgSlug: string; scenarioId: string; runId: string };
+  params: Promise<{ orgSlug: string; scenarioId: string; runId: string }>;
 }) {
-  const run = await getScenarioRun(params.orgSlug, params.runId);
-  const result = run.financialResult;
+  const { orgSlug, scenarioId, runId } = await params;
 
-  return (
-    <div className="space-y-6 p-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Feasibility Result</h1>
-        <p className="text-sm text-slate-600">Scenario {params.scenarioId} · Run {params.runId}</p>
+  try {
+    const [run, scenario] = await Promise.all([
+      getScenarioRun(orgSlug, runId),
+      getScenario(orgSlug, scenarioId),
+    ]);
+
+    const result = run.financialResult;
+    const verdict = getRunVerdict(run);
+    const builderHref = `/${orgSlug}/scenarios/${scenarioId}/builder`;
+    const parcelHref = scenario.parcelId ? `/${orgSlug}/parcels/${scenario.parcelId}` : null;
+    const planningHref = scenario.parcelId ? `/${orgSlug}/parcels/${scenario.parcelId}/planning` : null;
+    const nextAction = getNextActionCopy(runId, scenarioId, verdict.title, Boolean(planningHref));
+
+    return (
+      <div className="workspace-page content-stack">
+        <PageHeader
+          eyebrow="Feasibility result"
+          title={scenario.name}
+          description="Review the latest directional output as a decision page, not a raw payload. Keep caveats, confidence, and missing-data signals visible beside the numbers."
+          actions={(
+            <>
+              <StatusBadge tone={getRunStatusTone(run.status)}>{humanizeTokenLabel(run.status)}</StatusBadge>
+              <Link className={buttonClasses({ variant: "secondary" })} href={builderHref}>
+                Back to builder
+              </Link>
+            </>
+          )}
+          meta={(
+            <WorkflowSteps
+              activeStep={5}
+              steps={[
+                { label: "Parcel", description: "Site context" },
+                { label: "Planning", description: "Readiness inputs" },
+                { label: "Scenario", description: "Strategy framing" },
+                { label: "Readiness and run", description: "Validation and engine trigger" },
+                { label: "Result", description: "Decision-support output" },
+              ]}
+            />
+          )}
+        />
+
+        <VerdictPanel
+          eyebrow="Decision verdict"
+          title={verdict.title}
+          summary={verdict.summary}
+          tone={verdict.tone}
+          context={(
+            <div className="action-row">
+              <StatusBadge tone={getRunStatusTone(run.status)}>Run {humanizeTokenLabel(run.status)}</StatusBadge>
+              {run.readinessStatus ? <StatusBadge tone="surface">Readiness {humanizeTokenLabel(run.readinessStatus)}</StatusBadge> : null}
+              {run.engineVersion ? <StatusBadge tone="surface">{run.engineVersion}</StatusBadge> : null}
+            </div>
+          )}
+          actions={(
+            <>
+              {planningHref ? (
+                <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={planningHref}>
+                  Review planning
+                </Link>
+              ) : null}
+              <Link className={buttonClasses({ size: "sm" })} href={builderHref}>
+                Refine scenario
+              </Link>
+            </>
+          )}
+        />
+
+        {result ? (
+          <>
+            <SectionCard
+              eyebrow="Headline metrics"
+              title="Directional feasibility summary"
+              description="Scan these first, then move into diagnostics and explanation to judge whether the current output is decision-strong enough."
+              tone="accent"
+            >
+              <div className="metrics-grid">
+                <StatBlock label="Buildable BGF" value={result.buildableBgfSqm ?? "n/a"} caption="Estimated total gross floor area" tone="accent" />
+                <StatBlock label="Required equity" value={result.requiredEquity ?? "n/a"} caption="Residual capital after debt layers" tone="warning" />
+                <StatBlock label="Break-even rent" value={result.breakEvenRentEurSqm ?? "n/a"} caption="EUR/sqm equivalent" tone="success" />
+                <StatBlock label="Estimated units" value={result.estimatedUnitCount ?? "n/a"} caption="Current unit-count signal from the v0 engine" />
+              </div>
+            </SectionCard>
+
+            <RunDiagnosticsPanel run={run} />
+            <ResultExplanationCard explanation={result.explanation ?? null} />
+
+            <div className="detail-grid">
+              <SectionCard
+                eyebrow="Capital and cost context"
+                title="How the result was capitalized"
+                description="These supporting figures help explain why required equity and break-even metrics landed where they did."
+              >
+                <div className="key-value-grid">
+                  <div className="key-value-card">
+                    <div className="key-value-card__label">Total development cost</div>
+                    <div className="key-value-card__value">{result.totalDevelopmentCost ?? "n/a"}</div>
+                  </div>
+                  <div className="key-value-card">
+                    <div className="key-value-card__label">State subsidy</div>
+                    <div className="key-value-card__value">{result.stateSubsidyAmount ?? "n/a"}</div>
+                  </div>
+                  <div className="key-value-card">
+                    <div className="key-value-card__label">KfW amount</div>
+                    <div className="key-value-card__value">{result.kfwAmount ?? "n/a"}</div>
+                  </div>
+                  <div className="key-value-card">
+                    <div className="key-value-card__label">Free financing</div>
+                    <div className="key-value-card__value">{result.freeFinancingAmount ?? "n/a"}</div>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <NextStepPanel
+                title={nextAction.title}
+                description={nextAction.description}
+                actions={(
+                  <>
+                    <Link className={buttonClasses()} href={builderHref}>
+                      Refine scenario
+                    </Link>
+                    {planningHref ? (
+                      <Link className={buttonClasses({ variant: "secondary" })} href={planningHref}>
+                        Improve planning
+                      </Link>
+                    ) : null}
+                    {parcelHref ? (
+                      <Link className={buttonClasses({ variant: "ghost" })} href={parcelHref}>
+                        Open parcel
+                      </Link>
+                    ) : null}
+                  </>
+                )}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <RunDiagnosticsPanel run={run} />
+
+            <NextStepPanel
+              title={nextAction.title}
+              description={nextAction.description}
+              actions={(
+                <>
+                  <Link className={buttonClasses()} href={builderHref}>
+                    Back to builder
+                  </Link>
+                  {planningHref ? (
+                    <Link className={buttonClasses({ variant: "secondary" })} href={planningHref}>
+                      Review planning
+                    </Link>
+                  ) : null}
+                </>
+              )}
+            />
+
+            <EmptyState
+              eyebrow="No financial result yet"
+              title="This run has not produced a result payload"
+              description="Use the diagnostics above to see whether the run is still queued, still processing, or blocked by the current inputs."
+              actions={(
+                <>
+                  <Link className={buttonClasses()} href={builderHref}>
+                    Back to builder
+                  </Link>
+                  <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios`}>
+                    Scenario list
+                  </Link>
+                </>
+              )}
+            />
+          </>
+        )}
       </div>
+    );
+  } catch (error) {
+    if (isApiUnavailableError(error)) {
+      return (
+        <ApiUnreachableState
+          title="Result view unavailable"
+          description="The result page could not load because the configured API is not reachable."
+        />
+      );
+    }
 
-      <RunDiagnosticsPanel run={run} />
-      <ResultExplanationCard explanation={result?.explanation ?? null} />
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Buildable BGF" value={result?.buildableBgfSqm} />
-        <MetricCard title="Required Equity" value={result?.requiredEquity} />
-        <MetricCard title="Break-even Rent" value={result?.breakEvenRentEurSqm} />
-        <MetricCard title="Subsidy-adjusted Rent" value={result?.subsidyAdjustedBreakEvenRentEurSqm} />
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Heuristic Engine Context</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-slate-600">
-          <p>Engine version: {run.engineVersion ?? "n/a"}</p>
-          <p>Status: {run.status}</p>
-          <p>Readiness status: {run.readinessStatus ?? "n/a"}</p>
-          <p>This result remains explicitly heuristic and replaceable.</p>
-        </CardContent>
-      </Card>
-    </div>
-  );
+    throw error;
+  }
 }

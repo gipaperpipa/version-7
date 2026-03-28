@@ -1,9 +1,16 @@
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Feasibility OS",
+  description: "Sprint 1 development feasibility workspace",
+};
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-slate-100 text-slate-950">{children}</body>
+      <body className="app-root">{children}</body>
     </html>
   );
 }

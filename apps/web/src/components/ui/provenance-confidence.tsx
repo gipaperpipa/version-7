@@ -1,6 +1,7 @@
 import type { SourceType } from "@repo/contracts";
-import { getConfidenceBand, getConfidenceBandClasses, getSourceLabel } from "@/lib/ui/provenance";
+import { getConfidenceBand, getSourceLabel } from "@/lib/ui/provenance";
 import { Badge } from "./badge";
+import { getConfidenceTone } from "./status-badge";
 
 export function ProvenanceConfidence({
   sourceType,
@@ -17,13 +18,13 @@ export function ProvenanceConfidence({
   const band = getConfidenceBand(confidenceScore);
 
   return (
-    <div className="space-y-1">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Badge className={getConfidenceBandClasses(band)}>{band}</Badge>
-        {sourceLabel ? <Badge className="border-slate-200 bg-slate-50 text-slate-700">{sourceLabel}</Badge> : null}
-        {readOnlyLabel ? <Badge className="border-slate-200 bg-slate-50 text-slate-700">{readOnlyLabel}</Badge> : null}
+    <div className="provenance">
+      <div className="provenance__line">
+        <Badge variant={getConfidenceTone(band)}>Confidence {band}</Badge>
+        {sourceLabel ? <span className="meta-chip">{sourceLabel}</span> : null}
+        {readOnlyLabel ? <span className="meta-chip">{readOnlyLabel}</span> : null}
       </div>
-      {sourceReference ? <div className="text-xs text-slate-500">{sourceReference}</div> : null}
+      {sourceReference ? <div className="provenance__reference">{sourceReference}</div> : null}
     </div>
   );
 }

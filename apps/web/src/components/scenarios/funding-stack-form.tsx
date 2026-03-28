@@ -8,10 +8,12 @@ import {
   type FundingProgramVariantDto,
   type ScenarioFundingVariantDto,
 } from "@repo/contracts";
-import { Button } from "@/components/ui/button";
+import { ActionRow } from "@/components/ui/action-row";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { SectionCard } from "@/components/ui/section-card";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 function flattenOptions(programs: FundingProgramDto[], providerType: FundingProviderType) {
   return programs
@@ -30,7 +32,7 @@ function buildMetadataChips(variant: FundingProgramVariantDto | undefined) {
 
   return [
     variant.interestRatePct || variant.termMonths
-      ? `Interest/Term: ${variant.interestRatePct ?? "n/a"}${variant.termMonths ? ` / ${variant.termMonths}m` : ""}`
+      ? `Interest / Term: ${variant.interestRatePct ?? "n/a"}${variant.termMonths ? ` / ${variant.termMonths}m` : ""}`
       : null,
     variant.maxLoanPct ? `Max Loan %: ${variant.maxLoanPct}` : null,
     variant.maxLoanPerSqm ? `Max Loan / sqm: ${variant.maxLoanPerSqm}` : null,
@@ -42,6 +44,7 @@ function buildMetadataChips(variant: FundingProgramVariantDto | undefined) {
 
 function FundingLane({
   label,
+  description,
   checkboxName,
   selectName,
   options,
@@ -50,6 +53,7 @@ function FundingLane({
   onSelectChange,
 }: {
   label: string;
+  description: string;
   checkboxName: string;
   selectName: string;
   options: Array<{ id: string; label: string; variant: FundingProgramVariantDto }>;
@@ -61,16 +65,22 @@ function FundingLane({
   const chips = buildMetadataChips(selectedOption?.variant);
 
   return (
-    <div className="space-y-2">
-      <Label className="flex items-center gap-2">
-        <input type="checkbox" name={checkboxName} defaultChecked={defaultChecked} />
-        {label}
-      </Label>
+    <div className="funding-lane">
+      <div className="funding-lane__header">
+        <Label className="ui-label">
+          <input type="checkbox" name={checkboxName} defaultChecked={defaultChecked} />
+          {label}
+        </Label>
+        <StatusBadge tone={selectedOption ? "success" : "neutral"}>
+          {selectedOption ? "Selected" : "Optional"}
+        </StatusBadge>
+      </div>
+      <p className="funding-lane__description">{description}</p>
       <select
         name={selectName}
         value={selectedVariantId}
         onChange={(event) => onSelectChange(event.target.value)}
-        className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+        className="ui-select"
       >
         <option value="">Select variant</option>
         {options.map((option) => (
@@ -78,12 +88,14 @@ function FundingLane({
         ))}
       </select>
       {chips.length ? (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="chip-row">
           {chips.map((chip) => (
-            <Badge key={chip} className="border-slate-200 bg-slate-50 text-slate-700">{chip}</Badge>
+            <Badge key={chip} variant="surface">{chip}</Badge>
           ))}
         </div>
-      ) : null}
+      ) : (
+        <div className="field-help">Choose a variant to reveal the compact summary for this lane.</div>
+      )}
     </div>
   );
 }
@@ -108,46 +120,50 @@ export function FundingStackForm({
   const [freeVariantId, setFreeVariantId] = useState(selectedFree?.fundingProgramVariantId ?? "");
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Funding</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="mb-4 text-sm text-slate-600">
-          Sprint 1 temporary flow: this replaces the entire funding stack in one action instead of editing individual line items.
-        </p>
+    <SectionCard
+      eyebrow="Funding stack"
+      title="Capital sources"
+      description="Sprint 1 keeps funding editing intentionally simple: the stack is replaced in one move rather than edited line by line."
+    >
+      <form action={action} className="form-stack">
+        <FundingLane
+          label="State subsidy"
+          description="Primary subsidy-bank layer for the current stack."
+          checkboxName="stateSubsidyEnabled"
+          selectName="stateSubsidyVariantId"
+          options={stateOptions}
+          selectedVariantId={stateVariantId}
+          defaultChecked={Boolean(selectedState)}
+          onSelectChange={setStateVariantId}
+        />
 
-        <form action={action} className="space-y-6">
-          <FundingLane
-            label="State subsidy"
-            checkboxName="stateSubsidyEnabled"
-            selectName="stateSubsidyVariantId"
-            options={stateOptions}
-            selectedVariantId={stateVariantId}
-            defaultChecked={Boolean(selectedState)}
-            onSelectChange={setStateVariantId}
-          />
-          <FundingLane
-            label="KfW"
-            checkboxName="kfwEnabled"
-            selectName="kfwVariantId"
-            options={kfwOptions}
-            selectedVariantId={kfwVariantId}
-            defaultChecked={Boolean(selectedKfw)}
-            onSelectChange={setKfwVariantId}
-          />
-          <FundingLane
-            label="Free financing"
-            checkboxName="freeFinancingEnabled"
-            selectName="freeFinancingVariantId"
-            options={freeOptions}
-            selectedVariantId={freeVariantId}
-            defaultChecked={Boolean(selectedFree)}
-            onSelectChange={setFreeVariantId}
-          />
-          <Button type="submit" variant="outline">Replace Funding Stack</Button>
-        </form>
-      </CardContent>
-    </Card>
+        <FundingLane
+          label="KfW"
+          description="KfW layer when the selected program combination supports it."
+          checkboxName="kfwEnabled"
+          selectName="kfwVariantId"
+          options={kfwOptions}
+          selectedVariantId={kfwVariantId}
+          defaultChecked={Boolean(selectedKfw)}
+          onSelectChange={setKfwVariantId}
+        />
+
+        <FundingLane
+          label="Free financing"
+          description="Commercial financing as the flexible market-rate layer."
+          checkboxName="freeFinancingEnabled"
+          selectName="freeFinancingVariantId"
+          options={freeOptions}
+          selectedVariantId={freeVariantId}
+          defaultChecked={Boolean(selectedFree)}
+          onSelectChange={setFreeVariantId}
+        />
+
+        <ActionRow spread className="form-footer">
+          <div className="field-help">Temporary whole-stack replacement flow for Sprint 1.</div>
+          <Button type="submit" variant="secondary">Replace funding stack</Button>
+        </ActionRow>
+      </form>
+    </SectionCard>
   );
 }

@@ -48,7 +48,7 @@ export interface CreateParcelRequestDto {
   geom?: PolygonalGeometryDto;
 }
 
-export interface UpdateParcelRequestDto extends Partial<CreateParcelRequestDto> {
+export interface UpdateParcelRequestDto extends Omit<Partial<CreateParcelRequestDto>, "landAreaSqm" | "sourceReference" | "confidenceScore" | "geom"> {
   landAreaSqm?: DecimalString | null;
   sourceReference?: string | null;
   confidenceScore?: number | null;
