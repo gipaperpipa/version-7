@@ -8,6 +8,14 @@ const nextConfig = {
     externalDir: true,
   },
   outputFileTracingRoot: path.join(process.cwd(), "../.."),
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...(config.resolve.alias ?? {}),
+      "@repo/contracts": path.join(process.cwd(), "../../packages/contracts/dist/index.js"),
+    };
+
+    return config;
+  },
 };
 
 export default nextConfig;
