@@ -5,7 +5,7 @@ import type {
   ScenarioDto,
   UpdateScenarioRequestDto,
   UpsertScenarioFundingStackRequestDto,
-} from "../../../../../packages/contracts/dist/scenarios";
+} from "../../generated-contracts/scenarios";
 import { toApiDate, toApiDecimal, toApiJson, toPrismaDecimal, toPrismaJson } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";

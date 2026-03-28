@@ -4,8 +4,8 @@ import {
   FundingCategory,
   FundingProviderType,
   StrategyType,
-} from "../../../../../packages/contracts/dist/enums";
-import type { ListFundingProgramsResponseDto } from "../../../../../packages/contracts/dist/funding";
+} from "../../generated-contracts/enums";
+import type { ListFundingProgramsResponseDto } from "../../generated-contracts/funding";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { OrgScopeGuard } from "../../common/auth/org-scope.guard";
 import { FundingProgramsService } from "./funding-programs.service";

@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import type { UserRole } from "../../../../../packages/contracts/dist/enums";
+import type { UserRole } from "../../generated-contracts/enums";
 
 export interface JwtPrincipal {
   sub: string;

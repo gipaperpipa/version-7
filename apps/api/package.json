@@ -3,10 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "pnpm exec wait-on ../../packages/contracts/dist/index.js && pnpm exec dotenv -e .env -- pnpm exec tsx watch src/main.ts",
-    "build": "pnpm --filter @repo/contracts build && tsc -p tsconfig.build.json",
+    "dev": "pnpm --filter @repo/contracts build && node scripts/sync-contracts-source.cjs && pnpm exec dotenv -e .env -- pnpm exec tsx watch src/main.ts",
+    "build": "pnpm --filter @repo/contracts build && node scripts/sync-contracts-source.cjs && tsc -p tsconfig.build.json",
     "start": "node scripts/run-with-optional-dotenv.cjs .env node dist/main.js",
-    "typecheck": "pnpm --filter @repo/contracts build && tsc -p tsconfig.json --noEmit",
+    "typecheck": "pnpm --filter @repo/contracts build && node scripts/sync-contracts-source.cjs && tsc -p tsconfig.json --noEmit",
     "prisma:generate": "node scripts/prepare-prisma-cli.cjs && pnpm exec prisma generate --schema prisma/schema.prisma",
     "prisma:migrate": "node scripts/prepare-prisma-cli.cjs && pnpm exec prisma migrate deploy --schema prisma/schema.prisma",
     "prisma:seed": "pnpm --filter @repo/contracts build && node scripts/run-with-optional-dotenv.cjs .env node prisma/seed.cjs",

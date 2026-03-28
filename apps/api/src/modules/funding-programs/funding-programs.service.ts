@@ -3,8 +3,8 @@ import type {
   FundingCategory,
   FundingProviderType,
   StrategyType,
-} from "../../../../../packages/contracts/dist/enums";
-import type { ListFundingProgramsResponseDto } from "../../../../../packages/contracts/dist/funding";
+} from "../../generated-contracts/enums";
+import type { ListFundingProgramsResponseDto } from "../../generated-contracts/funding";
 import { toApiDecimal } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";

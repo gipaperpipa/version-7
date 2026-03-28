@@ -4,9 +4,9 @@ import type {
   MissingDataFlag,
   OptimizationTarget,
   StrategyType,
-} from "../../../../../packages/contracts/dist/enums";
-import type { RunWarningDto } from "../../../../../packages/contracts/dist/common";
-import type { ScenarioResultExplanationDto } from "../../../../../packages/contracts/dist/feasibility";
+} from "../../generated-contracts/enums";
+import type { RunWarningDto } from "../../generated-contracts/common";
+import type { ScenarioResultExplanationDto } from "../../generated-contracts/feasibility";
 
 export interface ScenarioSnapshotFundingItem {
   id: string;

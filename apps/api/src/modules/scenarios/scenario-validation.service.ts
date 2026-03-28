@@ -2,14 +2,14 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { FinancingSourceType } from "@prisma/client";
 import {
   CORE_PLANNING_KEY_SLUGS,
-} from "../../../../../packages/contracts/dist/planning-keys";
+} from "../../generated-contracts/planning-keys";
 import {
   ScenarioReadinessIssueCode,
   ScenarioReadinessIssueSeverity,
   ScenarioReadinessStatus,
   StrategyType,
-} from "../../../../../packages/contracts/dist/enums";
-import type { ScenarioReadinessIssueDto } from "../../../../../packages/contracts/dist/readiness";
+} from "../../generated-contracts/enums";
+import type { ScenarioReadinessIssueDto } from "../../generated-contracts/readiness";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { scenarioForValidationArgs, type ScenarioForValidation } from "./scenario.types";
 

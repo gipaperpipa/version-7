@@ -1,9 +1,9 @@
 import {
   ScenarioReadinessIssueSeverity,
-} from "../../../../../packages/contracts/dist/enums";
-import type { RunWarningDto } from "../../../../../packages/contracts/dist/common";
-import type { ScenarioReadinessIssueDto } from "../../../../../packages/contracts/dist/readiness";
-import type { ScenarioResultExplanationDto } from "../../../../../packages/contracts/dist/feasibility";
+} from "../../generated-contracts/enums";
+import type { RunWarningDto } from "../../generated-contracts/common";
+import type { ScenarioReadinessIssueDto } from "../../generated-contracts/readiness";
+import type { ScenarioResultExplanationDto } from "../../generated-contracts/feasibility";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
