@@ -1,4 +1,4 @@
-import { RunWarningCode } from "@repo/contracts";
+import { RunWarningCode } from "../../contracts";
 
 export const FEASIBILITY_V0_DEFAULTS = {
   floorToFloorMeters: 3.1,

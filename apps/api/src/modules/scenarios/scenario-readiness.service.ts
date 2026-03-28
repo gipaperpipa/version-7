@@ -1,5 +1,5 @@
 import { Injectable, Scope } from "@nestjs/common";
-import type { ScenarioReadinessDto } from "@repo/contracts";
+import type { ScenarioReadinessDto } from "../../contracts";
 import { RequestContextService } from "../../common/request-context/request-context.service";
 import type { ScenarioForValidation } from "./scenario.types";
 import { ScenarioValidationService } from "./scenario-validation.service";

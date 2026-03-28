@@ -2,7 +2,7 @@ import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, NotFoundException, Scope, UnprocessableEntityException } from "@nestjs/common";
 import { Queue } from "bullmq";
 import { ScenarioRunStatus } from "@prisma/client";
-import type { FinancialResultDto, ScenarioRunDto } from "@repo/contracts";
+import type { FinancialResultDto, ScenarioRunDto } from "../../contracts";
 import { toApiDate, toApiDecimal, toApiJson, toPrismaJson } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";

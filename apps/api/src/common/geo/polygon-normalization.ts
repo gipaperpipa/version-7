@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import type { GeometryDto, MultiPolygonDto, PolygonDto } from "@repo/contracts";
+import type { GeometryDto, MultiPolygonDto, PolygonDto } from "../../contracts";
 
 export function normalizePolygonGeometryToMultiPolygon(
   geom: GeometryDto | null | undefined,

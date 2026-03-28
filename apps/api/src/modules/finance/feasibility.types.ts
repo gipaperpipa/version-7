@@ -6,7 +6,7 @@ import type {
   RunWarningDto,
   ScenarioResultExplanationDto,
   StrategyType,
-} from "@repo/contracts";
+} from "../../contracts";
 
 export interface ScenarioSnapshotFundingItem {
   id: string;

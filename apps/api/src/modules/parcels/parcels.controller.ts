@@ -5,7 +5,7 @@ import type {
   ListParcelsResponseDto,
   ParcelDto,
   UpdateParcelRequestDto,
-} from "@repo/contracts";
+} from "../../contracts";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { OrgScopeGuard } from "../../common/auth/org-scope.guard";
 import { ParcelsService } from "./parcels.service";

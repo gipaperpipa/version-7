@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import type { UserRole } from "@repo/contracts";
+import type { UserRole } from "../../contracts";
 
 export interface JwtPrincipal {
   sub: string;

@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Post, UseGuards, Version } from "@nestjs/common";
 import { ApiBearerAuth, ApiHeader, ApiTags } from "@nestjs/swagger";
-import type { ScenarioRunDto } from "@repo/contracts";
+import type { ScenarioRunDto } from "../../contracts";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { OrgScopeGuard } from "../../common/auth/org-scope.guard";
 import { ScenarioRunsService } from "./scenario-runs.service";

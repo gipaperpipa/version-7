@@ -4,7 +4,7 @@ import type {
   FundingProviderType,
   ListFundingProgramsResponseDto,
   StrategyType,
-} from "@repo/contracts";
+} from "../../contracts";
 import { toApiDecimal } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";

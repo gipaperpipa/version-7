@@ -4,7 +4,7 @@ import type {
   ListPlanningParametersResponseDto,
   PlanningParameterDto,
   UpsertPlanningParameterRequestDto,
-} from "@repo/contracts";
+} from "../../contracts";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { OrgScopeGuard } from "../../common/auth/org-scope.guard";
 import { PlanningParametersService } from "./planning-parameters.service";

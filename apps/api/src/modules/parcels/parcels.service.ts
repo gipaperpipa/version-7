@@ -4,7 +4,7 @@ import type {
   ListParcelsResponseDto,
   ParcelDto,
   UpdateParcelRequestDto,
-} from "@repo/contracts";
+} from "../../contracts";
 import { normalizePolygonGeometryToMultiPolygon } from "../../common/geo/polygon-normalization";
 import { toApiDate, toApiDecimal, toApiJson, toPrismaJson } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";

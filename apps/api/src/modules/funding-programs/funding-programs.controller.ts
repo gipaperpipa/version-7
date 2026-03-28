@@ -5,7 +5,7 @@ import {
   FundingProviderType,
   StrategyType,
   type ListFundingProgramsResponseDto,
-} from "@repo/contracts";
+} from "../../contracts";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { OrgScopeGuard } from "../../common/auth/org-scope.guard";
 import { FundingProgramsService } from "./funding-programs.service";

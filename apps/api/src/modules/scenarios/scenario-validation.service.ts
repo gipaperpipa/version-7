@@ -7,7 +7,7 @@ import {
   ScenarioReadinessStatus,
   StrategyType,
   type ScenarioReadinessIssueDto,
-} from "@repo/contracts";
+} from "../../contracts";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { scenarioForValidationArgs, type ScenarioForValidation } from "./scenario.types";
 

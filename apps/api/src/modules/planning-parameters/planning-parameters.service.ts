@@ -3,8 +3,8 @@ import type {
   ListPlanningParametersResponseDto,
   PlanningParameterDto,
   UpsertPlanningParameterRequestDto,
-} from "@repo/contracts";
-import { resolvePlanningKeyParts } from "@repo/contracts";
+} from "../../contracts";
+import { resolvePlanningKeyParts } from "../../contracts";
 import { toApiDate, toApiDecimal, toApiJson, toPrismaJson } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";

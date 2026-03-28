@@ -1,7 +1,7 @@
 import {
   LOCAL_DEV_DEMO_USER_EMAIL,
   LOCAL_DEV_DEMO_USER_ID,
-} from "@repo/contracts";
+} from "../../contracts";
 import type { JwtPrincipal } from "../request-context/request-context.types";
 
 function isTruthy(value: string | undefined) {
