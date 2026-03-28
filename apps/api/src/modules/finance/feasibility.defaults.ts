@@ -1,4 +1,4 @@
-import { RunWarningCode } from "../../contracts";
+import { RunWarningCode } from "../../../../../packages/contracts/dist/enums";
 
 export const FEASIBILITY_V0_DEFAULTS = {
   floorToFloorMeters: 3.1,

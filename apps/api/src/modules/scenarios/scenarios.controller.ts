@@ -4,10 +4,10 @@ import type {
   CreateScenarioRequestDto,
   ListScenariosResponseDto,
   ScenarioDto,
-  ScenarioReadinessDto,
   UpdateScenarioRequestDto,
   UpsertScenarioFundingStackRequestDto,
-} from "../../contracts";
+} from "../../../../../packages/contracts/dist/scenarios";
+import type { ScenarioReadinessDto } from "../../../../../packages/contracts/dist/readiness";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
 import { OrgScopeGuard } from "../../common/auth/org-scope.guard";
 import { ScenarioReadinessService } from "./scenario-readiness.service";

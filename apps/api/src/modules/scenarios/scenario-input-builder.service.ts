@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { CORE_PLANNING_KEY_SLUGS } from "../../contracts";
+import { CORE_PLANNING_KEY_SLUGS } from "../../../../../packages/contracts/dist/planning-keys";
 import { toApiJson } from "../../common/prisma/api-mappers";
 import type {
   FeasibilityEngineInput,

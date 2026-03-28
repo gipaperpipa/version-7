@@ -2,9 +2,9 @@ import { Injectable, Scope } from "@nestjs/common";
 import type {
   FundingCategory,
   FundingProviderType,
-  ListFundingProgramsResponseDto,
   StrategyType,
-} from "../../contracts";
+} from "../../../../../packages/contracts/dist/enums";
+import type { ListFundingProgramsResponseDto } from "../../../../../packages/contracts/dist/funding";
 import { toApiDecimal } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";

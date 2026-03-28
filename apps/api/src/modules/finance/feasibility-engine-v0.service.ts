@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { MissingDataFlag, OptimizationTarget } from "../../contracts";
+import { MissingDataFlag, OptimizationTarget } from "../../../../../packages/contracts/dist/enums";
 import { FEASIBILITY_V0_DEFAULTS, FEASIBILITY_V0_WARNINGS } from "./feasibility.defaults";
 import type { FeasibilityEngineInput, FeasibilityEngineOutput } from "./feasibility.types";
 

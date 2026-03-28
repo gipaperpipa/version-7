@@ -3,10 +3,10 @@ import type {
   FinancingSourceType,
   MissingDataFlag,
   OptimizationTarget,
-  RunWarningDto,
-  ScenarioResultExplanationDto,
   StrategyType,
-} from "../../contracts";
+} from "../../../../../packages/contracts/dist/enums";
+import type { RunWarningDto } from "../../../../../packages/contracts/dist/common";
+import type { ScenarioResultExplanationDto } from "../../../../../packages/contracts/dist/feasibility";
 
 export interface ScenarioSnapshotFundingItem {
   id: string;
