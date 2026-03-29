@@ -62,6 +62,10 @@ function summarizeRequiredFields(fields: string[]) {
   return `${fields.slice(0, 2).join(" / ")} +${fields.length - 2}`;
 }
 
+function countFilledFields(fields: FieldConfig[]) {
+  return fields.filter((field) => hasValue(field.defaultValue)).length;
+}
+
 export function ScenarioEditorForm({
   action,
   parcels,
@@ -181,6 +185,11 @@ export function ScenarioEditorForm({
   const hiddenRevenueFields = revenuePartition.visible.length ? revenuePartition.hidden : revenueFields.slice(1);
   const focusChips = hint.requiredFields.slice(0, 3);
   const focusOverflow = Math.max(hint.requiredFields.length - focusChips.length, 0);
+  const builderRevenueFields = revenueFields.filter((field) => field.requiredNow);
+  const builderRevenuePrimaryFields = builderRevenueFields.length ? builderRevenueFields : revenueFields.slice(0, 1);
+  const builderRevenueExtensions = revenueFields.filter((field) => !builderRevenuePrimaryFields.some((candidate) => candidate.id === field.id));
+  const builderFinancePrimaryFields = financeFields.filter((field) => field.priority || field.requiredNow);
+  const builderFinanceExtensions = financeFields.filter((field) => !builderFinancePrimaryFields.some((candidate) => candidate.id === field.id));
 
   return (
     <form action={action} className="form-stack form-stack--dense">
@@ -330,57 +339,141 @@ export function ScenarioEditorForm({
         </div>
       </SectionCard>
 
-      <div className={cx("editor-secondary-grid", mode === "builder" && "editor-secondary-grid--builder")}>
-        <SectionCard
-          className="editor-panel"
-          eyebrow="Revenue assumptions"
-          title="Revenue"
-          description="Fill the strategy-critical inputs first."
-          size="compact"
-        >
-          <div className="content-stack">
-            <div className="field-grid field-grid--quad">
-              {visibleRevenueFields.map((field) => renderTextField(field))}
-            </div>
+      {mode === "builder" ? (
+        <>
+          <SectionCard
+            className="editor-panel editor-panel--primary"
+            eyebrow="Operating assumptions"
+            title="Core assumptions"
+            description="Edit the few inputs most likely to move readiness and output."
+            size="compact"
+            actions={(
+              <div className="action-row">
+                <Badge variant="accent">{countFilledFields(builderRevenuePrimaryFields)}/{builderRevenuePrimaryFields.length} revenue</Badge>
+                <Badge variant="surface">{countFilledFields(builderFinancePrimaryFields)}/{builderFinancePrimaryFields.length} cost/program</Badge>
+              </div>
+            )}
+          >
+            <div className="editor-core-grid">
+              <div className="editor-core-group">
+                <div className="editor-core-group__header">
+                  <div>
+                    <div className="editor-core-group__eyebrow">Revenue signal</div>
+                    <div className="editor-core-group__title">Strategy-critical revenue</div>
+                  </div>
+                  <Badge variant="surface">{builderRevenueExtensions.length} extension{builderRevenueExtensions.length === 1 ? "" : "s"}</Badge>
+                </div>
+                <div className="field-grid field-grid--quad">
+                  {builderRevenuePrimaryFields.map((field) => renderTextField(field))}
+                </div>
+              </div>
 
-            {hiddenRevenueFields.length ? (
-              <details className="compact-disclosure" open={hiddenRevenueFields.some((field) => hasValue(field.defaultValue))}>
-                <summary className="compact-disclosure__summary">Additional revenue inputs ({hiddenRevenueFields.length})</summary>
-                <div className="compact-disclosure__body">
+              <div className="editor-core-group">
+                <div className="editor-core-group__header">
+                  <div>
+                    <div className="editor-core-group__eyebrow">Cost and program</div>
+                    <div className="editor-core-group__title">Primary delivery inputs</div>
+                  </div>
+                  <Badge variant="surface">{builderFinanceExtensions.length} extension{builderFinanceExtensions.length === 1 ? "" : "s"}</Badge>
+                </div>
+                <div className="field-grid field-grid--quad">
+                  {builderFinancePrimaryFields.map((field) => renderTextField(field))}
+                </div>
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            className="editor-panel"
+            eyebrow="Model extensions"
+            title="Secondary assumptions"
+            description="Keep lower-priority inputs available without letting them dominate the page."
+            size="compact"
+          >
+            <div className="editor-extension-grid">
+              <details className="editor-extension-panel" open={builderRevenueExtensions.some((field) => hasValue(field.defaultValue))}>
+                <summary className="editor-extension-panel__summary">
+                  <span>Revenue extensions</span>
+                  <span className="editor-extension-panel__meta">
+                    {countFilledFields(builderRevenueExtensions)}/{builderRevenueExtensions.length} filled
+                  </span>
+                </summary>
+                <div className="editor-extension-panel__body">
                   <div className="field-grid field-grid--quad">
-                    {hiddenRevenueFields.map((field) => renderTextField(field))}
+                    {builderRevenueExtensions.map((field) => renderTextField(field))}
                   </div>
                 </div>
               </details>
-            ) : null}
-          </div>
-        </SectionCard>
 
-        <SectionCard
-          className="editor-panel"
-          eyebrow="Finance and delivery"
-          title="Cost and program"
-          description="Cover the assumptions that move the result most."
-          size="compact"
-        >
-          <div className="content-stack">
-            <div className="field-grid field-grid--quad">
-              {financePartition.visible.map((field) => renderTextField(field))}
-            </div>
-
-            {financePartition.hidden.length ? (
-              <details className="compact-disclosure" open={financePartition.hidden.some((field) => hasValue(field.defaultValue))}>
-                <summary className="compact-disclosure__summary">Additional cost inputs ({financePartition.hidden.length})</summary>
-                <div className="compact-disclosure__body">
+              <details className="editor-extension-panel" open={builderFinanceExtensions.some((field) => hasValue(field.defaultValue))}>
+                <summary className="editor-extension-panel__summary">
+                  <span>Cost and program extensions</span>
+                  <span className="editor-extension-panel__meta">
+                    {countFilledFields(builderFinanceExtensions)}/{builderFinanceExtensions.length} filled
+                  </span>
+                </summary>
+                <div className="editor-extension-panel__body">
                   <div className="field-grid field-grid--quad">
-                    {financePartition.hidden.map((field) => renderTextField(field))}
+                    {builderFinanceExtensions.map((field) => renderTextField(field))}
                   </div>
                 </div>
               </details>
-            ) : null}
-          </div>
-        </SectionCard>
-      </div>
+            </div>
+          </SectionCard>
+        </>
+      ) : (
+        <div className="editor-secondary-grid">
+          <SectionCard
+            className="editor-panel"
+            eyebrow="Revenue assumptions"
+            title="Revenue"
+            description="Fill the strategy-critical inputs first."
+            size="compact"
+          >
+            <div className="content-stack">
+              <div className="field-grid field-grid--quad">
+                {visibleRevenueFields.map((field) => renderTextField(field))}
+              </div>
+
+              {hiddenRevenueFields.length ? (
+                <details className="compact-disclosure" open={hiddenRevenueFields.some((field) => hasValue(field.defaultValue))}>
+                  <summary className="compact-disclosure__summary">Additional revenue inputs ({hiddenRevenueFields.length})</summary>
+                  <div className="compact-disclosure__body">
+                    <div className="field-grid field-grid--quad">
+                      {hiddenRevenueFields.map((field) => renderTextField(field))}
+                    </div>
+                  </div>
+                </details>
+              ) : null}
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            className="editor-panel"
+            eyebrow="Finance and delivery"
+            title="Cost and program"
+            description="Cover the assumptions that move the result most."
+            size="compact"
+          >
+            <div className="content-stack">
+              <div className="field-grid field-grid--quad">
+                {financePartition.visible.map((field) => renderTextField(field))}
+              </div>
+
+              {financePartition.hidden.length ? (
+                <details className="compact-disclosure" open={financePartition.hidden.some((field) => hasValue(field.defaultValue))}>
+                  <summary className="compact-disclosure__summary">Additional cost inputs ({financePartition.hidden.length})</summary>
+                  <div className="compact-disclosure__body">
+                    <div className="field-grid field-grid--quad">
+                      {financePartition.hidden.map((field) => renderTextField(field))}
+                    </div>
+                  </div>
+                </details>
+              ) : null}
+            </div>
+          </SectionCard>
+        </div>
+      )}
 
       <ActionRow spread className={cx("form-actions-bar", mode === "builder" && "form-actions-bar--builder")}>
         <div className="field-help">Core now badges mark the inputs most likely to block readiness.</div>

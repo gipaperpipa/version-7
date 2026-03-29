@@ -4,7 +4,6 @@ import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
-import { ParcelCompletenessSummary } from "@/components/ui/parcel-completeness-summary";
 import { ProvenanceConfidence } from "@/components/ui/provenance-confidence";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -31,6 +30,7 @@ function ParcelRow({
     planningItems,
     linkedScenarios,
   });
+  const planningValueCount = planningItems.filter((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null).length;
 
   return (
     <div className="ops-table__row ops-table__row--parcels">
@@ -57,17 +57,48 @@ function ParcelRow({
       </div>
 
       <div className="ops-table__cell">
-        <ParcelCompletenessSummary
-          summary={summary}
-          variant="inline"
-        />
+        <div className="ops-cell-stack">
+          <div className="ops-scan__label">Area</div>
+          <div className="ops-scan__value">{parcel.landAreaSqm ?? "n/a"} sqm</div>
+          <div className="ops-scan__detail">{parcel.city ?? "Unknown city"} / {parcel.municipalityName ?? "Municipality not set"}</div>
+        </div>
       </div>
 
-      <div className="ops-table__actions">
+      <div className="ops-table__cell">
+        <div className="ops-cell-stack">
+          <div className="ops-scan__label">Source</div>
+          <div className="action-row">
+            <StatusBadge tone={summary.sourceStatus.tone}>{summary.sourceStatus.label}</StatusBadge>
+          </div>
+          <div className="ops-scan__detail">{summary.sourceStatus.detail}</div>
+        </div>
+      </div>
+
+      <div className="ops-table__cell">
+        <div className="ops-cell-stack">
+          <div className="ops-scan__label">Planning</div>
+          <div className="action-row">
+            <StatusBadge tone={summary.planningCompleteness.tone}>{summary.planningCompleteness.label}</StatusBadge>
+          </div>
+          <div className="ops-scan__detail">{planningValueCount} saved · {summary.planningCompleteness.detail}</div>
+        </div>
+      </div>
+
+      <div className="ops-table__cell">
+        <div className="ops-cell-stack">
+          <div className="ops-scan__label">Continuity</div>
+          <div className="action-row">
+            <StatusBadge tone={summary.scenarioContinuity.tone}>{summary.scenarioContinuity.label}</StatusBadge>
+          </div>
+          <div className="ops-scan__detail">{summary.scenarioContinuity.detail}</div>
+        </div>
+      </div>
+
+      <div className="ops-table__actions ops-table__actions--dense">
         <div className="action-row">
           <StatusBadge tone={summary.nextBestAction.tone}>{summary.nextBestAction.label}</StatusBadge>
         </div>
-        <div className="action-row">
+        <div className="action-row action-row--compact">
           <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${parcel.id}`}>
             Parcel
           </Link>
@@ -176,8 +207,11 @@ export default async function ParcelsPage({
             <div className="ops-table">
               <div className="ops-table__header ops-table__header--parcels">
                 <div>Parcel</div>
-                <div>Operational scan</div>
-                <div>Action</div>
+                <div>Area</div>
+                <div>Source</div>
+                <div>Planning</div>
+                <div>Continuity</div>
+                <div>Next</div>
               </div>
               {parcels.items.map((parcel) => (
                 <ParcelRow
