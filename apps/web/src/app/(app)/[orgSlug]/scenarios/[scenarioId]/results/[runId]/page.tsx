@@ -77,7 +77,7 @@ export default async function ScenarioResultPage({
         <PageHeader
           eyebrow="Feasibility result"
           title={scenario.name}
-          description="Read the latest output as a decision page: verdict first, weaknesses second, next move third."
+          description="Verdict first, weaknesses second, next move third."
           actions={(
             <>
               <StatusBadge tone={getRunStatusTone(run.status)}>{humanizeTokenLabel(run.status)}</StatusBadge>

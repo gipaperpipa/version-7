@@ -15,6 +15,7 @@ export function ScenarioReadinessBanner({ readiness }: { readiness: ScenarioRead
       title={verdict.title}
       summary={verdict.summary}
       tone={verdict.tone}
+      size="compact"
       context={(
         <div className="action-row">
           <StatusBadge tone={blockerCount ? "danger" : "success"}>

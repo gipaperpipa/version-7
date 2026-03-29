@@ -9,6 +9,7 @@ export function VerdictPanel({
   tone,
   context,
   actions,
+  size = "default",
 }: {
   eyebrow?: string;
   title: string;
@@ -16,6 +17,7 @@ export function VerdictPanel({
   tone: "neutral" | "surface" | "accent" | "success" | "warning" | "danger" | "info";
   context?: ReactNode;
   actions?: ReactNode;
+  size?: "default" | "compact";
 }) {
   return (
     <SectionCard
@@ -24,6 +26,7 @@ export function VerdictPanel({
       description={summary}
       tone={tone === "success" || tone === "accent" ? "accent" : tone === "warning" || tone === "danger" ? "muted" : "default"}
       actions={<StatusBadge tone={tone}>{title}</StatusBadge>}
+      size={size}
     >
       <div className="content-stack">
         {context ? <div className="verdict-panel__context">{context}</div> : null}

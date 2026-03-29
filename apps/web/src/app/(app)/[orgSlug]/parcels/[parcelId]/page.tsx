@@ -8,8 +8,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ParcelCompletenessSummary } from "@/components/ui/parcel-completeness-summary";
 import { ProvenanceConfidence } from "@/components/ui/provenance-confidence";
 import { SectionCard } from "@/components/ui/section-card";
-import { StatBlock } from "@/components/ui/stat-block";
-import { WorkflowSteps } from "@/components/ui/workflow-steps";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { getParcel } from "@/lib/api/parcels";
 import { getPlanningParameters } from "@/lib/api/planning";
@@ -64,12 +62,38 @@ export default async function ParcelDetailPage({
           )}
         />
 
-        <div className="stat-grid">
-          <StatBlock label="Land area" value={parcel.landAreaSqm ?? "n/a"} caption="sqm" tone="accent" />
-          <StatBlock label="Planning values" value={planningParameters.items.filter((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null).length} caption="Saved on this site" />
-          <StatBlock label="Linked scenarios" value={linkedScenarios.length} caption="Cases attached here" tone={linkedScenarios.length ? "success" : "neutral"} />
-          <StatBlock label="Source mode" value={summary.sourceStatus.label} caption="Trust posture" tone={summary.sourceStatus.tone === "surface" ? "warning" : summary.sourceStatus.tone === "info" ? "accent" : summary.sourceStatus.tone === "success" ? "success" : "neutral"} />
-        </div>
+        <SectionCard
+          eyebrow="Operating summary"
+          title="Parcel scan"
+          description="Trust, planning, and continuity signals in one row."
+          tone="accent"
+          size="compact"
+        >
+          <div className="ops-summary-grid ops-summary-grid--planning">
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Land area</div>
+              <div className="ops-summary-item__value">{parcel.landAreaSqm ?? "n/a"}</div>
+              <div className="ops-summary-item__detail">sqm carried from parcel context.</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Planning values</div>
+              <div className="ops-summary-item__value">
+                {planningParameters.items.filter((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null).length}
+              </div>
+              <div className="ops-summary-item__detail">Saved on this site.</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Linked scenarios</div>
+              <div className="ops-summary-item__value">{linkedScenarios.length}</div>
+              <div className="ops-summary-item__detail">Active cases attached here.</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Source mode</div>
+              <div className="ops-summary-item__value">{summary.sourceStatus.label}</div>
+              <div className="ops-summary-item__detail">Current trust posture.</div>
+            </div>
+          </div>
+        </SectionCard>
 
         <div className="detail-grid detail-grid--decision">
           <ParcelCompletenessSummary
@@ -137,31 +161,19 @@ export default async function ParcelDetailPage({
                   confidenceScore={parcel.confidenceScore}
                   sourceReference={parcel.sourceReference}
                 />
-                <div className="helper-list">
-                  <div>Source-selected parcels remain the intended product path.</div>
-                  <div>Manual edits stay usable in Sprint 1, but only as fallback.</div>
+                <div className="action-row">
+                  <span className="meta-chip">Source-first target</span>
+                  <span className="meta-chip">Manual fallback</span>
+                  <span className="meta-chip">Continuity preserved</span>
+                </div>
+                <div className="field-help">
+                  Keep manual edits usable, but read them as fallback rather than the flagship parcel workflow.
                 </div>
               </div>
             </SectionCard>
           </div>
 
           <div className="sidebar-stack">
-            <SectionCard
-              eyebrow="Workflow"
-              title="Current path"
-              tone="muted"
-              size="compact"
-            >
-              <WorkflowSteps
-                activeStep={1}
-                steps={[
-                  { label: "Parcel", description: "Keep site context legible." },
-                  { label: "Planning", description: "Record buildability." },
-                  { label: "Scenario", description: "Carry into a decision case." },
-                ]}
-              />
-            </SectionCard>
-
             <SectionCard
               eyebrow="Manual fallback"
               title="Manual fallback edit"

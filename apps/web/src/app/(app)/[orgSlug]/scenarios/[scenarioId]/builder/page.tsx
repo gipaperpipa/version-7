@@ -53,7 +53,7 @@ export default async function ScenarioBuilderPage({
         <PageHeader
           eyebrow="Scenario builder"
           title={scenario.name}
-          description="Configure the case, assess readiness, and act."
+          description="Read state fast, change what matters, then act."
           actions={(
             <>
               {scenario.parcelId ? (
@@ -78,7 +78,7 @@ export default async function ScenarioBuilderPage({
         <SectionCard
           eyebrow="Operating summary"
           title="Current case"
-          description="Read state fast, then edit below."
+          description="Context, funding, readiness, action."
           tone="accent"
         >
           <div className="content-stack">

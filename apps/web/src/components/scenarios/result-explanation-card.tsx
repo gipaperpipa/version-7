@@ -8,8 +8,8 @@ export function ResultExplanationCard({ explanation }: { explanation: ScenarioRe
 
   return (
     <SectionCard
-      eyebrow="Result explanation"
-      title="Engine readout"
+      eyebrow="Engine notes"
+      title="Readout"
       tone="accent"
       size="compact"
       actions={<StatusBadge tone="surface">{explanation.heuristicVersion}</StatusBadge>}

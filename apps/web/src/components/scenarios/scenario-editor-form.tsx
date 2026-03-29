@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AcquisitionType, OptimizationTarget, StrategyType, type ParcelDto, type ScenarioDto } from "@repo/contracts";
 import { ActionRow } from "@/components/ui/action-row";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,7 @@ function TextField({
   defaultValue,
   requiredNow = false,
   required = false,
+  className,
 }: {
   id: string;
   label: string;
@@ -34,9 +35,10 @@ function TextField({
   defaultValue?: string | null;
   requiredNow?: boolean;
   required?: boolean;
+  className?: string;
 }) {
   return (
-    <div className="field-stack">
+    <div className={className ?? "field-stack"}>
       <div className="field-row">
         <Label htmlFor={id}>{label}</Label>
         <FieldTag requiredNow={requiredNow} />
@@ -53,23 +55,33 @@ function TextAreaField({
   helpText,
   defaultValue,
   requiredNow = false,
+  rows = 4,
+  className,
 }: {
   id: string;
   label: string;
   helpText?: string;
   defaultValue?: string | null;
   requiredNow?: boolean;
+  rows?: number;
+  className?: string;
 }) {
   return (
-    <div className="field-stack">
+    <div className={className ?? "field-stack"}>
       <div className="field-row">
         <Label htmlFor={id}>{label}</Label>
         <FieldTag requiredNow={requiredNow} />
       </div>
-      <Textarea id={id} name={id} defaultValue={defaultValue ?? ""} />
+      <Textarea id={id} name={id} rows={rows} defaultValue={defaultValue ?? ""} className="ui-textarea--compact" />
       {helpText ? <div className="field-help">{helpText}</div> : null}
     </div>
   );
+}
+
+function summarizeRequiredFields(fields: string[]) {
+  if (!fields.length) return "No immediate blockers";
+  if (fields.length <= 2) return fields.join(" / ");
+  return `${fields.slice(0, 2).join(" / ")} +${fields.length - 2}`;
 }
 
 export function ScenarioEditorForm({
@@ -86,31 +98,72 @@ export function ScenarioEditorForm({
   submitLabel: string;
 }) {
   const initialStrategy = initialScenario?.strategyType ?? StrategyType.FREE_MARKET_RENTAL;
+  const initialSelectedParcelId = initialScenario?.parcelId ?? initialParcelId ?? "";
   const [strategyType, setStrategyType] = useState<StrategyType>(initialStrategy);
+  const [selectedParcelId, setSelectedParcelId] = useState(initialSelectedParcelId);
   const hint = strategyFieldHints[strategyType];
   const isRequiredNow = (label: string) => hint.requiredFields.includes(label);
+  const selectedParcel = useMemo(
+    () => parcels.find((parcel) => parcel.id === selectedParcelId) ?? null,
+    [parcels, selectedParcelId],
+  );
 
   return (
     <form action={action} className="form-stack">
-      <section className="scenario-hint">
-        <div className="eyebrow">Decision framing</div>
-        <h2 className="scenario-hint__title">{hint.title}</h2>
-        <p className="scenario-hint__description">{hint.description}</p>
-        <div className="chip-row" style={{ marginTop: 16 }}>
-          {hint.requiredFields.map((field) => (
-            <Badge key={field} variant="accent">{field}</Badge>
-          ))}
+      <SectionCard
+        eyebrow="Current input focus"
+        title={hint.title}
+        description="Anchor the case, cover the core assumptions, then move into funding and readiness."
+        tone="accent"
+        size="compact"
+      >
+        <div className="content-stack">
+          <div className="ops-summary-grid ops-summary-grid--builder">
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Parcel</div>
+              <div className="ops-summary-item__value">
+                {selectedParcel?.name ?? selectedParcel?.cadastralId ?? "Select parcel"}
+              </div>
+              <div className="ops-summary-item__detail">Keep the case tied to a real site.</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Strategy</div>
+              <div className="ops-summary-item__value">{strategyTypeLabels[strategyType]}</div>
+              <div className="ops-summary-item__detail">{optimizationTargetLabels[initialScenario?.optimizationTarget ?? OptimizationTarget.MIN_REQUIRED_EQUITY]}</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Core now</div>
+              <div className="ops-summary-item__value">{hint.requiredFields.length} field(s)</div>
+              <div className="ops-summary-item__detail">{summarizeRequiredFields(hint.requiredFields)}</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Secondary</div>
+              <div className="ops-summary-item__value">Acquisition, target, notes</div>
+              <div className="ops-summary-item__detail">Useful, but not the first blockers to clear.</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Next</div>
+              <div className="ops-summary-item__value">Save, fund, run</div>
+              <div className="ops-summary-item__detail">Funding stack and readiness sit immediately after save.</div>
+            </div>
+          </div>
+
+          <div className="chip-row">
+            {hint.requiredFields.map((field) => (
+              <Badge key={field} variant="accent">{field}</Badge>
+            ))}
+          </div>
         </div>
-      </section>
+      </SectionCard>
 
       <SectionCard
         eyebrow="Scenario framing"
         title="Case definition"
-        description="Anchor parcel, strategy, and decision lens."
+        description="Cover the few setup fields that shape the case."
         size="compact"
       >
-        <div className="field-grid">
-          <div className="field-grid field-grid--single">
+        <div className="content-stack">
+          <div className="field-grid field-grid--tri">
             <TextField
               id="name"
               label="Scenario name"
@@ -118,16 +171,6 @@ export function ScenarioEditorForm({
               requiredNow
               required
             />
-          </div>
-
-          <div className="field-grid field-grid--single">
-            <TextAreaField
-              id="description"
-              label="Description"
-              defaultValue={initialScenario?.description ?? ""}
-            />
-          </div>
-
           <div className="field-stack">
             <div className="field-row">
               <Label htmlFor="parcelId">Linked parcel</Label>
@@ -136,7 +179,8 @@ export function ScenarioEditorForm({
             <select
               id="parcelId"
               name="parcelId"
-              defaultValue={initialScenario?.parcelId ?? initialParcelId ?? ""}
+              defaultValue={initialSelectedParcelId}
+              onChange={(event) => setSelectedParcelId(event.target.value)}
               className="ui-select"
             >
               <option value="">Select parcel</option>
@@ -146,7 +190,7 @@ export function ScenarioEditorForm({
                 </option>
               ))}
             </select>
-            <div className="field-help">Keep the case anchored to a real site.</div>
+            <div className="field-help">Keep the case site-linked.</div>
           </div>
 
           <div className="field-stack">
@@ -165,60 +209,76 @@ export function ScenarioEditorForm({
                 <option key={value} value={value}>{strategyTypeLabels[value]}</option>
               ))}
             </select>
-            <div className="field-help">Changes which revenue inputs matter now.</div>
+            <div className="field-help">Sets which revenue inputs matter now.</div>
+          </div>
           </div>
 
-          <div className="field-stack">
-            <div className="field-row">
-              <Label htmlFor="acquisitionType">Acquisition</Label>
-              <FieldTag requiredNow={false} />
+          <TextAreaField
+            id="description"
+            label="Description"
+            defaultValue={initialScenario?.description ?? ""}
+            rows={3}
+            className="field-stack field-stack--span-full"
+          />
+
+          <details className="compact-disclosure" open={Boolean(initialScenario?.description || initialScenario?.strategyMixJson)}>
+            <summary className="compact-disclosure__summary">Advanced framing</summary>
+            <div className="compact-disclosure__body">
+              <div className="field-grid field-grid--tri">
+                <div className="field-stack">
+                  <div className="field-row">
+                    <Label htmlFor="acquisitionType">Acquisition</Label>
+                    <FieldTag requiredNow={false} />
+                  </div>
+                  <select
+                    id="acquisitionType"
+                    name="acquisitionType"
+                    defaultValue={initialScenario?.acquisitionType ?? AcquisitionType.BUY}
+                    className="ui-select"
+                  >
+                    {Object.values(AcquisitionType).map((value) => (
+                      <option key={value} value={value}>{acquisitionTypeLabels[value]}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="field-stack">
+                  <div className="field-row">
+                    <Label htmlFor="optimizationTarget">Optimization target</Label>
+                    <FieldTag requiredNow={false} />
+                  </div>
+                  <select
+                    id="optimizationTarget"
+                    name="optimizationTarget"
+                    defaultValue={initialScenario?.optimizationTarget ?? OptimizationTarget.MIN_REQUIRED_EQUITY}
+                    className="ui-select"
+                  >
+                    {Object.values(OptimizationTarget).map((value) => (
+                      <option key={value} value={value}>{optimizationTargetLabels[value]}</option>
+                    ))}
+                  </select>
+                  <div className="field-help">Decision lens.</div>
+                </div>
+
+                <TextAreaField
+                  id="strategyMixJson"
+                  label="Temporary mix configuration JSON"
+                  helpText="Only needed for Mixed Strategy in Sprint 1."
+                  defaultValue={initialScenario?.strategyMixJson ? JSON.stringify(initialScenario.strategyMixJson, null, 2) : ""}
+                  requiredNow={isRequiredNow("Temporary mix configuration JSON")}
+                  rows={6}
+                  className="field-stack field-stack--span-full"
+                />
+              </div>
             </div>
-            <select
-              id="acquisitionType"
-              name="acquisitionType"
-              defaultValue={initialScenario?.acquisitionType ?? AcquisitionType.BUY}
-              className="ui-select"
-            >
-              {Object.values(AcquisitionType).map((value) => (
-                <option key={value} value={value}>{acquisitionTypeLabels[value]}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="field-stack">
-            <div className="field-row">
-              <Label htmlFor="optimizationTarget">Optimization target</Label>
-              <FieldTag requiredNow={false} />
-            </div>
-            <select
-              id="optimizationTarget"
-              name="optimizationTarget"
-              defaultValue={initialScenario?.optimizationTarget ?? OptimizationTarget.MIN_REQUIRED_EQUITY}
-              className="ui-select"
-            >
-              {Object.values(OptimizationTarget).map((value) => (
-                <option key={value} value={value}>{optimizationTargetLabels[value]}</option>
-              ))}
-            </select>
-            <div className="field-help">Choose the decision lens.</div>
-          </div>
-
-          <div className="field-grid field-grid--single">
-            <TextAreaField
-              id="strategyMixJson"
-              label="Temporary mix configuration JSON"
-              helpText="Only needed for Mixed Strategy in Sprint 1."
-              defaultValue={initialScenario?.strategyMixJson ? JSON.stringify(initialScenario.strategyMixJson, null, 2) : ""}
-              requiredNow={isRequiredNow("Temporary mix configuration JSON")}
-            />
-          </div>
+          </details>
         </div>
       </SectionCard>
 
       <SectionCard
         eyebrow="Revenue assumptions"
         title="Revenue"
-        description="Set the commercial logic the case should support."
+        description="Fill only the strategy-critical revenue inputs first."
         size="compact"
       >
         <div className="field-grid field-grid--tri">
@@ -256,7 +316,7 @@ export function ScenarioEditorForm({
       <SectionCard
         eyebrow="Finance and delivery"
         title="Cost and program"
-        description="Shape unitization, cost, and capital need before funding."
+        description="Cover the few assumptions that most change the result."
         size="compact"
       >
         <div className="field-grid field-grid--tri">
@@ -305,12 +365,12 @@ export function ScenarioEditorForm({
       <SectionCard
         eyebrow="Save"
         title="Save"
-        description="Save first. Then funding, readiness, run."
+        description="Save first, then funding and run."
         tone="muted"
         size="compact"
       >
         <ActionRow spread className="form-footer">
-          <div className="field-help">Core badges mark the fields most likely to block readiness.</div>
+          <div className="field-help">Core badges mark the inputs most likely to block readiness.</div>
           <Button type="submit" size="lg">{submitLabel}</Button>
         </ActionRow>
       </SectionCard>

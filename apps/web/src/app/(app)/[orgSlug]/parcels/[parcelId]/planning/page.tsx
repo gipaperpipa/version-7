@@ -5,8 +5,6 @@ import { NextStepPanel } from "@/components/ui/next-step-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { PlanningParameterForm } from "@/components/planning/planning-parameter-form";
 import { SectionCard } from "@/components/ui/section-card";
-import { StatBlock } from "@/components/ui/stat-block";
-import { WorkflowSteps } from "@/components/ui/workflow-steps";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { getParcel } from "@/lib/api/parcels";
 import { getPlanningParameters } from "@/lib/api/planning";
@@ -122,33 +120,15 @@ export default async function ParcelPlanningPage({
               description="Keep empty, saved, cleared, and derived values distinct."
               size="compact"
             >
-              <div className="action-row">
-                <span className="meta-chip">Empty</span>
-                <span className="meta-chip">Filled</span>
-                <span className="meta-chip">Cleared</span>
-                <span className="meta-chip">Derived / Read-only</span>
+              <div className="content-stack">
+                <div className="action-row">
+                  <span className="meta-chip">Empty</span>
+                  <span className="meta-chip">Filled</span>
+                  <span className="meta-chip">Cleared</span>
+                  <span className="meta-chip">Derived / Read-only</span>
+                </div>
+                <div className="field-help">Readiness-relevant fields are marked inline. Buildable Window stays source-backed and read-only.</div>
               </div>
-              <div className="helper-list">
-                <div>Readiness-relevant fields are marked inline.</div>
-                <div>Buildable Window stays source-backed and read-only.</div>
-                <div>Save first, then carry the parcel into scenario design.</div>
-              </div>
-            </SectionCard>
-
-            <SectionCard
-              eyebrow="Workflow"
-              title="Current path"
-              tone="muted"
-              size="compact"
-            >
-              <WorkflowSteps
-                activeStep={2}
-                steps={[
-                  { label: "Parcel", description: "Establish site context." },
-                  { label: "Planning", description: "Interpret buildability." },
-                  { label: "Scenario", description: "Frame the decision case." },
-                ]}
-              />
             </SectionCard>
           </div>
         </div>

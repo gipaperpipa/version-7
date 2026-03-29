@@ -28,7 +28,8 @@ export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
     <SectionCard
       eyebrow="Diagnostics"
       title="Risk and signal quality"
-      description="Scan blockers, warnings, missing data, caveats, and confidence before trusting the direction."
+      description="Blockers, warnings, missing data, caveats, confidence."
+      size="compact"
     >
       <div className="content-stack">
         <div className="action-row">

@@ -7,7 +7,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ParcelCompletenessSummary } from "@/components/ui/parcel-completeness-summary";
 import { ProvenanceConfidence } from "@/components/ui/provenance-confidence";
 import { SectionCard } from "@/components/ui/section-card";
-import { StatBlock } from "@/components/ui/stat-block";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { getParcels } from "@/lib/api/parcels";
@@ -62,18 +61,20 @@ function ParcelRow({
       </div>
 
       <div className="ops-table__actions">
-        <div className="list-row__title">
+        <div className="action-row">
           <StatusBadge tone={summary.nextBestAction.tone}>{summary.nextBestAction.label}</StatusBadge>
         </div>
-        <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${parcel.id}`}>
-          Parcel
-        </Link>
-        <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/parcels/${parcel.id}/planning`}>
-          Planning
-        </Link>
-        <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/new?parcelId=${parcel.id}`}>
-          Scenario
-        </Link>
+        <div className="action-row">
+          <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${parcel.id}`}>
+            Parcel
+          </Link>
+          <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/parcels/${parcel.id}/planning`}>
+            Planning
+          </Link>
+          <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/new?parcelId=${parcel.id}`}>
+            Scenario
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -114,7 +115,7 @@ export default async function ParcelsPage({
         <PageHeader
           eyebrow="Workspace / Parcels"
           title="Site pipeline"
-          description="Scan parcel trust, planning coverage, and next action. Manual parcel intake remains fallback only."
+          description="Scan parcel trust, planning coverage, and next move. Manual intake remains fallback only."
           actions={(
             <Link className={buttonClasses({ size: "lg" })} href={`/${orgSlug}/parcels/new`}>
               Add fallback parcel
@@ -122,12 +123,36 @@ export default async function ParcelsPage({
           )}
         />
 
-        <div className="stat-grid">
-          <StatBlock label="Total parcels" value={parcels.total} caption="Workspace pipeline" tone="accent" />
-          <StatBlock label="Source-backed" value={sourceBackedCount} caption="Aligned to source-led intake" tone="success" />
-          <StatBlock label="Planning started" value={planningStartedCount} caption="Buildability work underway" />
-          <StatBlock label="Manual fallback" value={manualCount} caption="Usable, but secondary" tone={manualCount ? "warning" : "neutral"} />
-        </div>
+        <SectionCard
+          eyebrow="Operating summary"
+          title="Portfolio scan"
+          description="Compare trust, planning momentum, and fallback exposure at a glance."
+          tone="accent"
+          size="compact"
+        >
+          <div className="ops-summary-grid ops-summary-grid--planning">
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Parcels</div>
+              <div className="ops-summary-item__value">{parcels.total}</div>
+              <div className="ops-summary-item__detail">Current site pipeline.</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Source-backed</div>
+              <div className="ops-summary-item__value">{sourceBackedCount}</div>
+              <div className="ops-summary-item__detail">Aligned to source-led intake.</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Planning started</div>
+              <div className="ops-summary-item__value">{planningStartedCount}</div>
+              <div className="ops-summary-item__detail">Buildability work underway.</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Manual fallback</div>
+              <div className="ops-summary-item__value">{manualCount}</div>
+              <div className="ops-summary-item__detail">Usable now, but secondary.</div>
+            </div>
+          </div>
+        </SectionCard>
 
         <SectionCard
           eyebrow="Acquisition workspace"
