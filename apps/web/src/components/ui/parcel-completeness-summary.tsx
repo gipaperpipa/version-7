@@ -11,13 +11,27 @@ function SummaryRow({
   detail,
   tone,
   compact = false,
+  inline = false,
 }: {
   title: string;
   label: string;
   detail: string;
   tone: "neutral" | "surface" | "accent" | "success" | "warning" | "danger" | "info";
   compact?: boolean;
+  inline?: boolean;
 }) {
+  if (inline) {
+    return (
+      <div className="ops-summary-item">
+        <div className="ops-summary-item__label">{title}</div>
+        <div className="ops-summary-item__value">
+          <StatusBadge tone={tone}>{label}</StatusBadge>
+        </div>
+        <div className="ops-summary-item__detail">{detail}</div>
+      </div>
+    );
+  }
+
   return (
     <div className={cx("summary-row", compact && "summary-row--compact")}>
       <div className="content-stack" style={{ gap: 6 }}>
@@ -46,9 +60,45 @@ export function ParcelCompletenessSummary({
   primaryActionLabel?: string;
   secondaryActionHref?: string;
   secondaryActionLabel?: string;
-  variant?: "default" | "compact";
+  variant?: "default" | "compact" | "inline";
 }) {
   const compact = variant === "compact";
+  const inline = variant === "inline";
+
+  if (inline) {
+    return (
+      <div className="ops-summary-grid ops-summary-grid--parcel">
+        <SummaryRow
+          title="Source"
+          label={summary.sourceStatus.label}
+          detail={summary.sourceStatus.detail}
+          tone={summary.sourceStatus.tone}
+          inline
+        />
+        <SummaryRow
+          title="Planning"
+          label={summary.planningCompleteness.label}
+          detail={summary.planningCompleteness.detail}
+          tone={summary.planningCompleteness.tone}
+          inline
+        />
+        <SummaryRow
+          title="Scenario"
+          label={summary.scenarioContinuity.label}
+          detail={summary.scenarioContinuity.detail}
+          tone={summary.scenarioContinuity.tone}
+          inline
+        />
+        <SummaryRow
+          title="Next"
+          label={summary.nextBestAction.label}
+          detail={summary.nextBestAction.detail}
+          tone={summary.nextBestAction.tone}
+          inline
+        />
+      </div>
+    );
+  }
 
   return (
     <SectionCard

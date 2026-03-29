@@ -96,7 +96,7 @@ export function PlanningParameterForm({
             description={sectionDescriptions[section]}
             size="compact"
           >
-            <div className="field-grid">
+            <div className="field-grid planning-field-grid">
               {sectionDefinitions.map((definition) => {
                 const existing = items.find((item) => item.keySlug === definition.keySlug);
                 const currentValue = values[definition.keySlug] ?? "";

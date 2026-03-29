@@ -34,31 +34,37 @@ function ParcelRow({
   });
 
   return (
-    <div className="list-row list-row--dense">
-      <div className="list-row__body">
-        <div className="list-row__title">
-          <span className="list-row__title-text">{parcel.name ?? parcel.cadastralId ?? "Untitled parcel"}</span>
-          <StatusBadge tone={summary.sourceStatus.tone}>{summary.sourceStatus.label}</StatusBadge>
-          <StatusBadge tone={summary.nextBestAction.tone}>{summary.nextBestAction.label}</StatusBadge>
-          {linkedScenarios.length ? <StatusBadge tone="accent">{linkedScenarios.length} scenario(s)</StatusBadge> : null}
+    <div className="ops-table__row ops-table__row--parcels">
+      <div className="ops-table__cell">
+        <div className="list-row__body">
+          <div className="list-row__title">
+            <span className="list-row__title-text">{parcel.name ?? parcel.cadastralId ?? "Untitled parcel"}</span>
+            <StatusBadge tone={summary.sourceStatus.tone}>{summary.sourceStatus.label}</StatusBadge>
+            {linkedScenarios.length ? <StatusBadge tone="accent">{linkedScenarios.length} scenario(s)</StatusBadge> : null}
+          </div>
+          <div className="list-row__description">
+            {[parcel.city ?? "Unknown city", parcel.municipalityName ?? "Municipality not set", `${parcel.landAreaSqm ?? "n/a"} sqm`].join(" / ")}
+          </div>
+          <div className="list-row__meta">{parcel.addressLine1 ?? parcel.cadastralId ?? "No address saved yet"}</div>
+          <ProvenanceConfidence
+            sourceType={parcel.sourceType}
+            confidenceScore={parcel.confidenceScore}
+            sourceReference={parcel.sourceReference}
+          />
         </div>
-        <div className="list-row__description">
-          {[parcel.city ?? "Unknown city", parcel.municipalityName ?? "Municipality not set", `${parcel.landAreaSqm ?? "n/a"} sqm`].join(" / ")}
-        </div>
-        <div className="list-row__meta">{parcel.addressLine1 ?? parcel.cadastralId ?? "No address saved yet"}</div>
-        <ProvenanceConfidence
-          sourceType={parcel.sourceType}
-          confidenceScore={parcel.confidenceScore}
-          sourceReference={parcel.sourceReference}
+      </div>
+
+      <div className="ops-table__cell">
+        <ParcelCompletenessSummary
+          summary={summary}
+          variant="inline"
         />
       </div>
 
-      <ParcelCompletenessSummary
-        summary={summary}
-        variant="compact"
-      />
-
-      <div className="action-row">
+      <div className="ops-table__actions">
+        <div className="list-row__title">
+          <StatusBadge tone={summary.nextBestAction.tone}>{summary.nextBestAction.label}</StatusBadge>
+        </div>
         <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${parcel.id}`}>
           Parcel
         </Link>
@@ -126,10 +132,15 @@ export default async function ParcelsPage({
         <SectionCard
           eyebrow="Acquisition workspace"
           title="Parcel portfolio"
-          description="Scan identity, trust, continuity, and next action."
+          description="Scan identity, trust, continuity, and next move in one sweep."
         >
           {parcels.items.length ? (
-            <div className="list-shell">
+            <div className="ops-table">
+              <div className="ops-table__header ops-table__header--parcels">
+                <div>Parcel</div>
+                <div>Operational scan</div>
+                <div>Action</div>
+              </div>
               {parcels.items.map((parcel) => (
                 <ParcelRow
                   key={parcel.id}

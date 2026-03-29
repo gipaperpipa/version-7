@@ -116,54 +116,27 @@ export default async function ScenarioResultPage({
 
         {result ? (
           <>
-            <SectionCard
-              eyebrow="Headline metrics"
-              title="Decision summary"
-              description="Scan these first."
-              tone="accent"
-              size="compact"
-            >
-              <div className="metrics-grid">
-                <StatBlock label="Buildable BGF" value={result.buildableBgfSqm ?? "n/a"} caption="Estimated total gross floor area" tone="accent" />
-                <StatBlock label="Required equity" value={result.requiredEquity ?? "n/a"} caption="Residual capital after debt layers" tone="warning" />
-                <StatBlock label="Break-even rent" value={result.breakEvenRentEurSqm ?? "n/a"} caption="EUR/sqm equivalent" tone="success" />
-                <StatBlock label="Estimated units" value={result.estimatedUnitCount ?? "n/a"} caption="Current unit-count signal from the v0 engine" />
-              </div>
-            </SectionCard>
-
-            <RunDiagnosticsPanel run={run} />
-            <ResultExplanationCard explanation={result.explanation ?? null} />
-
-            <div className="detail-grid">
+            <div className="detail-grid detail-grid--decision">
               <SectionCard
-                eyebrow="Capital and cost context"
-                title="Capital context"
-                description="Supporting figures behind equity and break-even."
+                eyebrow="Headline metrics"
+                title="Decision summary"
+                description="Scan these first."
+                tone="accent"
                 size="compact"
               >
-                <div className="key-value-grid">
-                  <div className="key-value-card">
-                    <div className="key-value-card__label">Total development cost</div>
-                    <div className="key-value-card__value">{result.totalDevelopmentCost ?? "n/a"}</div>
-                  </div>
-                  <div className="key-value-card">
-                    <div className="key-value-card__label">State subsidy</div>
-                    <div className="key-value-card__value">{result.stateSubsidyAmount ?? "n/a"}</div>
-                  </div>
-                  <div className="key-value-card">
-                    <div className="key-value-card__label">KfW amount</div>
-                    <div className="key-value-card__value">{result.kfwAmount ?? "n/a"}</div>
-                  </div>
-                  <div className="key-value-card">
-                    <div className="key-value-card__label">Free financing</div>
-                    <div className="key-value-card__value">{result.freeFinancingAmount ?? "n/a"}</div>
-                  </div>
+                <div className="metrics-grid">
+                  <StatBlock label="Buildable BGF" value={result.buildableBgfSqm ?? "n/a"} caption="Estimated total gross floor area" tone="accent" />
+                  <StatBlock label="Required equity" value={result.requiredEquity ?? "n/a"} caption="Residual capital after debt layers" tone="warning" />
+                  <StatBlock label="Break-even rent" value={result.breakEvenRentEurSqm ?? "n/a"} caption="EUR/sqm equivalent" tone="success" />
+                  <StatBlock label="Estimated units" value={result.estimatedUnitCount ?? "n/a"} caption="Current unit-count signal from the v0 engine" />
                 </div>
               </SectionCard>
 
               <NextStepPanel
                 title={nextAction.title}
                 description={nextAction.description}
+                tone={verdict.tone === "success" ? "accent" : "muted"}
+                size="compact"
                 actions={(
                   <>
                     <Link className={buttonClasses()} href={builderHref}>
@@ -183,14 +156,42 @@ export default async function ScenarioResultPage({
                 )}
               />
             </div>
+
+            <RunDiagnosticsPanel run={run} />
+            <ResultExplanationCard explanation={result.explanation ?? null} />
+
+            <SectionCard
+              eyebrow="Capital and cost context"
+              title="Capital context"
+              description="Supporting figures behind equity and break-even."
+              size="compact"
+            >
+              <div className="key-value-grid">
+                <div className="key-value-card">
+                  <div className="key-value-card__label">Total development cost</div>
+                  <div className="key-value-card__value">{result.totalDevelopmentCost ?? "n/a"}</div>
+                </div>
+                <div className="key-value-card">
+                  <div className="key-value-card__label">State subsidy</div>
+                  <div className="key-value-card__value">{result.stateSubsidyAmount ?? "n/a"}</div>
+                </div>
+                <div className="key-value-card">
+                  <div className="key-value-card__label">KfW amount</div>
+                  <div className="key-value-card__value">{result.kfwAmount ?? "n/a"}</div>
+                </div>
+                <div className="key-value-card">
+                  <div className="key-value-card__label">Free financing</div>
+                  <div className="key-value-card__value">{result.freeFinancingAmount ?? "n/a"}</div>
+                </div>
+              </div>
+            </SectionCard>
           </>
         ) : (
           <>
-            <RunDiagnosticsPanel run={run} />
-
             <NextStepPanel
               title={nextAction.title}
               description={nextAction.description}
+              size="compact"
               actions={(
                 <>
                   <Link className={buttonClasses()} href={builderHref}>
@@ -204,6 +205,8 @@ export default async function ScenarioResultPage({
                 </>
               )}
             />
+
+            <RunDiagnosticsPanel run={run} />
 
             <EmptyState
               eyebrow="No financial result yet"

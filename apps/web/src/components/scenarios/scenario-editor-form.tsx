@@ -221,7 +221,7 @@ export function ScenarioEditorForm({
         description="Set the commercial logic the case should support."
         size="compact"
       >
-        <div className="field-grid">
+        <div className="field-grid field-grid--tri">
           <TextField
             id="targetMarketRentEurSqm"
             label="Market rent EUR/sqm"
@@ -259,7 +259,7 @@ export function ScenarioEditorForm({
         description="Shape unitization, cost, and capital need before funding."
         size="compact"
       >
-        <div className="field-grid">
+        <div className="field-grid field-grid--tri">
           <TextField
             id="avgUnitSizeSqm"
             label="Average unit size sqm"

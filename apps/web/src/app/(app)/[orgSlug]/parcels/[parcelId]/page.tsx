@@ -71,6 +71,33 @@ export default async function ParcelDetailPage({
           <StatBlock label="Source mode" value={summary.sourceStatus.label} caption="Trust posture" tone={summary.sourceStatus.tone === "surface" ? "warning" : summary.sourceStatus.tone === "info" ? "accent" : summary.sourceStatus.tone === "success" ? "success" : "neutral"} />
         </div>
 
+        <div className="detail-grid detail-grid--decision">
+          <ParcelCompletenessSummary
+            summary={summary}
+            primaryActionHref={`/${orgSlug}/parcels/${parcelId}/planning`}
+            primaryActionLabel="Review planning"
+            secondaryActionHref={`/${orgSlug}/scenarios/new?parcelId=${parcelId}`}
+            secondaryActionLabel="Create scenario"
+          />
+
+          <NextStepPanel
+            title={summary.nextBestAction.label}
+            description={summary.nextBestAction.detail}
+            tone="accent"
+            size="compact"
+            actions={(
+              <>
+                <Link className={buttonClasses()} href={`/${orgSlug}/parcels/${parcelId}/planning`}>
+                  Open planning
+                </Link>
+                <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios/new?parcelId=${parcelId}`}>
+                  Create scenario
+                </Link>
+              </>
+            )}
+          />
+        </div>
+
         <div className="detail-grid">
           <div className="content-stack">
             <SectionCard
@@ -116,42 +143,9 @@ export default async function ParcelDetailPage({
                 </div>
               </div>
             </SectionCard>
-
-            <NextStepPanel
-              title={summary.nextBestAction.label}
-              description={summary.nextBestAction.detail}
-              actions={(
-                <>
-                  <Link className={buttonClasses()} href={`/${orgSlug}/parcels/${parcelId}/planning`}>
-                    Open planning
-                  </Link>
-                  <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios/new?parcelId=${parcelId}`}>
-                    Create scenario
-                  </Link>
-                </>
-              )}
-            />
           </div>
 
           <div className="sidebar-stack">
-            <ParcelCompletenessSummary
-              summary={summary}
-              primaryActionHref={`/${orgSlug}/parcels/${parcelId}/planning`}
-              primaryActionLabel="Review planning"
-              secondaryActionHref={`/${orgSlug}/scenarios/new?parcelId=${parcelId}`}
-              secondaryActionLabel="Create scenario"
-            />
-
-            <SectionCard
-              eyebrow="Manual fallback"
-              title="Manual fallback edit"
-              description="Usable in Sprint 1. Source-led parcel selection remains the intended model."
-              tone="muted"
-              size="compact"
-            >
-              <ParcelEditorForm action={action} initialParcel={parcel} submitLabel="Save parcel" />
-            </SectionCard>
-
             <SectionCard
               eyebrow="Workflow"
               title="Current path"
@@ -166,6 +160,16 @@ export default async function ParcelDetailPage({
                   { label: "Scenario", description: "Carry into a decision case." },
                 ]}
               />
+            </SectionCard>
+
+            <SectionCard
+              eyebrow="Manual fallback"
+              title="Manual fallback edit"
+              description="Usable in Sprint 1. Source-led parcel selection remains the intended model."
+              tone="muted"
+              size="compact"
+            >
+              <ParcelEditorForm action={action} initialParcel={parcel} submitLabel="Save parcel" />
             </SectionCard>
           </div>
         </div>

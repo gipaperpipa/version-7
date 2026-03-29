@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
 import { buttonClasses } from "@/components/ui/button";
 import { NextStepPanel } from "@/components/ui/next-step-panel";
@@ -54,20 +53,43 @@ export default async function ParcelPlanningPage({
           )}
         />
 
-        <div className="stat-grid">
-          <StatBlock label="Saved inputs" value={filledCount} caption="Current non-empty values" tone="accent" />
-          <StatBlock label="Readiness inputs" value={readinessCount} caption="Fields already helping checks" />
-          <StatBlock label="Derived values" value={derivedCount} caption="Source-backed and read-only" tone="accent" />
-          <StatBlock label="Parcel context" value={parcel.landAreaSqm ?? "n/a"} caption="Land area carried in" />
-        </div>
+        <SectionCard
+          eyebrow="Planning summary"
+          title="Current planning state"
+          description="Read readiness-relevant coverage first."
+          tone="accent"
+          size="compact"
+        >
+          <div className="content-stack">
+            <div className="ops-summary-grid ops-summary-grid--planning">
+              <div className="ops-summary-item">
+                <div className="ops-summary-item__label">Saved inputs</div>
+                <div className="ops-summary-item__value">{filledCount}</div>
+                <div className="ops-summary-item__detail">Current non-empty values.</div>
+              </div>
+              <div className="ops-summary-item">
+                <div className="ops-summary-item__label">Readiness inputs</div>
+                <div className="ops-summary-item__value">{readinessCount}</div>
+                <div className="ops-summary-item__detail">Already contributing to checks.</div>
+              </div>
+              <div className="ops-summary-item">
+                <div className="ops-summary-item__label">Derived values</div>
+                <div className="ops-summary-item__value">{derivedCount}</div>
+                <div className="ops-summary-item__detail">Source-backed and read-only.</div>
+              </div>
+              <div className="ops-summary-item">
+                <div className="ops-summary-item__label">Parcel context</div>
+                <div className="ops-summary-item__value">{parcel.landAreaSqm ?? "n/a"}</div>
+                <div className="ops-summary-item__detail">Land area carried in from parcel.</div>
+              </div>
+            </div>
 
-        <Alert tone="info">
-          <AlertTitle>Focused Sprint 1 planning coverage</AlertTitle>
-          <AlertDescription>
-            This page keeps only the planning keys that matter most for Sprint 1 readiness and feasibility.
-            Geometry-backed inputs stay source-derived and read-only.
-          </AlertDescription>
-        </Alert>
+            <div className="action-row">
+              <span className="meta-chip">Focused Sprint 1 planning coverage</span>
+              <span className="meta-chip">Buildable Window stays source-derived</span>
+            </div>
+          </div>
+        </SectionCard>
 
         <div className="detail-grid">
           <PlanningParameterForm
@@ -77,10 +99,11 @@ export default async function ParcelPlanningPage({
             continueHref={continueHref}
           />
 
-          <div className="sidebar-stack">
+          <div className="sidebar-stack cockpit-rail">
             <NextStepPanel
               title="Move from site interpretation into scenario design"
               description="Use planning to make the parcel decision-ready enough for scenario framing, not to recreate a full planning document."
+              size="compact"
               actions={(
                 <>
                   <Link className={buttonClasses()} href={continueHref}>
