@@ -68,35 +68,39 @@ function FundingLane({
   return (
     <div className={cx("funding-lane", selectedOption && "funding-lane--selected")}>
       <div className="funding-lane__header">
-        <Label className="ui-label">
-          <input type="checkbox" name={checkboxName} defaultChecked={defaultChecked} />
-          {label}
-        </Label>
+        <div className="funding-lane__body">
+          <Label className="ui-label">
+            <input type="checkbox" name={checkboxName} defaultChecked={defaultChecked} />
+            <span className="funding-lane__title">{label}</span>
+          </Label>
+          <p className="funding-lane__description">{description}</p>
+        </div>
         <StatusBadge tone={selectedOption ? "success" : "neutral"}>
           {selectedOption ? "Selected" : "Optional"}
         </StatusBadge>
       </div>
-      <p className="funding-lane__description">{description}</p>
-      <select
-        name={selectName}
-        value={selectedVariantId}
-        onChange={(event) => onSelectChange(event.target.value)}
-        className="ui-select"
-      >
-        <option value="">Select variant</option>
-        {options.map((option) => (
-          <option key={option.id} value={option.id}>{option.label}</option>
-        ))}
-      </select>
-      {chips.length ? (
-        <div className="chip-row">
-          {chips.map((chip) => (
-            <Badge key={chip} variant="surface">{chip}</Badge>
+      <div className="funding-lane__controls">
+        <select
+          name={selectName}
+          value={selectedVariantId}
+          onChange={(event) => onSelectChange(event.target.value)}
+          className="ui-select"
+        >
+          <option value="">Select variant</option>
+          {options.map((option) => (
+            <option key={option.id} value={option.id}>{option.label}</option>
           ))}
-        </div>
-      ) : (
-        <div className="field-help">Choose a variant to show terms.</div>
-      )}
+        </select>
+        {chips.length ? (
+          <div className="chip-row">
+            {chips.map((chip) => (
+              <Badge key={chip} variant="surface">{chip}</Badge>
+            ))}
+          </div>
+        ) : (
+          <div className="field-help">Choose a variant to show terms.</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -124,10 +128,10 @@ export function FundingStackForm({
     <SectionCard
       eyebrow="Funding stack"
       title="Funding lanes"
-      description="Sprint 1 replaces the full stack in one save."
+      description="Save the full stack in one step."
       size="compact"
     >
-      <form action={action} className="form-stack">
+      <form action={action} className="form-stack form-stack--dense">
         <FundingLane
           label="State subsidy"
           description="Subsidy-bank anchor."

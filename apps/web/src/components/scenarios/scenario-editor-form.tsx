@@ -182,31 +182,31 @@ export function ScenarioEditorForm({
   const focusOverflow = Math.max(hint.requiredFields.length - focusChips.length, 0);
 
   return (
-    <form action={action} className="form-stack">
-      <div className="scenario-focus-strip">
-        <div className="scenario-focus-strip__body">
-          <div className="scenario-focus-strip__title">{hint.title}</div>
-          <div className="scenario-focus-strip__description">
-            {mode === "builder" ? "Focus on the blocking assumptions first." : "Create the case fast, then continue in the builder."}
+    <form action={action} className="form-stack form-stack--dense">
+      {mode === "create" ? (
+        <div className="scenario-focus-strip">
+          <div className="scenario-focus-strip__body">
+            <div className="scenario-focus-strip__title">{hint.title}</div>
+            <div className="scenario-focus-strip__description">Create fast, then continue in the builder.</div>
+          </div>
+          <div className="scenario-focus-strip__signals">
+            <span className="meta-chip">{selectedParcel?.name ?? selectedParcel?.cadastralId ?? "Select parcel"}</span>
+            <span className="meta-chip">{strategyTypeLabels[strategyType]}</span>
+            <span className="meta-chip">{summarizeRequiredFields(hint.requiredFields)}</span>
+          </div>
+          <div className="chip-row">
+            {focusChips.map((field) => (
+              <Badge key={field} variant="accent">{field}</Badge>
+            ))}
+            {focusOverflow ? <Badge variant="surface">+{focusOverflow} more</Badge> : null}
           </div>
         </div>
-        <div className="scenario-focus-strip__signals">
-          <span className="meta-chip">{selectedParcel?.name ?? selectedParcel?.cadastralId ?? "Select parcel"}</span>
-          <span className="meta-chip">{strategyTypeLabels[strategyType]}</span>
-          <span className="meta-chip">{summarizeRequiredFields(hint.requiredFields)}</span>
-        </div>
-        <div className="chip-row">
-          {focusChips.map((field) => (
-            <Badge key={field} variant="accent">{field}</Badge>
-          ))}
-          {focusOverflow ? <Badge variant="surface">+{focusOverflow} more</Badge> : null}
-        </div>
-      </div>
+      ) : null}
 
       <SectionCard
         eyebrow="Scenario framing"
         title="Case definition"
-        description="Anchor parcel, strategy, and the decision lens."
+        description="Anchor parcel, strategy, and decision lens."
         size="compact"
       >
         <div className="content-stack">
@@ -251,7 +251,7 @@ export function ScenarioEditorForm({
                   <option key={value} value={value}>{strategyTypeLabels[value]}</option>
                 ))}
               </select>
-              <div className="field-help">Sets which revenue inputs matter now.</div>
+              <div className="field-help">Sets which revenue inputs matter.</div>
             </div>
 
             <div className="field-stack">
@@ -355,11 +355,11 @@ export function ScenarioEditorForm({
       <SectionCard
         eyebrow="Finance and delivery"
         title="Cost and program"
-        description="Cover the assumptions that most change the result."
+        description="Cover the assumptions that move the result most."
         size="compact"
       >
         <div className="content-stack">
-          <div className="field-grid field-grid--tri">
+          <div className="field-grid field-grid--quad">
             {financePartition.visible.map((field) => renderTextField(field))}
           </div>
 
@@ -367,7 +367,7 @@ export function ScenarioEditorForm({
             <details className="compact-disclosure" open={financePartition.hidden.some((field) => hasValue(field.defaultValue))}>
               <summary className="compact-disclosure__summary">Additional cost inputs ({financePartition.hidden.length})</summary>
               <div className="compact-disclosure__body">
-                <div className="field-grid field-grid--tri">
+                <div className="field-grid field-grid--quad">
                   {financePartition.hidden.map((field) => renderTextField(field))}
                 </div>
               </div>
@@ -376,18 +376,10 @@ export function ScenarioEditorForm({
         </div>
       </SectionCard>
 
-      <SectionCard
-        eyebrow="Save"
-        title="Save"
-        description={mode === "builder" ? "Save first, then funding and run." : "Save the case, then continue in the builder."}
-        tone="muted"
-        size="compact"
-      >
-        <ActionRow spread className="form-footer">
-          <div className="field-help">Core badges mark the inputs most likely to block readiness.</div>
-          <Button type="submit" size="lg">{submitLabel}</Button>
-        </ActionRow>
-      </SectionCard>
+      <ActionRow spread className="form-actions-bar">
+        <div className="field-help">Core now badges mark the inputs most likely to block readiness.</div>
+        <Button type="submit" size="lg">{submitLabel}</Button>
+      </ActionRow>
     </form>
   );
 }

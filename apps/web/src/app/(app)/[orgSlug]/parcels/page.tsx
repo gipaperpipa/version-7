@@ -115,7 +115,7 @@ export default async function ParcelsPage({
         <PageHeader
           eyebrow="Workspace / Parcels"
           title="Site pipeline"
-          description="Scan parcel trust, planning coverage, and next move. Manual intake remains fallback only."
+          description="Scan trust, planning coverage, and next move. Manual intake remains fallback only."
           actions={(
             <Link className={buttonClasses({ size: "lg" })} href={`/${orgSlug}/parcels/new`}>
               Add fallback parcel

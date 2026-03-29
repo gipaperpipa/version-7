@@ -49,7 +49,7 @@ export default async function ParcelDetailPage({
         <PageHeader
           eyebrow="Parcel workspace"
           title={parcel.name ?? parcel.cadastralId ?? "Parcel"}
-          description="Review parcel trust, planning coverage, and the cleanest next move."
+          description="Review parcel trust, planning coverage, and next move."
           actions={(
             <>
               <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels/${parcelId}/planning`}>
@@ -126,7 +126,7 @@ export default async function ParcelDetailPage({
           <div className="content-stack">
             <SectionCard
               eyebrow="Overview"
-              title="Site brief"
+              title="Site"
               size="compact"
             >
               <div className="key-value-grid">
@@ -151,7 +151,7 @@ export default async function ParcelDetailPage({
 
             <SectionCard
               eyebrow="Trust and provenance"
-              title="Trust signal"
+              title="Trust"
               description="Keep source-led context distinct from fallback manual entry."
               size="compact"
             >
@@ -166,17 +166,14 @@ export default async function ParcelDetailPage({
                   <span className="meta-chip">Manual fallback</span>
                   <span className="meta-chip">Continuity preserved</span>
                 </div>
-                <div className="field-help">
-                  Keep manual edits usable, but read them as fallback rather than the flagship parcel workflow.
-                </div>
               </div>
             </SectionCard>
           </div>
 
-          <div className="sidebar-stack">
+          <div className="sidebar-stack cockpit-rail">
             <SectionCard
-              eyebrow="Manual fallback"
-              title="Manual fallback edit"
+              eyebrow="Fallback only"
+              title="Manual parcel edit"
               description="Usable in Sprint 1. Source-led parcel selection remains the intended model."
               tone="muted"
               size="compact"

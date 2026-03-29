@@ -594,6 +594,10 @@ button {
   gap: 18px;
 }
 
+.form-stack--dense {
+  gap: 14px;
+}
+
 .field-stack {
   display: flex;
   flex-direction: column;
@@ -1011,7 +1015,7 @@ button {
 }
 
 .ops-table__row {
-  padding: 10px 0;
+  padding: 8px 0;
   border-bottom: 1px solid rgba(19, 32, 25, 0.08);
 }
 
@@ -1044,6 +1048,52 @@ button {
 .ops-summary-grid {
   display: grid;
   gap: 10px;
+}
+
+.ops-scan {
+  display: grid;
+  gap: 0 12px;
+}
+
+.ops-scan--parcel {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ops-scan--scenario {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.ops-scan__item {
+  min-width: 0;
+  padding-left: 12px;
+  border-left: 1px solid rgba(19, 32, 25, 0.08);
+}
+
+.ops-scan__item:first-child {
+  padding-left: 0;
+  border-left: none;
+}
+
+.ops-scan__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ops-scan__value {
+  margin-top: 6px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.ops-scan__detail {
+  margin-top: 5px;
+  font-size: 0.79rem;
+  color: var(--muted);
+  line-height: 1.35;
 }
 
 .ops-summary-grid--parcel,
@@ -1261,6 +1311,14 @@ button {
   padding-top: 4px;
 }
 
+.form-actions-bar {
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid rgba(19, 32, 25, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
 .scenario-hint {
   padding: 18px 20px;
   border: 1px solid rgba(33, 89, 79, 0.12);
@@ -1359,10 +1417,10 @@ button {
 .funding-lane {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px;
+  gap: 8px;
+  padding: 14px;
   border: 1px solid rgba(19, 32, 25, 0.08);
-  border-radius: 20px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.62);
 }
 
@@ -1373,15 +1431,32 @@ button {
 
 .funding-lane__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
+.funding-lane__body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.funding-lane__title {
+  font-size: 0.92rem;
+}
+
 .funding-lane__description {
   margin: 0;
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   color: var(--muted);
+}
+
+.funding-lane__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .insight-list {
@@ -1395,6 +1470,37 @@ button {
   border: 1px solid rgba(19, 32, 25, 0.08);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.68);
+}
+
+.signal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.signal-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(19, 32, 25, 0.08);
+}
+
+.signal-row:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.signal-row__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.signal-row__text {
+  font-size: 0.84rem;
+  color: var(--muted-strong);
+  line-height: 1.45;
 }
 
 .helper-list {
@@ -1435,6 +1541,8 @@ button {
   .field-grid--tri,
   .field-grid--quad,
   .planning-field-grid,
+  .ops-scan--parcel,
+  .ops-scan--scenario,
   .ops-summary-grid--builder,
   .ops-summary-grid--parcel,
   .ops-summary-grid--scenario,
@@ -1517,10 +1625,24 @@ button {
 
   .field-grid--tri,
   .planning-field-grid,
+  .ops-scan--parcel,
+  .ops-scan--scenario,
   .ops-summary-grid--builder,
   .ops-summary-grid--parcel,
   .ops-summary-grid--scenario,
   .ops-summary-grid--planning {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ops-scan__item {
+    padding-left: 0;
+    border-left: none;
+    padding-top: 10px;
+    border-top: 1px solid rgba(19, 32, 25, 0.08);
+  }
+
+  .ops-scan__item:first-child {
+    padding-top: 0;
+    border-top: none;
   }
 }

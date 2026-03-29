@@ -80,19 +80,34 @@ export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
 
         <div className="diagnostic-grid">
           <DiagnosticGroup title="Blockers" emptyLabel="No blockers carried into this run.">
-            {blockers.map((issue) => (
-              <div key={`${issue.code}-${issue.field ?? "global"}`} className="insight-item">
-                {issue.message}
+            {blockers.length ? (
+              <div className="signal-list">
+                {blockers.map((issue) => (
+                  <div key={`${issue.code}-${issue.field ?? "global"}`} className="signal-row">
+                    <div className="signal-row__badges">
+                      <StatusBadge tone="danger">{humanizeTokenLabel(issue.code)}</StatusBadge>
+                      {issue.field ? <StatusBadge tone="info">{issue.field}</StatusBadge> : null}
+                    </div>
+                    <div className="signal-row__text">{issue.message}</div>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : null}
           </DiagnosticGroup>
 
           <DiagnosticGroup title="Warnings" emptyLabel="No warning signals surfaced.">
-            {combinedWarnings.map((warning) => (
-              <div key={warning} className="insight-item">
-                {warning}
+            {combinedWarnings.length ? (
+              <div className="signal-list">
+                {combinedWarnings.map((warning) => (
+                  <div key={warning} className="signal-row">
+                    <div className="signal-row__badges">
+                      <StatusBadge tone="warning">Warning</StatusBadge>
+                    </div>
+                    <div className="signal-row__text">{warning}</div>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : null}
           </DiagnosticGroup>
         </div>
 
@@ -108,20 +123,34 @@ export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
           </DiagnosticGroup>
 
           <DiagnosticGroup title="Heuristic caveats" emptyLabel="No heuristic caveats were returned.">
-            {heuristicCaveats.map((warning) => (
-              <div key={warning.code} className="insight-item">
-                {warning.message}
+            {heuristicCaveats.length ? (
+              <div className="signal-list">
+                {heuristicCaveats.map((warning) => (
+                  <div key={warning.code} className="signal-row">
+                    <div className="signal-row__badges">
+                      <StatusBadge tone="surface">{humanizeTokenLabel(warning.code)}</StatusBadge>
+                    </div>
+                    <div className="signal-row__text">{warning.message}</div>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : null}
           </DiagnosticGroup>
         </div>
 
         <DiagnosticGroup title="Confidence notes" emptyLabel="No confidence reasoning text was returned.">
-          {run.confidence.reasons.map((reason) => (
-            <div key={reason} className="insight-item">
-              {reason}
+          {run.confidence.reasons.length ? (
+            <div className="signal-list">
+              {run.confidence.reasons.map((reason) => (
+                <div key={reason} className="signal-row">
+                  <div className="signal-row__badges">
+                    <StatusBadge tone="surface">Confidence</StatusBadge>
+                  </div>
+                  <div className="signal-row__text">{reason}</div>
+                </div>
+              ))}
             </div>
-          ))}
+          ) : null}
         </DiagnosticGroup>
       </div>
     </SectionCard>

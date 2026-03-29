@@ -68,7 +68,7 @@ export default async function ScenariosPage({
         <PageHeader
           eyebrow="Workspace / Scenarios"
           title="Scenario studio"
-          description="Compare cases by parcel, strategy, readiness signal, and latest activity."
+          description="Compare cases by parcel, strategy, status, and latest signal."
           actions={(
             <Link className={buttonClasses({ size: "lg" })} href={`/${orgSlug}/scenarios/new`}>
               New scenario
@@ -110,7 +110,7 @@ export default async function ScenariosPage({
         <SectionCard
           eyebrow="Decision workspace"
           title="Scenario index"
-          description="Open the right case quickly by parcel, strategy, status, and latest signal."
+          description="Open the right case fast by parcel, strategy, status, and latest signal."
         >
           {scenarios.items.length ? (
             <div className="ops-table">
@@ -147,31 +147,31 @@ export default async function ScenariosPage({
                     </div>
 
                     <div className="ops-table__cell">
-                      <div className="ops-summary-grid ops-summary-grid--scenario">
-                        <div className="ops-summary-item">
-                          <div className="ops-summary-item__label">Parcel</div>
-                          <div className="ops-summary-item__value">
+                      <div className="ops-scan ops-scan--scenario">
+                        <div className="ops-scan__item">
+                          <div className="ops-scan__label">Parcel</div>
+                          <div className="ops-scan__value">
                             {linkedParcel?.name ?? linkedParcel?.cadastralId ?? (scenario.parcelId ? "Linked parcel" : "Unlinked")}
                           </div>
                         </div>
-                        <div className="ops-summary-item">
-                          <div className="ops-summary-item__label">Strategy</div>
-                          <div className="ops-summary-item__value">{strategyTypeLabels[scenario.strategyType]}</div>
+                        <div className="ops-scan__item">
+                          <div className="ops-scan__label">Strategy</div>
+                          <div className="ops-scan__value">{strategyTypeLabels[scenario.strategyType]}</div>
                         </div>
-                        <div className="ops-summary-item">
-                          <div className="ops-summary-item__label">Funding</div>
-                          <div className="ops-summary-item__value">{selectedFundingCount} lane(s) enabled</div>
+                        <div className="ops-scan__item">
+                          <div className="ops-scan__label">Funding</div>
+                          <div className="ops-scan__value">{selectedFundingCount} lane(s)</div>
                         </div>
-                        <div className="ops-summary-item">
-                          <div className="ops-summary-item__label">Activity</div>
-                          <div className="ops-summary-item__value">
+                        <div className="ops-scan__item">
+                          <div className="ops-scan__label">Activity</div>
+                          <div className="ops-scan__value">
                             {scenario.latestRunAt ? `Ran ${formatScenarioSignal(scenario.latestRunAt)}` : `Updated ${formatScenarioSignal(scenario.updatedAt)}`}
                           </div>
                         </div>
-                        <div className="ops-summary-item">
-                          <div className="ops-summary-item__label">Next</div>
-                          <div className="ops-summary-item__value">{nextAction.label}</div>
-                          <div className="ops-summary-item__detail">{nextAction.detail}</div>
+                        <div className="ops-scan__item">
+                          <div className="ops-scan__label">Next</div>
+                          <div className="ops-scan__value">{nextAction.label}</div>
+                          <div className="ops-scan__detail">{nextAction.detail}</div>
                         </div>
                       </div>
                     </div>

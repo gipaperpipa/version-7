@@ -4,10 +4,10 @@ import { getPlanningParameters } from "@/lib/api/planning";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { getFundingPrograms, getScenario, getScenarioReadiness } from "@/lib/api/scenarios";
 import { humanizeTokenLabel, optimizationTargetLabels, strategyTypeLabels } from "@/lib/ui/enum-labels";
+import { getReadinessVerdict } from "@/lib/ui/verdicts";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
 import { FundingStackForm } from "@/components/scenarios/funding-stack-form";
 import { ScenarioEditorForm } from "@/components/scenarios/scenario-editor-form";
-import { ScenarioReadinessBanner } from "@/components/scenarios/scenario-readiness-banner";
 import { buttonClasses, Button } from "@/components/ui/button";
 import { DiagnosticGroup } from "@/components/ui/diagnostic-group";
 import { NextStepPanel } from "@/components/ui/next-step-panel";
@@ -47,13 +47,15 @@ export default async function ScenarioBuilderPage({
     const planningValueCount = planningParameters.items.filter((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null).length;
     const blockerCount = readiness.issues.filter((issue) => issue.severity === "BLOCKING").length;
     const warningCount = readiness.issues.filter((issue) => issue.severity === "WARNING").length;
+    const readinessVerdict = getReadinessVerdict(readiness);
+    const validatedLabel = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(readiness.validatedAt));
 
     return (
       <div className="workspace-page content-stack">
         <PageHeader
           eyebrow="Scenario builder"
           title={scenario.name}
-          description="Read state fast, change what matters, then act."
+          description="Read state, adjust the case, then act."
           actions={(
             <>
               {scenario.parcelId ? (
@@ -77,9 +79,11 @@ export default async function ScenarioBuilderPage({
 
         <SectionCard
           eyebrow="Operating summary"
-          title="Current case"
-          description="Context, funding, readiness, action."
+          title="Operator header"
+          description={readinessVerdict.summary}
           tone="accent"
+          size="compact"
+          actions={<StatusBadge tone={readinessVerdict.tone}>{readinessVerdict.title}</StatusBadge>}
         >
           <div className="content-stack">
             <div className="ops-summary-grid ops-summary-grid--builder">
@@ -108,9 +112,7 @@ export default async function ScenarioBuilderPage({
               <div className="ops-summary-item">
                 <div className="ops-summary-item__label">Readiness</div>
                 <div className="ops-summary-item__value">{humanizeTokenLabel(readiness.status)}</div>
-                <div className="ops-summary-item__detail">
-                  {blockerCount ? `${blockerCount} blocker(s)` : `${warningCount} warning(s)`}
-                </div>
+                <div className="ops-summary-item__detail">{blockerCount ? `${blockerCount} blocker(s)` : `${warningCount} warning(s)`} · Checked {validatedLabel}</div>
               </div>
             </div>
 
@@ -139,8 +141,6 @@ export default async function ScenarioBuilderPage({
           </div>
         </SectionCard>
 
-        <ScenarioReadinessBanner readiness={readiness} />
-
         <div className="dashboard-grid">
           <ScenarioEditorForm
             action={updateAction}
@@ -159,7 +159,7 @@ export default async function ScenarioBuilderPage({
 
             <SectionCard
               eyebrow="Readiness details"
-              title="Readiness issues"
+              title="Current issues"
               tone={readiness.canRun ? "muted" : "default"}
               size="compact"
             >
@@ -172,17 +172,21 @@ export default async function ScenarioBuilderPage({
                     {warningCount} warning{warningCount === 1 ? "" : "s"}
                   </StatusBadge>
                 </div>
-                <DiagnosticGroup title="Current issues" emptyLabel="No readiness issues. The scenario is ready to run.">
-                  {readiness.issues.map((issue) => (
-                    <div key={`${issue.code}-${issue.field ?? "global"}`} className="insight-item">
-                      <div className="action-row">
-                        <StatusBadge tone={getIssueTone(issue.severity)}>{issue.severity}</StatusBadge>
-                        <StatusBadge tone="surface">{humanizeTokenLabel(issue.code)}</StatusBadge>
-                        {issue.field ? <StatusBadge tone="info">{issue.field}</StatusBadge> : null}
-                      </div>
-                      <div className="field-help" style={{ marginTop: 8 }}>{issue.message}</div>
+                <DiagnosticGroup title="Readiness scan" emptyLabel="No readiness issues. The scenario is ready to run.">
+                  {readiness.issues.length ? (
+                    <div className="signal-list">
+                      {readiness.issues.map((issue) => (
+                        <div key={`${issue.code}-${issue.field ?? "global"}`} className="signal-row">
+                          <div className="signal-row__badges">
+                            <StatusBadge tone={getIssueTone(issue.severity)}>{issue.severity}</StatusBadge>
+                            <StatusBadge tone="surface">{humanizeTokenLabel(issue.code)}</StatusBadge>
+                            {issue.field ? <StatusBadge tone="info">{issue.field}</StatusBadge> : null}
+                          </div>
+                          <div className="signal-row__text">{issue.message}</div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  ) : null}
                 </DiagnosticGroup>
               </div>
             </SectionCard>
@@ -190,8 +194,8 @@ export default async function ScenarioBuilderPage({
             <NextStepPanel
               title={readiness.canRun ? "Ready to run" : "Resolve blockers first"}
               description={readiness.canRun
-                ? "The case is coherent enough for a directional run. Review the funding and parcel context once, then launch."
-                : "Use the issue list and planning page to clear blockers before treating the case as run-ready."}
+                ? "Directional enough to run. Review funding and planning once, then launch."
+                : "Clear the listed blockers before treating the case as run-ready."}
               tone={readiness.canRun ? "accent" : "muted"}
               size="compact"
               actions={(

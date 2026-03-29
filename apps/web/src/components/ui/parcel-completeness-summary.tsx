@@ -22,12 +22,12 @@ function SummaryRow({
 }) {
   if (inline) {
     return (
-      <div className="ops-summary-item">
-        <div className="ops-summary-item__label">{title}</div>
-        <div className="ops-summary-item__value">
+      <div className="ops-scan__item">
+        <div className="ops-scan__label">{title}</div>
+        <div className="ops-scan__value">
           <StatusBadge tone={tone}>{label}</StatusBadge>
         </div>
-        <div className="ops-summary-item__detail">{detail}</div>
+        <div className="ops-scan__detail">{detail}</div>
       </div>
     );
   }
@@ -67,7 +67,7 @@ export function ParcelCompletenessSummary({
 
   if (inline) {
     return (
-      <div className="ops-summary-grid ops-summary-grid--parcel">
+      <div className="ops-scan ops-scan--parcel">
         <SummaryRow
           title="Source"
           label={summary.sourceStatus.label}
