@@ -14,7 +14,7 @@ import { getParcels } from "@/lib/api/parcels";
 import { getPlanningParameters } from "@/lib/api/planning";
 import { getScenarios } from "@/lib/api/scenarios";
 import { buildParcelCompletenessSummary } from "@/lib/ui/parcel-completeness";
-import { getConfidenceBand, getSourceLabel } from "@/lib/ui/provenance";
+import { getSourceLabel } from "@/lib/ui/provenance";
 
 function ParcelRow({
   orgSlug,
@@ -38,13 +38,14 @@ function ParcelRow({
       <div className="list-row__body">
         <div className="list-row__title">
           <span className="list-row__title-text">{parcel.name ?? parcel.cadastralId ?? "Untitled parcel"}</span>
-          <StatusBadge tone="info">Site record</StatusBadge>
+          <StatusBadge tone={summary.sourceStatus.tone}>{summary.sourceStatus.label}</StatusBadge>
+          <StatusBadge tone={summary.nextBestAction.tone}>{summary.nextBestAction.label}</StatusBadge>
           {linkedScenarios.length ? <StatusBadge tone="accent">{linkedScenarios.length} scenario(s)</StatusBadge> : null}
         </div>
         <div className="list-row__description">
-          {[parcel.city ?? "Unknown city", parcel.municipalityName ?? "Municipality not set", `Land area ${parcel.landAreaSqm ?? "n/a"} sqm`].join(" / ")}
+          {[parcel.city ?? "Unknown city", parcel.municipalityName ?? "Municipality not set", `${parcel.landAreaSqm ?? "n/a"} sqm`].join(" / ")}
         </div>
-        <div className="list-row__meta">{parcel.addressLine1 ?? "No address saved yet"}</div>
+        <div className="list-row__meta">{parcel.addressLine1 ?? parcel.cadastralId ?? "No address saved yet"}</div>
         <ProvenanceConfidence
           sourceType={parcel.sourceType}
           confidenceScore={parcel.confidenceScore}
@@ -54,19 +55,18 @@ function ParcelRow({
 
       <ParcelCompletenessSummary
         summary={summary}
-        title="Parcel continuity"
-        description="A compact view of trust, planning progress, and the next best downstream move."
+        variant="compact"
       />
 
       <div className="action-row">
         <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${parcel.id}`}>
-          Open parcel
+          Parcel
         </Link>
         <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/parcels/${parcel.id}/planning`}>
           Planning
         </Link>
         <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/new?parcelId=${parcel.id}`}>
-          New scenario
+          Scenario
         </Link>
       </div>
     </div>
@@ -101,7 +101,6 @@ export default async function ParcelsPage({
 
     const manualCount = parcels.items.filter((parcel) => getSourceLabel(parcel.sourceType) === "Manual").length;
     const sourceBackedCount = parcels.items.filter((parcel) => getSourceLabel(parcel.sourceType) === "Source").length;
-    const highConfidenceCount = parcels.items.filter((parcel) => getConfidenceBand(parcel.confidenceScore) === "High").length;
     const planningStartedCount = parcels.items.filter((parcel) => (planningByParcel.get(parcel.id) ?? []).some((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null)).length;
 
     return (
@@ -109,7 +108,7 @@ export default async function ParcelsPage({
         <PageHeader
           eyebrow="Workspace / Parcels"
           title="Site pipeline"
-          description="Use parcels as the acquisition and site-context workspace for Feasibility OS. Manual parcel intake stays available, but the intended product model remains source-selected parcels with derived geometry and area."
+          description="Scan parcel trust, planning coverage, and next action. Manual parcel intake remains fallback only."
           actions={(
             <Link className={buttonClasses({ size: "lg" })} href={`/${orgSlug}/parcels/new`}>
               Add fallback parcel
@@ -118,16 +117,16 @@ export default async function ParcelsPage({
         />
 
         <div className="stat-grid">
-          <StatBlock label="Total parcels" value={parcels.total} caption="Current workspace count" tone="accent" />
-          <StatBlock label="Source-backed" value={sourceBackedCount} caption="Parcels already aligned with the intended intake model" tone="success" />
-          <StatBlock label="Planning started" value={planningStartedCount} caption="Parcels already moving into buildability interpretation" />
-          <StatBlock label="Manual fallback" value={manualCount} caption="Still usable, but not the intended long-term intake path" tone={manualCount ? "warning" : "neutral"} />
+          <StatBlock label="Total parcels" value={parcels.total} caption="Workspace pipeline" tone="accent" />
+          <StatBlock label="Source-backed" value={sourceBackedCount} caption="Aligned to source-led intake" tone="success" />
+          <StatBlock label="Planning started" value={planningStartedCount} caption="Buildability work underway" />
+          <StatBlock label="Manual fallback" value={manualCount} caption="Usable, but secondary" tone={manualCount ? "warning" : "neutral"} />
         </div>
 
         <SectionCard
           eyebrow="Acquisition workspace"
-          title="Active site records"
-          description="Each row should tell you what the parcel is, how trustworthy it is, how far it has moved downstream, and what to do next."
+          title="Parcel portfolio"
+          description="Scan identity, trust, continuity, and next action."
         >
           {parcels.items.length ? (
             <div className="list-shell">
@@ -145,7 +144,7 @@ export default async function ParcelsPage({
             <EmptyState
               eyebrow="No sites yet"
               title="Start with a parcel"
-              description="Create a parcel to unlock the thin Sprint 1 workflow. In the long-term product, parcels are expected to originate from source selection and geometry-backed site context rather than manual entry."
+              description="Create a parcel to unlock the Sprint 1 flow. Long-term, parcels should come from source selection rather than manual entry."
               actions={(
                 <>
                   <Link className={buttonClasses()} href={`/${orgSlug}/parcels/new`}>

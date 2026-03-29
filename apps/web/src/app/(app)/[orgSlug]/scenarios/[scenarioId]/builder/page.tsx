@@ -15,7 +15,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatBlock } from "@/components/ui/stat-block";
 import { StatusBadge, getIssueTone, getReadinessTone } from "@/components/ui/status-badge";
-import { WorkflowSteps } from "@/components/ui/workflow-steps";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { replaceFundingStackAction, triggerFeasibilityRunAction, updateScenarioAction } from "../../actions";
 
@@ -44,13 +43,15 @@ export default async function ScenarioBuilderPage({
     const selectedFundingCount = scenario.fundingVariants.filter((item) => item.isEnabled).length;
     const linkedParcel = scenario.parcelId ? parcels.items.find((parcel) => parcel.id === scenario.parcelId) ?? null : null;
     const planningValueCount = planningParameters.items.filter((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null).length;
+    const blockerCount = readiness.issues.filter((issue) => issue.severity === "BLOCKING").length;
+    const warningCount = readiness.issues.filter((issue) => issue.severity === "WARNING").length;
 
     return (
       <div className="workspace-page content-stack">
         <PageHeader
           eyebrow="Scenario builder"
           title={scenario.name}
-          description="Use the builder as a decision workspace: refine assumptions, replace the funding stack, review readiness, then run heuristic feasibility."
+          description="Configure the case, assess readiness, and act."
           actions={(
             <>
               {scenario.parcelId ? (
@@ -63,18 +64,6 @@ export default async function ScenarioBuilderPage({
               </Link>
             </>
           )}
-          meta={(
-            <WorkflowSteps
-              activeStep={4}
-              steps={[
-                { label: "Parcel", description: "Linked site context" },
-                { label: "Planning", description: "Narrow readiness inputs" },
-                { label: "Scenario", description: "Strategy and commercial assumptions" },
-                { label: "Readiness and run", description: "Funding, blockers, and run trigger" },
-                { label: "Result", description: "Decision-support output" },
-              ]}
-            />
-          )}
         />
 
         {resolvedSearchParams?.error === "invalid-strategy-mix-json" ? (
@@ -85,10 +74,15 @@ export default async function ScenarioBuilderPage({
         ) : null}
 
         <div className="stat-grid">
-          <StatBlock label="Linked parcel" value={linkedParcel?.name ?? linkedParcel?.cadastralId ?? "Not linked"} caption={linkedParcel ? "Scenario stays anchored in a real site" : "Link a parcel to keep the case grounded"} tone="accent" />
-          <StatBlock label="Planning context" value={planningValueCount} caption="Saved parcel planning values carried into this case" />
-          <StatBlock label="Funding lanes" value={selectedFundingCount} caption="Enabled capital sources in the temporary Sprint 1 stack" />
-          <StatBlock label="Readiness status" value={humanizeTokenLabel(readiness.status)} caption={`${readiness.issues.length} issue(s) currently shape this case`} tone={getReadinessTone(readiness.status) === "success" ? "success" : getReadinessTone(readiness.status) === "danger" ? "danger" : "warning"} />
+          <StatBlock label="Linked parcel" value={linkedParcel?.name ?? linkedParcel?.cadastralId ?? "Not linked"} caption={linkedParcel ? "Site anchor" : "Link parcel"} tone="accent" />
+          <StatBlock label="Planning context" value={planningValueCount} caption={planningValueCount ? "Inputs carried in" : "No planning values yet"} />
+          <StatBlock label="Funding lanes" value={selectedFundingCount} caption={selectedFundingCount ? "Enabled now" : "No lanes selected"} />
+          <StatBlock
+            label="Readiness"
+            value={humanizeTokenLabel(readiness.status)}
+            caption={blockerCount ? `${blockerCount} blocker(s)` : `${warningCount} warning(s)`}
+            tone={getReadinessTone(readiness.status) === "success" ? "success" : getReadinessTone(readiness.status) === "danger" ? "danger" : "warning"}
+          />
         </div>
 
         <ScenarioReadinessBanner readiness={readiness} />
@@ -101,11 +95,11 @@ export default async function ScenarioBuilderPage({
             submitLabel="Save scenario"
           />
 
-          <div className="sidebar-stack">
+          <div className="sidebar-stack cockpit-rail">
             <SectionCard
-              eyebrow="Context"
-              title="Decision frame"
-              description="Keep the builder anchored to parcel context, planning coverage, and the current commercial lens."
+              eyebrow="Snapshot"
+              title="Case snapshot"
+              size="compact"
             >
               <div className="key-value-grid">
                 <div className="key-value-card">
@@ -135,17 +129,26 @@ export default async function ScenarioBuilderPage({
 
             <SectionCard
               eyebrow="Readiness details"
-              title="What still needs attention"
-              description="Use the issue list to understand exactly what blocks or weakens the case before running."
+              title="Readiness issues"
               tone={readiness.canRun ? "muted" : "default"}
+              size="compact"
             >
               <div className="content-stack">
+                <div className="action-row">
+                  <StatusBadge tone={blockerCount ? "danger" : "success"}>
+                    {blockerCount} blocker{blockerCount === 1 ? "" : "s"}
+                  </StatusBadge>
+                  <StatusBadge tone={warningCount ? "warning" : "success"}>
+                    {warningCount} warning{warningCount === 1 ? "" : "s"}
+                  </StatusBadge>
+                </div>
                 <DiagnosticGroup title="Current issues" emptyLabel="No readiness issues. The scenario is ready to run.">
                   {readiness.issues.map((issue) => (
                     <div key={`${issue.code}-${issue.field ?? "global"}`} className="insight-item">
                       <div className="action-row">
                         <StatusBadge tone={getIssueTone(issue.severity)}>{issue.severity}</StatusBadge>
                         <StatusBadge tone="surface">{humanizeTokenLabel(issue.code)}</StatusBadge>
+                        {issue.field ? <StatusBadge tone="info">{issue.field}</StatusBadge> : null}
                       </div>
                       <div className="field-help" style={{ marginTop: 8 }}>{issue.message}</div>
                     </div>
@@ -156,13 +159,11 @@ export default async function ScenarioBuilderPage({
 
             <SectionCard
               eyebrow="Run"
-              title="Trigger heuristic feasibility"
-              description="The engine remains explicitly heuristic and replaceable, but the workflow should still feel production-grade."
+              title="Run"
+              description="Launch once parcel, planning, strategy, and funding are coherent."
+              size="compact"
             >
               <div className="content-stack">
-                <div className="field-help">
-                  Run once the parcel, planning, strategy, and funding signals are coherent enough for a directional decision.
-                </div>
                 <form action={runAction}>
                   <Button type="submit" size="lg" disabled={!readiness.canRun}>Run feasibility</Button>
                 </form>
@@ -170,10 +171,11 @@ export default async function ScenarioBuilderPage({
             </SectionCard>
 
             <NextStepPanel
-              title={readiness.canRun ? "Run the case when the assumptions feel coherent" : "Resolve blockers before you run"}
+              title={readiness.canRun ? "Ready to run" : "Resolve blockers first"}
               description={readiness.canRun
-                ? "The current case is ready for a directional heuristic output. Review funding and linked parcel context one last time, then launch the run."
-                : "Use the readiness list and linked parcel planning page to resolve blockers before treating the scenario as decision-ready."}
+                ? "The case is coherent enough for a directional run. Review the funding and parcel context once, then launch."
+                : "Use the issue list and planning page to clear blockers before treating the case as run-ready."}
+              tone={readiness.canRun ? "accent" : "muted"}
               actions={(
                 <>
                   {scenario.parcelId ? (

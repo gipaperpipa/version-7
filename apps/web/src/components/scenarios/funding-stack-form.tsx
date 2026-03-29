@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { cx } from "@/lib/ui/cx";
 
 function flattenOptions(programs: FundingProgramDto[], providerType: FundingProviderType) {
   return programs
@@ -65,7 +66,7 @@ function FundingLane({
   const chips = buildMetadataChips(selectedOption?.variant);
 
   return (
-    <div className="funding-lane">
+    <div className={cx("funding-lane", selectedOption && "funding-lane--selected")}>
       <div className="funding-lane__header">
         <Label className="ui-label">
           <input type="checkbox" name={checkboxName} defaultChecked={defaultChecked} />
@@ -94,7 +95,7 @@ function FundingLane({
           ))}
         </div>
       ) : (
-        <div className="field-help">Choose a variant to reveal the compact summary for this lane.</div>
+        <div className="field-help">Choose a variant to show terms.</div>
       )}
     </div>
   );
@@ -122,13 +123,14 @@ export function FundingStackForm({
   return (
     <SectionCard
       eyebrow="Funding stack"
-      title="Capital sources"
-      description="Sprint 1 keeps funding editing intentionally simple: the stack is replaced in one move rather than edited line by line."
+      title="Funding lanes"
+      description="Sprint 1 replaces the full stack in one save."
+      size="compact"
     >
       <form action={action} className="form-stack">
         <FundingLane
           label="State subsidy"
-          description="Primary subsidy-bank layer for the current stack."
+          description="Subsidy-bank anchor."
           checkboxName="stateSubsidyEnabled"
           selectName="stateSubsidyVariantId"
           options={stateOptions}
@@ -139,7 +141,7 @@ export function FundingStackForm({
 
         <FundingLane
           label="KfW"
-          description="KfW layer when the selected program combination supports it."
+          description="Program debt layer."
           checkboxName="kfwEnabled"
           selectName="kfwVariantId"
           options={kfwOptions}
@@ -150,7 +152,7 @@ export function FundingStackForm({
 
         <FundingLane
           label="Free financing"
-          description="Commercial financing as the flexible market-rate layer."
+          description="Flexible market-rate layer."
           checkboxName="freeFinancingEnabled"
           selectName="freeFinancingVariantId"
           options={freeOptions}
@@ -160,8 +162,8 @@ export function FundingStackForm({
         />
 
         <ActionRow spread className="form-footer">
-          <div className="field-help">Temporary whole-stack replacement flow for Sprint 1.</div>
-          <Button type="submit" variant="secondary">Replace funding stack</Button>
+          <div className="field-help">Whole-stack replacement only in Sprint 1.</div>
+          <Button type="submit" variant="secondary">Save stack</Button>
         </ActionRow>
       </form>
     </SectionCard>

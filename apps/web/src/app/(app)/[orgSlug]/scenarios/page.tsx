@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatBlock } from "@/components/ui/stat-block";
 import { StatusBadge, getScenarioStatusTone } from "@/components/ui/status-badge";
-import { WorkflowSteps } from "@/components/ui/workflow-steps";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { getParcels } from "@/lib/api/parcels";
 import { getScenarios } from "@/lib/api/scenarios";
@@ -16,6 +15,12 @@ import {
   scenarioStatusLabels,
   strategyTypeLabels,
 } from "@/lib/ui/enum-labels";
+
+function formatScenarioSignal(value: string | null) {
+  if (!value) return "No run";
+
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value));
+}
 
 export default async function ScenariosPage({
   params,
@@ -36,36 +41,25 @@ export default async function ScenariosPage({
         <PageHeader
           eyebrow="Workspace / Scenarios"
           title="Scenario studio"
-          description="Use scenarios as structured decision cases that connect parcel context, planning interpretation, funding selection, readiness, and heuristic output."
+          description="Scan active decision cases by parcel, strategy, status, and run history."
           actions={(
             <Link className={buttonClasses({ size: "lg" })} href={`/${orgSlug}/scenarios/new`}>
               New scenario
             </Link>
           )}
-          meta={(
-            <WorkflowSteps
-              activeStep={3}
-              steps={[
-                { label: "Parcel", description: "Anchor the case in a real site." },
-                { label: "Planning", description: "Carry forward buildability interpretation." },
-                { label: "Scenario", description: "Frame the commercial decision case." },
-                { label: "Readiness and run", description: "Resolve blockers, then launch the heuristic engine." },
-              ]}
-            />
-          )}
         />
 
         <div className="stat-grid">
           <StatBlock label="Total scenarios" value={scenarios.total} caption="Current decision cases" tone="accent" />
-          <StatBlock label="Linked parcels" value={withLinkedParcel} caption="Cases already grounded in a site" />
-          <StatBlock label="Run history" value={withRunHistory} caption="Cases that have already produced or attempted a result" tone="success" />
-          <StatBlock label="Active cases" value={activeCases} caption="Ready, running, or completed scenarios" />
+          <StatBlock label="Linked parcels" value={withLinkedParcel} caption="Grounded in a site" />
+          <StatBlock label="Run history" value={withRunHistory} caption="Cases with recorded runs" tone="success" />
+          <StatBlock label="Active cases" value={activeCases} caption="Ready, running, or done" />
         </div>
 
         <SectionCard
           eyebrow="Decision workspace"
-          title="Scenario list"
-          description="Each case should read as a live decision workspace with clear parcel context, current status, and the next place to work."
+          title="Scenario index"
+          description="Open the right case quickly by parcel, strategy, status, and run signal."
         >
           {scenarios.items.length ? (
             <div className="list-shell">
@@ -81,27 +75,35 @@ export default async function ScenariosPage({
                         <StatusBadge tone={getScenarioStatusTone(scenario.status)}>
                           {scenarioStatusLabels[scenario.status]}
                         </StatusBadge>
-                        {scenario.latestRunAt ? <StatusBadge tone="success">Run history</StatusBadge> : null}
+                        {scenario.latestRunAt ? <StatusBadge tone="success">Has run</StatusBadge> : null}
                         {scenario.parcelId ? <StatusBadge tone="accent">Parcel linked</StatusBadge> : <StatusBadge tone="warning">Parcel missing</StatusBadge>}
                       </div>
 
-                      <div className="list-row__description">
-                        {[
-                          strategyTypeLabels[scenario.strategyType],
-                          optimizationTargetLabels[scenario.optimizationTarget],
-                          linkedParcel?.name ?? linkedParcel?.cadastralId ?? (scenario.parcelId ? "Linked parcel" : "Parcel not linked"),
-                        ].join(" / ")}
+                      <div className="list-row__summary">
+                        <div className="list-row__summary-item">
+                          <div className="list-row__summary-label">Parcel</div>
+                          <div className="list-row__summary-value">
+                            {linkedParcel?.name ?? linkedParcel?.cadastralId ?? (scenario.parcelId ? "Linked parcel" : "Unlinked")}
+                          </div>
+                        </div>
+                        <div className="list-row__summary-item">
+                          <div className="list-row__summary-label">Strategy</div>
+                          <div className="list-row__summary-value">{strategyTypeLabels[scenario.strategyType]}</div>
+                        </div>
+                        <div className="list-row__summary-item">
+                          <div className="list-row__summary-label">Funding</div>
+                          <div className="list-row__summary-value">{selectedFundingCount} lane(s) enabled</div>
+                        </div>
+                        <div className="list-row__summary-item">
+                          <div className="list-row__summary-label">Latest run</div>
+                          <div className="list-row__summary-value">{formatScenarioSignal(scenario.latestRunAt)}</div>
+                        </div>
                       </div>
 
-                      <div className="list-row__meta">
-                        {scenario.description ?? "No scenario description saved yet. Use the builder to turn this into a clearer decision case."}
-                      </div>
+                      {scenario.description ? <div className="list-row__meta">{scenario.description}</div> : null}
 
                       <div className="inline-meta">
-                        <span className="meta-chip">{selectedFundingCount} funding lane(s)</span>
-                        <span className="meta-chip">
-                          {scenario.latestRunAt ? "Latest run recorded" : "No run yet"}
-                        </span>
+                        <span className="meta-chip">{optimizationTargetLabels[scenario.optimizationTarget]}</span>
                         <span className="meta-chip">{humanizeTokenLabel(scenario.status)}</span>
                       </div>
                     </div>
@@ -109,11 +111,11 @@ export default async function ScenariosPage({
                     <div className="action-row">
                       {scenario.parcelId ? (
                         <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${scenario.parcelId}`}>
-                          Open parcel
+                          Parcel
                         </Link>
                       ) : null}
                       <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/scenarios/${scenario.id}/builder`}>
-                        Open builder
+                        Builder
                       </Link>
                     </div>
                   </div>
@@ -124,7 +126,7 @@ export default async function ScenariosPage({
             <EmptyState
               eyebrow="No scenarios yet"
               title="Create the first decision case"
-              description="Scenarios turn parcel and planning context into a real feasibility question. Start with a parcel-linked case so the run flow stays grounded in a site."
+              description="Start with a parcel-linked case so the run flow stays grounded in a real site."
               actions={(
                 <>
                   <Link className={buttonClasses()} href={`/${orgSlug}/scenarios/new`}>

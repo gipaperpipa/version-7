@@ -17,7 +17,7 @@ import {
 } from "@/lib/ui/enum-labels";
 
 function FieldTag({ requiredNow }: { requiredNow: boolean }) {
-  return <Badge variant={requiredNow ? "accent" : "surface"}>{requiredNow ? "Required now" : "Optional"}</Badge>;
+  return <Badge variant={requiredNow ? "accent" : "surface"}>{requiredNow ? "Core now" : "Later"}</Badge>;
 }
 
 function TextField({
@@ -30,7 +30,7 @@ function TextField({
 }: {
   id: string;
   label: string;
-  helpText: string;
+  helpText?: string;
   defaultValue?: string | null;
   requiredNow?: boolean;
   required?: boolean;
@@ -42,7 +42,7 @@ function TextField({
         <FieldTag requiredNow={requiredNow} />
       </div>
       <Input id={id} name={id} defaultValue={defaultValue ?? ""} required={required} />
-      <div className="field-help">{helpText}</div>
+      {helpText ? <div className="field-help">{helpText}</div> : null}
     </div>
   );
 }
@@ -56,7 +56,7 @@ function TextAreaField({
 }: {
   id: string;
   label: string;
-  helpText: string;
+  helpText?: string;
   defaultValue?: string | null;
   requiredNow?: boolean;
 }) {
@@ -67,7 +67,7 @@ function TextAreaField({
         <FieldTag requiredNow={requiredNow} />
       </div>
       <Textarea id={id} name={id} defaultValue={defaultValue ?? ""} />
-      <div className="field-help">{helpText}</div>
+      {helpText ? <div className="field-help">{helpText}</div> : null}
     </div>
   );
 }
@@ -105,15 +105,15 @@ export function ScenarioEditorForm({
 
       <SectionCard
         eyebrow="Scenario framing"
-        title="Core case definition"
-        description="Anchor the decision case in a parcel, strategy, and optimization lens."
+        title="Case definition"
+        description="Anchor parcel, strategy, and decision lens."
+        size="compact"
       >
         <div className="field-grid">
           <div className="field-grid field-grid--single">
             <TextField
               id="name"
               label="Scenario name"
-              helpText="Use a clear case name that remains legible in lists and results."
               defaultValue={initialScenario?.name ?? ""}
               requiredNow
               required
@@ -124,7 +124,6 @@ export function ScenarioEditorForm({
             <TextAreaField
               id="description"
               label="Description"
-              helpText="Capture the intent of the case, not a long working note."
               defaultValue={initialScenario?.description ?? ""}
             />
           </div>
@@ -147,7 +146,7 @@ export function ScenarioEditorForm({
                 </option>
               ))}
             </select>
-            <div className="field-help">The scenario must stay attached to a real site context.</div>
+            <div className="field-help">Keep the case anchored to a real site.</div>
           </div>
 
           <div className="field-stack">
@@ -166,7 +165,7 @@ export function ScenarioEditorForm({
                 <option key={value} value={value}>{strategyTypeLabels[value]}</option>
               ))}
             </select>
-            <div className="field-help">The selected strategy changes the readiness-critical revenue fields.</div>
+            <div className="field-help">Changes which revenue inputs matter now.</div>
           </div>
 
           <div className="field-stack">
@@ -184,7 +183,6 @@ export function ScenarioEditorForm({
                 <option key={value} value={value}>{acquisitionTypeLabels[value]}</option>
               ))}
             </select>
-            <div className="field-help">Use the deal posture you want this scenario to test.</div>
           </div>
 
           <div className="field-stack">
@@ -202,7 +200,7 @@ export function ScenarioEditorForm({
                 <option key={value} value={value}>{optimizationTargetLabels[value]}</option>
               ))}
             </select>
-            <div className="field-help">Choose the output lens that best matches the decision you need.</div>
+            <div className="field-help">Choose the decision lens.</div>
           </div>
 
           <div className="field-grid field-grid--single">
@@ -219,8 +217,9 @@ export function ScenarioEditorForm({
 
       <SectionCard
         eyebrow="Revenue assumptions"
-        title="Commercial outputs"
-        description="Tell the engine what revenue logic this scenario should support."
+        title="Revenue"
+        description="Set the commercial logic the case should support."
+        size="compact"
       >
         <div className="field-grid">
           <TextField
@@ -233,21 +232,21 @@ export function ScenarioEditorForm({
           <TextField
             id="targetSubsidizedRentEurSqm"
             label="Subsidized rent EUR/sqm"
-            helpText="Required for subsidized rental scenarios."
+            helpText="Required for subsidized rental cases."
             defaultValue={initialScenario?.targetSubsidizedRentEurSqm ?? ""}
             requiredNow={isRequiredNow("Subsidized rent EUR/sqm")}
           />
           <TextField
             id="subsidizedSharePct"
             label="Subsidized share pct"
-            helpText="Needed when only part of the scheme is assumed to qualify."
+            helpText="Needed when only part of the scheme qualifies."
             defaultValue={initialScenario?.subsidizedSharePct ?? ""}
             requiredNow={isRequiredNow("Subsidized share pct")}
           />
           <TextField
             id="targetSalesPriceEurSqm"
             label="Sales price EUR/sqm"
-            helpText="Critical for build-to-sell scenarios."
+            helpText="Critical for build-to-sell cases."
             defaultValue={initialScenario?.targetSalesPriceEurSqm ?? ""}
             requiredNow={isRequiredNow("Sales price EUR/sqm")}
           />
@@ -256,47 +255,48 @@ export function ScenarioEditorForm({
 
       <SectionCard
         eyebrow="Finance and delivery"
-        title="Cost and program assumptions"
-        description="These values shape unitization, development cost, and capital need before funding is applied."
+        title="Cost and program"
+        description="Shape unitization, cost, and capital need before funding."
+        size="compact"
       >
         <div className="field-grid">
           <TextField
             id="avgUnitSizeSqm"
             label="Average unit size sqm"
-            helpText="Helps estimate unit count and parking demand."
+            helpText="Used for unit count and parking."
             defaultValue={initialScenario?.avgUnitSizeSqm ?? ""}
             requiredNow={isRequiredNow("Average unit size sqm")}
           />
           <TextField
             id="hardCostPerBgfSqm"
             label="Hard cost per BGF sqm"
-            helpText="A major cost driver in Sprint 1 feasibility."
+            helpText="Major cost driver."
             defaultValue={initialScenario?.hardCostPerBgfSqm ?? ""}
             requiredNow={isRequiredNow("Hard cost per BGF sqm")}
           />
           <TextField
             id="landCost"
             label="Land cost"
-            helpText="Important for meaningful break-even outputs."
+            helpText="Critical for meaningful break-even output."
             defaultValue={initialScenario?.landCost ?? ""}
             requiredNow={isRequiredNow("Land cost")}
           />
           <TextField
             id="softCostPct"
             label="Soft cost pct"
-            helpText="Overhead multiplier layered onto hard costs."
+            helpText="Overhead on hard costs."
             defaultValue={initialScenario?.softCostPct ?? ""}
           />
           <TextField
             id="parkingCostPerSpace"
             label="Parking cost per space"
-            helpText="Useful when parking materially shapes the cost profile."
+            helpText="Useful when parking materially changes cost."
             defaultValue={initialScenario?.parkingCostPerSpace ?? ""}
           />
           <TextField
             id="equityTargetPct"
             label="Equity target pct"
-            helpText="Use when the case needs a preferred equity posture."
+            helpText="Use when the case targets a specific equity posture."
             defaultValue={initialScenario?.equityTargetPct ?? ""}
           />
         </div>
@@ -304,14 +304,13 @@ export function ScenarioEditorForm({
 
       <SectionCard
         eyebrow="Save"
-        title="Commit the scenario inputs"
-        description="Save first, then use the funding and readiness rail to move into a run."
+        title="Save"
+        description="Save first. Then funding, readiness, run."
         tone="muted"
+        size="compact"
       >
         <ActionRow spread className="form-footer">
-          <div className="field-help">
-            Fields marked "Required now" are the ones most likely to block readiness for the selected strategy.
-          </div>
+          <div className="field-help">Core badges mark the fields most likely to block readiness.</div>
           <Button type="submit" size="lg">{submitLabel}</Button>
         </ActionRow>
       </SectionCard>

@@ -41,7 +41,7 @@ export default async function ParcelPlanningPage({
         <PageHeader
           eyebrow="Parcel / Planning"
           title="Planning inputs"
-          description={`Use planning inputs to interpret ${parcel.name ?? parcel.cadastralId ?? parcel.id} as a real site, not just a parcel record. These values drive readiness and shape the current heuristic engine.`}
+          description={`Interpret ${parcel.name ?? parcel.cadastralId ?? parcel.id} as a real site. These inputs drive readiness and the current heuristic engine.`}
           actions={(
             <>
               <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels/${parcelId}`}>
@@ -55,17 +55,17 @@ export default async function ParcelPlanningPage({
         />
 
         <div className="stat-grid">
-          <StatBlock label="Saved inputs" value={filledCount} caption="Current non-empty planning values" tone="accent" />
-          <StatBlock label="Readiness inputs" value={readinessCount} caption="Fields already helping readiness checks" />
-          <StatBlock label="Derived values" value={derivedCount} caption="Source-backed, read-only planning inputs" tone="accent" />
-          <StatBlock label="Parcel context" value={parcel.landAreaSqm ?? "n/a"} caption="Land area carried from the parcel workspace" />
+          <StatBlock label="Saved inputs" value={filledCount} caption="Current non-empty values" tone="accent" />
+          <StatBlock label="Readiness inputs" value={readinessCount} caption="Fields already helping checks" />
+          <StatBlock label="Derived values" value={derivedCount} caption="Source-backed and read-only" tone="accent" />
+          <StatBlock label="Parcel context" value={parcel.landAreaSqm ?? "n/a"} caption="Land area carried in" />
         </div>
 
         <Alert tone="info">
-          <AlertTitle>Thin planning coverage, deliberately focused</AlertTitle>
+          <AlertTitle>Focused Sprint 1 planning coverage</AlertTitle>
           <AlertDescription>
-            This page captures only the planning keys that matter most for Sprint 1 readiness and heuristic feasibility.
-            Geometry-backed inputs remain source-derived and read-only in the web flow.
+            This page keeps only the planning keys that matter most for Sprint 1 readiness and feasibility.
+            Geometry-backed inputs stay source-derived and read-only.
           </AlertDescription>
         </Alert>
 
@@ -80,7 +80,7 @@ export default async function ParcelPlanningPage({
           <div className="sidebar-stack">
             <NextStepPanel
               title="Move from site interpretation into scenario design"
-              description="The point of planning is to make the parcel decision-ready enough for scenario framing, not to recreate a full planning document."
+              description="Use planning to make the parcel decision-ready enough for scenario framing, not to recreate a full planning document."
               actions={(
                 <>
                   <Link className={buttonClasses()} href={continueHref}>
@@ -94,9 +94,10 @@ export default async function ParcelPlanningPage({
             />
 
             <SectionCard
-              eyebrow="How to read this form"
-              title="Field meaning and state"
-              description="The page distinguishes what is empty, saved, cleared, and derived so edits remain trustworthy."
+              eyebrow="Form legend"
+              title="Field state"
+              description="Keep empty, saved, cleared, and derived values distinct."
+              size="compact"
             >
               <div className="action-row">
                 <span className="meta-chip">Empty</span>
@@ -105,24 +106,24 @@ export default async function ParcelPlanningPage({
                 <span className="meta-chip">Derived / Read-only</span>
               </div>
               <div className="helper-list">
-                <div>Readiness-affecting fields are marked inline where they matter now.</div>
-                <div>Buildable Window is explicitly source-backed and read-only, not a manually authored web input.</div>
-                <div>Save first, then carry the parcel forward into scenario design.</div>
+                <div>Readiness-relevant fields are marked inline.</div>
+                <div>Buildable Window stays source-backed and read-only.</div>
+                <div>Save first, then carry the parcel into scenario design.</div>
               </div>
             </SectionCard>
 
             <SectionCard
               eyebrow="Workflow"
-              title="Planning in the broader journey"
-              description="Planning is the bridge between parcel trust and scenario decision logic."
+              title="Current path"
               tone="muted"
+              size="compact"
             >
               <WorkflowSteps
                 activeStep={2}
                 steps={[
-                  { label: "Parcel intake", description: "Establish the site and its trust posture." },
-                  { label: "Planning inputs", description: "Interpret buildability and policy conditions." },
-                  { label: "Scenario setup", description: "Frame the decision case with better upstream context." },
+                  { label: "Parcel", description: "Establish site context." },
+                  { label: "Planning", description: "Interpret buildability." },
+                  { label: "Scenario", description: "Frame the decision case." },
                 ]}
               />
             </SectionCard>

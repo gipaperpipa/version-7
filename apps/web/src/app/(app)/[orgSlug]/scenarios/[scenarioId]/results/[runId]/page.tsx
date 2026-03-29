@@ -14,7 +14,6 @@ import { SectionCard } from "@/components/ui/section-card";
 import { StatBlock } from "@/components/ui/stat-block";
 import { StatusBadge, getRunStatusTone } from "@/components/ui/status-badge";
 import { VerdictPanel } from "@/components/ui/verdict-panel";
-import { WorkflowSteps } from "@/components/ui/workflow-steps";
 
 function getNextActionCopy(runId: string, scenarioId: string, verdictTitle: string, hasPlanningLink: boolean) {
   if (verdictTitle === "Run failed") {
@@ -78,7 +77,7 @@ export default async function ScenarioResultPage({
         <PageHeader
           eyebrow="Feasibility result"
           title={scenario.name}
-          description="Review the latest directional output as a decision page, not a raw payload. Keep caveats, confidence, and missing-data signals visible beside the numbers."
+          description="Read the latest output as a decision page: verdict first, weaknesses second, next move third."
           actions={(
             <>
               <StatusBadge tone={getRunStatusTone(run.status)}>{humanizeTokenLabel(run.status)}</StatusBadge>
@@ -86,18 +85,6 @@ export default async function ScenarioResultPage({
                 Back to builder
               </Link>
             </>
-          )}
-          meta={(
-            <WorkflowSteps
-              activeStep={5}
-              steps={[
-                { label: "Parcel", description: "Site context" },
-                { label: "Planning", description: "Readiness inputs" },
-                { label: "Scenario", description: "Strategy framing" },
-                { label: "Readiness and run", description: "Validation and engine trigger" },
-                { label: "Result", description: "Decision-support output" },
-              ]}
-            />
           )}
         />
 
@@ -131,9 +118,10 @@ export default async function ScenarioResultPage({
           <>
             <SectionCard
               eyebrow="Headline metrics"
-              title="Directional feasibility summary"
-              description="Scan these first, then move into diagnostics and explanation to judge whether the current output is decision-strong enough."
+              title="Decision summary"
+              description="Scan these first."
               tone="accent"
+              size="compact"
             >
               <div className="metrics-grid">
                 <StatBlock label="Buildable BGF" value={result.buildableBgfSqm ?? "n/a"} caption="Estimated total gross floor area" tone="accent" />
@@ -149,8 +137,9 @@ export default async function ScenarioResultPage({
             <div className="detail-grid">
               <SectionCard
                 eyebrow="Capital and cost context"
-                title="How the result was capitalized"
-                description="These supporting figures help explain why required equity and break-even metrics landed where they did."
+                title="Capital context"
+                description="Supporting figures behind equity and break-even."
+                size="compact"
               >
                 <div className="key-value-grid">
                   <div className="key-value-card">
@@ -219,7 +208,7 @@ export default async function ScenarioResultPage({
             <EmptyState
               eyebrow="No financial result yet"
               title="This run has not produced a result payload"
-              description="Use the diagnostics above to see whether the run is still queued, still processing, or blocked by the current inputs."
+              description="Use diagnostics above to see whether the run is queued, processing, or blocked."
               actions={(
                 <>
                   <Link className={buttonClasses()} href={builderHref}>

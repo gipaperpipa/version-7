@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ParcelCompletenessSummary as ParcelCompletenessSummaryValue } from "@/lib/ui/parcel-completeness";
+import { cx } from "@/lib/ui/cx";
 import { buttonClasses } from "./button";
 import { SectionCard } from "./section-card";
 import { StatusBadge } from "./status-badge";
@@ -9,17 +10,19 @@ function SummaryRow({
   label,
   detail,
   tone,
+  compact = false,
 }: {
   title: string;
   label: string;
   detail: string;
   tone: "neutral" | "surface" | "accent" | "success" | "warning" | "danger" | "info";
+  compact?: boolean;
 }) {
   return (
-    <div className="summary-row">
+    <div className={cx("summary-row", compact && "summary-row--compact")}>
       <div className="content-stack" style={{ gap: 6 }}>
         <div className="field-note-strong">{title}</div>
-        <div className="field-help">{detail}</div>
+        {!compact ? <div className="field-help">{detail}</div> : null}
       </div>
       <StatusBadge tone={tone}>{label}</StatusBadge>
     </div>
@@ -29,11 +32,12 @@ function SummaryRow({
 export function ParcelCompletenessSummary({
   summary,
   title = "Parcel completeness",
-  description = "Use this to understand trust, downstream continuity, and the best next move for this site.",
+  description = "Trust, continuity, and next action for this site.",
   primaryActionHref,
   primaryActionLabel,
   secondaryActionHref,
   secondaryActionLabel,
+  variant = "default",
 }: {
   summary: ParcelCompletenessSummaryValue;
   title?: string;
@@ -42,38 +46,46 @@ export function ParcelCompletenessSummary({
   primaryActionLabel?: string;
   secondaryActionHref?: string;
   secondaryActionLabel?: string;
+  variant?: "default" | "compact";
 }) {
+  const compact = variant === "compact";
+
   return (
     <SectionCard
-      eyebrow="Continuity"
-      title={title}
-      description={description}
+      eyebrow={compact ? "Signals" : "Continuity"}
+      title={compact ? "Parcel scan" : title}
+      description={compact ? undefined : description}
       tone="muted"
+      size={compact ? "compact" : "default"}
     >
       <div className="content-stack">
         <SummaryRow
-          title="Source status"
+          title={compact ? "Source" : "Source status"}
           label={summary.sourceStatus.label}
           detail={summary.sourceStatus.detail}
           tone={summary.sourceStatus.tone}
+          compact={compact}
         />
         <SummaryRow
-          title="Planning completeness"
+          title={compact ? "Planning" : "Planning completeness"}
           label={summary.planningCompleteness.label}
           detail={summary.planningCompleteness.detail}
           tone={summary.planningCompleteness.tone}
+          compact={compact}
         />
         <SummaryRow
-          title="Scenario continuity"
+          title={compact ? "Scenario" : "Scenario continuity"}
           label={summary.scenarioContinuity.label}
           detail={summary.scenarioContinuity.detail}
           tone={summary.scenarioContinuity.tone}
+          compact={compact}
         />
         <SummaryRow
-          title="Next best action"
+          title={compact ? "Next" : "Next best action"}
           label={summary.nextBestAction.label}
           detail={summary.nextBestAction.detail}
           tone={summary.nextBestAction.tone}
+          compact={compact}
         />
 
         {primaryActionHref || secondaryActionHref ? (

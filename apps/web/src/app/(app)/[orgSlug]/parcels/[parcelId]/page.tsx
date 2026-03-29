@@ -51,7 +51,7 @@ export default async function ParcelDetailPage({
         <PageHeader
           eyebrow="Parcel workspace"
           title={parcel.name ?? parcel.cadastralId ?? "Parcel"}
-          description="Use parcel detail to judge source trust, planning completeness, and the cleanest next move into scenario work."
+          description="Review parcel trust, planning coverage, and the cleanest next move."
           actions={(
             <>
               <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels/${parcelId}/planning`}>
@@ -65,18 +65,18 @@ export default async function ParcelDetailPage({
         />
 
         <div className="stat-grid">
-          <StatBlock label="Land area" value={parcel.landAreaSqm ?? "n/a"} caption="Square meters" tone="accent" />
-          <StatBlock label="Planning values" value={planningParameters.items.filter((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null).length} caption="Saved planning inputs on this site" />
-          <StatBlock label="Linked scenarios" value={linkedScenarios.length} caption="Decision cases already attached to this parcel" tone={linkedScenarios.length ? "success" : "neutral"} />
-          <StatBlock label="Source mode" value={summary.sourceStatus.label} caption="Trust posture for this parcel record" tone={summary.sourceStatus.tone === "surface" ? "warning" : summary.sourceStatus.tone === "info" ? "accent" : summary.sourceStatus.tone === "success" ? "success" : "neutral"} />
+          <StatBlock label="Land area" value={parcel.landAreaSqm ?? "n/a"} caption="sqm" tone="accent" />
+          <StatBlock label="Planning values" value={planningParameters.items.filter((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null).length} caption="Saved on this site" />
+          <StatBlock label="Linked scenarios" value={linkedScenarios.length} caption="Cases attached here" tone={linkedScenarios.length ? "success" : "neutral"} />
+          <StatBlock label="Source mode" value={summary.sourceStatus.label} caption="Trust posture" tone={summary.sourceStatus.tone === "surface" ? "warning" : summary.sourceStatus.tone === "info" ? "accent" : summary.sourceStatus.tone === "success" ? "success" : "neutral"} />
         </div>
 
         <div className="detail-grid">
           <div className="content-stack">
             <SectionCard
               eyebrow="Overview"
-              title="Site context"
-              description="This parcel should read like a working site brief rather than a raw database record."
+              title="Site brief"
+              size="compact"
             >
               <div className="key-value-grid">
                 <div className="key-value-card">
@@ -100,8 +100,9 @@ export default async function ParcelDetailPage({
 
             <SectionCard
               eyebrow="Trust and provenance"
-              title="How this parcel should be read"
-              description="Trust stays visible so the user can separate sourced context from fallback manual entry."
+              title="Trust signal"
+              description="Keep source-led context distinct from fallback manual entry."
+              size="compact"
             >
               <div className="content-stack">
                 <ProvenanceConfidence
@@ -110,14 +111,8 @@ export default async function ParcelDetailPage({
                   sourceReference={parcel.sourceReference}
                 />
                 <div className="helper-list">
-                  <div>
-                    The real product direction is sourced parcel selection with geometry-backed area and shape, not
-                    manual parcel authoring.
-                  </div>
-                  <div>
-                    This parcel can still be used for Sprint 1 even when entered manually, but it should be treated as
-                    a fallback record rather than the intended flagship intake model.
-                  </div>
+                  <div>Source-selected parcels remain the intended product path.</div>
+                  <div>Manual edits stay usable in Sprint 1, but only as fallback.</div>
                 </div>
               </div>
             </SectionCard>
@@ -149,25 +144,26 @@ export default async function ParcelDetailPage({
 
             <SectionCard
               eyebrow="Manual fallback"
-              title="Fallback parcel intake"
-              description="Keep the parcel editable for Sprint 1, but do not treat manual site entry as the intended product-center experience."
+              title="Manual fallback edit"
+              description="Usable in Sprint 1. Source-led parcel selection remains the intended model."
               tone="muted"
+              size="compact"
             >
               <ParcelEditorForm action={action} initialParcel={parcel} submitLabel="Save parcel" />
             </SectionCard>
 
             <SectionCard
               eyebrow="Workflow"
-              title="Parcel in the broader path"
-              description="Keep the current site anchored inside the parcel-to-result journey."
+              title="Current path"
               tone="muted"
+              size="compact"
             >
               <WorkflowSteps
                 activeStep={1}
                 steps={[
-                  { label: "Parcel intake", description: "Keep the site context legible and usable." },
-                  { label: "Planning inputs", description: "Record buildability and policy interpretation." },
-                  { label: "Scenario setup", description: "Carry the parcel into a real decision case." },
+                  { label: "Parcel", description: "Keep site context legible." },
+                  { label: "Planning", description: "Record buildability." },
+                  { label: "Scenario", description: "Carry into a decision case." },
                 ]}
               />
             </SectionCard>

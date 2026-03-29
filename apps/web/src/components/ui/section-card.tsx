@@ -10,6 +10,7 @@ export function SectionCard({
   description,
   actions,
   tone = "default",
+  size = "default",
   ...props
 }: PropsWithChildren<HTMLAttributes<HTMLDivElement>> & {
   eyebrow?: string;
@@ -17,9 +18,10 @@ export function SectionCard({
   description?: string;
   actions?: ReactNode;
   tone?: "default" | "muted" | "accent";
+  size?: "default" | "compact";
 }) {
   return (
-    <Card className={cx("section-card", className)} tone={tone} {...props}>
+    <Card className={cx("section-card", size === "compact" && "section-card--compact", className)} tone={tone} {...props}>
       <CardHeader>
         <div>
           {eyebrow ? <CardEyebrow>{eyebrow}</CardEyebrow> : null}

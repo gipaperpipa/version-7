@@ -64,9 +64,9 @@ function getFieldState(definition: PlanningFieldDefinition, existing: PlanningPa
 }
 
 const sectionDescriptions: Record<string, string> = {
-  Buildability: "These inputs explain what can be built and carry the most weight in readiness.",
-  Capacity: "These values refine unitization and parking assumptions once buildability is in place.",
-  Policy: "Use these fields when lending or subsidy context materially shapes the case.",
+  Buildability: "Core buildability inputs.",
+  Capacity: "Unit and parking refinements.",
+  Policy: "Program and policy overlays.",
 };
 
 export function PlanningParameterForm({
@@ -94,6 +94,7 @@ export function PlanningParameterForm({
             eyebrow={`Planning / ${section}`}
             title={section}
             description={sectionDescriptions[section]}
+            size="compact"
           >
             <div className="field-grid">
               {sectionDefinitions.map((definition) => {
@@ -162,14 +163,12 @@ export function PlanningParameterForm({
                       {definition.storageKind === "readonlyValueNumber" ? (
                         <div className="readonly-block">
                           <div className="readonly-block__value">{existing?.valueNumber ?? "n/a"}</div>
-                          <div className="field-help">
-                            Geometry-linked and source-backed. This value is intentionally read-only in the Sprint 1 web flow.
-                          </div>
+                          <div className="field-help">Source-derived geometry. Read-only in Sprint 1.</div>
                         </div>
                       ) : null}
 
                       {fieldState.isCleared ? (
-                        <div className="field-help field-note-strong">Will clear the saved value when you save planning inputs.</div>
+                        <div className="field-help field-note-strong">Will clear the saved value on save.</div>
                       ) : null}
                     </div>
                   </div>
@@ -182,14 +181,13 @@ export function PlanningParameterForm({
 
       <SectionCard
         eyebrow="Save and continue"
-        title="Commit the planning interpretation"
-        description="Save planning inputs first, then carry this parcel directly into scenario design."
+        title="Save and continue"
+        description="Save planning, then move into scenario design."
         tone="muted"
+        size="compact"
       >
         <ActionRow spread className="form-footer">
-          <div className="field-help">
-            Readiness-affecting fields are flagged inline so you can see which values matter immediately.
-          </div>
+          <div className="field-help">Readiness-relevant fields are flagged inline.</div>
           <div className="action-row">
             {continueHref ? (
               <Link className={buttonClasses({ variant: "secondary" })} href={continueHref}>

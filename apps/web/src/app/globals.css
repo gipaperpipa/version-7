@@ -247,11 +247,11 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  padding: 24px 26px 0;
+  padding: 20px 22px 0;
 }
 
 .card__content {
-  padding: 22px 26px 26px;
+  padding: 18px 22px 22px;
 }
 
 .card__eyebrow {
@@ -271,9 +271,9 @@ button {
 }
 
 .card__description {
-  margin: 8px 0 0;
-  max-width: 64ch;
-  font-size: 0.95rem;
+  margin: 6px 0 0;
+  max-width: 58ch;
+  font-size: 0.9rem;
   color: var(--muted);
 }
 
@@ -281,19 +281,37 @@ button {
   overflow: hidden;
 }
 
+.section-card--compact .card__header {
+  gap: 14px;
+  padding: 18px 18px 0;
+}
+
+.section-card--compact .card__content {
+  padding: 14px 18px 18px;
+}
+
+.section-card--compact .card__title {
+  font-size: 1.04rem;
+}
+
+.section-card--compact .card__description {
+  font-size: 0.84rem;
+  max-width: 52ch;
+}
+
 .page-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
+  gap: 18px;
 }
 
 .page-header__body {
-  max-width: 76ch;
+  max-width: 68ch;
 }
 
 .page-title {
-  margin: 10px 0 10px;
+  margin: 8px 0;
   font-size: clamp(2rem, 4vw, 3.2rem);
   line-height: 1.02;
   letter-spacing: -0.04em;
@@ -301,13 +319,13 @@ button {
 
 .page-description {
   margin: 0;
-  max-width: 70ch;
-  font-size: 1rem;
+  max-width: 62ch;
+  font-size: 0.95rem;
   color: var(--muted-strong);
 }
 
 .page-meta {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .page-meta .workflow-steps {
@@ -602,13 +620,18 @@ button {
 }
 
 .summary-row {
-  padding: 14px 0;
+  padding: 12px 0;
   border-top: 1px solid rgba(19, 32, 25, 0.08);
 }
 
 .summary-row:first-child {
   padding-top: 0;
   border-top: 0;
+}
+
+.summary-row--compact {
+  align-items: center;
+  gap: 12px;
 }
 
 .verdict-panel__context {
@@ -681,7 +704,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 20px 22px;
+  padding: 18px 18px;
   border: 1px solid var(--border);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.84);
@@ -736,21 +759,21 @@ button {
 
 .workflow-step {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 12px;
-  padding: 10px 0;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 0;
 }
 
 .workflow-step__index {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 999px;
   border: 1px solid rgba(19, 32, 25, 0.12);
   background: rgba(255, 255, 255, 0.84);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   font-weight: 800;
   color: var(--muted-strong);
 }
@@ -768,13 +791,13 @@ button {
 }
 
 .workflow-step__label {
-  font-size: 0.96rem;
+  font-size: 0.92rem;
   font-weight: 700;
 }
 
 .workflow-step__description {
   margin-top: 4px;
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   color: var(--muted);
 }
 
@@ -945,10 +968,10 @@ button {
 .list-shell {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 .list-row {
-  padding: 18px 0;
+  padding: 16px 0;
   border-top: 1px solid rgba(19, 32, 25, 0.08);
 }
 
@@ -978,7 +1001,7 @@ button {
 .list-row__body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .list-row__title {
@@ -999,8 +1022,36 @@ button {
   color: var(--muted);
 }
 
+.list-row__summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.list-row__summary-item {
+  padding: 10px 12px;
+  border: 1px solid rgba(19, 32, 25, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.list-row__summary-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.list-row__summary-value {
+  margin-top: 6px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .key-value-grid {
-  gap: 12px 16px;
+  gap: 10px 14px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -1029,8 +1080,8 @@ button {
 .planning-field {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 18px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid rgba(19, 32, 25, 0.08);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.62);
@@ -1056,7 +1107,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 16px 18px;
+  padding: 14px 16px;
   border: 1px dashed rgba(44, 105, 135, 0.24);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.58);
@@ -1077,7 +1128,7 @@ button {
 }
 
 .scenario-hint {
-  padding: 24px;
+  padding: 18px 20px;
   border: 1px solid rgba(33, 89, 79, 0.12);
   border-radius: 24px;
   background: linear-gradient(180deg, rgba(229, 242, 238, 0.86), rgba(255, 255, 255, 0.84));
@@ -1085,23 +1136,29 @@ button {
 
 .scenario-hint__title {
   margin: 0;
-  font-size: 1.06rem;
+  font-size: 1rem;
   font-weight: 800;
 }
 
 .scenario-hint__description {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
+  font-size: 0.9rem;
   color: var(--muted-strong);
 }
 
 .funding-lane {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 18px;
+  gap: 10px;
+  padding: 16px;
   border: 1px solid rgba(19, 32, 25, 0.08);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.62);
+}
+
+.funding-lane--selected {
+  border-color: rgba(33, 89, 79, 0.18);
+  background: rgba(229, 242, 238, 0.74);
 }
 
 .funding-lane__header {
@@ -1124,7 +1181,7 @@ button {
 }
 
 .insight-item {
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid rgba(19, 32, 25, 0.08);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.68);
@@ -1133,9 +1190,15 @@ button {
 .helper-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   padding-left: 18px;
   color: var(--muted-strong);
+}
+
+.cockpit-rail {
+  position: sticky;
+  top: 18px;
+  align-self: start;
 }
 
 @media (max-width: 1120px) {
@@ -1157,6 +1220,10 @@ button {
   .stat-grid,
   .metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cockpit-rail {
+    position: static;
   }
 }
 
@@ -1206,5 +1273,9 @@ button {
   .home-title,
   .page-title {
     max-width: none;
+  }
+
+  .list-row__summary {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

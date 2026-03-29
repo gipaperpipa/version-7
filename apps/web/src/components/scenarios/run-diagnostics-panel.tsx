@@ -16,14 +16,19 @@ function getConfidenceStatTone(band: string) {
 export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
   const inputBand = getConfidenceBand(run.confidence.inputConfidencePct);
   const outputBand = getConfidenceBand(run.confidence.outputConfidencePct);
+  const blockers = run.readinessIssues.filter((issue) => issue.severity === "BLOCKING");
+  const readinessWarnings = run.readinessIssues.filter((issue) => issue.severity === "WARNING");
   const heuristicCaveats = run.warnings.filter((warning) => warning.code.startsWith("HEURISTIC_"));
   const otherWarnings = run.warnings.filter((warning) => !warning.code.startsWith("HEURISTIC_"));
+  const combinedWarnings = Array.from(
+    new Set([...readinessWarnings.map((warning) => warning.message), ...otherWarnings.map((warning) => warning.message)]),
+  );
 
   return (
     <SectionCard
       eyebrow="Diagnostics"
-      title="Run quality and caveats"
-      description="Keep the heuristics explicit: confidence, caveats, missing-data flags, and failure reasons stay visible next to the result."
+      title="Risk and signal quality"
+      description="Scan blockers, warnings, missing data, caveats, and confidence before trusting the direction."
     >
       <div className="content-stack">
         <div className="action-row">
@@ -33,12 +38,24 @@ export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
           {run.errorMessage ? <StatusBadge tone="danger">Failure surfaced</StatusBadge> : null}
         </div>
 
-        <div className="metrics-grid metrics-grid--compact">
+        <div className="metrics-grid">
           <StatBlock
-            label="Input confidence"
-            value={inputBand}
-            caption={run.confidence.inputConfidencePct != null ? `Score ${run.confidence.inputConfidencePct}` : "No numeric score returned"}
-            tone={getConfidenceStatTone(inputBand)}
+            label="Blockers"
+            value={blockers.length}
+            caption={blockers.length ? "Readiness issues carried into the run" : "No blocking issues"}
+            tone={blockers.length ? "danger" : "success"}
+          />
+          <StatBlock
+            label="Warnings"
+            value={combinedWarnings.length}
+            caption={combinedWarnings.length ? "Non-blocking risk signals" : "No warning signals"}
+            tone={combinedWarnings.length ? "warning" : "success"}
+          />
+          <StatBlock
+            label="Missing data"
+            value={run.missingDataFlags.length}
+            caption={run.missingDataFlags.length ? "Fallback-dependent inputs" : "No missing-data flags"}
+            tone={run.missingDataFlags.length ? "warning" : "success"}
           />
           <StatBlock
             label="Output confidence"
@@ -50,25 +67,36 @@ export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
 
         {run.errorMessage ? (
           <SectionCard
-            eyebrow="Failure reason"
-            title="The run did not complete cleanly"
-            description="Use the surfaced backend reason below before you decide whether to retry or return to the builder."
+            eyebrow="Failure"
+            title="Run failure"
+            description="Use the surfaced backend reason before retrying."
             tone="muted"
+            size="compact"
           >
             <div className="insight-item">{run.errorMessage}</div>
           </SectionCard>
         ) : null}
 
         <div className="diagnostic-grid">
-          <DiagnosticGroup title="Heuristic caveats" emptyLabel="No explicit heuristic caveats were returned for this run.">
-            {heuristicCaveats.map((warning) => (
-              <div key={warning.code} className="insight-item">
-                {warning.message}
+          <DiagnosticGroup title="Blockers" emptyLabel="No blockers carried into this run.">
+            {blockers.map((issue) => (
+              <div key={`${issue.code}-${issue.field ?? "global"}`} className="insight-item">
+                {issue.message}
               </div>
             ))}
           </DiagnosticGroup>
 
-          <DiagnosticGroup title="Missing data flags" emptyLabel="No missing-data flags were raised.">
+          <DiagnosticGroup title="Warnings" emptyLabel="No warning signals surfaced.">
+            {combinedWarnings.map((warning) => (
+              <div key={warning} className="insight-item">
+                {warning}
+              </div>
+            ))}
+          </DiagnosticGroup>
+        </div>
+
+        <div className="diagnostic-grid">
+          <DiagnosticGroup title="Missing data" emptyLabel="No missing-data flags were raised.">
             {run.missingDataFlags.length ? (
               <div className="chip-row">
                 {run.missingDataFlags.map((flag) => (
@@ -77,25 +105,23 @@ export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
               </div>
             ) : null}
           </DiagnosticGroup>
-        </div>
 
-        <div className="diagnostic-grid">
-          <DiagnosticGroup title="Additional warnings" emptyLabel="No non-heuristic warnings were returned.">
-            {otherWarnings.map((warning) => (
+          <DiagnosticGroup title="Heuristic caveats" emptyLabel="No heuristic caveats were returned.">
+            {heuristicCaveats.map((warning) => (
               <div key={warning.code} className="insight-item">
                 {warning.message}
               </div>
             ))}
           </DiagnosticGroup>
-
-          <DiagnosticGroup title="Confidence reasoning" emptyLabel="No confidence reasoning text was returned.">
-            {run.confidence.reasons.map((reason) => (
-              <div key={reason} className="insight-item">
-                {reason}
-              </div>
-            ))}
-          </DiagnosticGroup>
         </div>
+
+        <DiagnosticGroup title="Confidence notes" emptyLabel="No confidence reasoning text was returned.">
+          {run.confidence.reasons.map((reason) => (
+            <div key={reason} className="insight-item">
+              {reason}
+            </div>
+          ))}
+        </DiagnosticGroup>
       </div>
     </SectionCard>
   );
