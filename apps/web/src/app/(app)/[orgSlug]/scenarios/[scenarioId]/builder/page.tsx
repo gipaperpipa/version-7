@@ -55,7 +55,15 @@ export default async function ScenarioBuilderPage({
         <PageHeader
           eyebrow="Scenario builder"
           title={scenario.name}
-          description="Current case, current blockers, key edits, then action."
+          description="Current state, key edits, then action."
+          meta={(
+            <div className="action-row">
+              {linkedParcel ? <span className="meta-chip">{linkedParcel.name ?? linkedParcel.cadastralId ?? "Linked parcel"}</span> : <StatusBadge tone="warning">Parcel missing</StatusBadge>}
+              <span className="meta-chip">{strategyTypeLabels[scenario.strategyType]}</span>
+              <span className="meta-chip">{selectedFundingCount ? `${selectedFundingCount} funding lane(s)` : "No funding lanes"}</span>
+              <StatusBadge tone={getReadinessTone(readiness.status)}>{humanizeTokenLabel(readiness.status)}</StatusBadge>
+            </div>
+          )}
           actions={(
             <>
               {scenario.parcelId ? (

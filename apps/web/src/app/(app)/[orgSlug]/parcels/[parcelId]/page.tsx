@@ -50,6 +50,14 @@ export default async function ParcelDetailPage({
           eyebrow="Parcel workspace"
           title={parcel.name ?? parcel.cadastralId ?? "Parcel"}
           description="Review parcel trust, planning coverage, and next move."
+          meta={(
+            <div className="action-row">
+              <span className="meta-chip">{summary.sourceStatus.label}</span>
+              <span className="meta-chip">{parcel.landAreaSqm ?? "n/a"} sqm</span>
+              <span className="meta-chip">{planningParameters.items.filter((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null).length} planning values</span>
+              <span className="meta-chip">{linkedScenarios.length} linked scenarios</span>
+            </div>
+          )}
           actions={(
             <>
               <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels/${parcelId}/planning`}>

@@ -69,6 +69,14 @@ export default async function ScenariosPage({
           eyebrow="Workspace / Scenarios"
           title="Scenario studio"
           description="Compare cases by parcel, strategy, status, and latest signal."
+          meta={(
+            <div className="action-row">
+              <span className="meta-chip">{scenarios.total} cases</span>
+              <span className="meta-chip">{withLinkedParcel} parcel-linked</span>
+              <span className="meta-chip">{withRunHistory} with runs</span>
+              <span className="meta-chip">{activeCases} active</span>
+            </div>
+          )}
           actions={(
             <Link className={buttonClasses({ size: "lg" })} href={`/${orgSlug}/scenarios/new`}>
               New scenario
@@ -143,6 +151,7 @@ export default async function ScenariosPage({
 
                         <div className="inline-meta">
                           <span className="meta-chip">{optimizationTargetLabels[scenario.optimizationTarget]}</span>
+                          <span className="meta-chip">{selectedFundingCount} funding lane(s)</span>
                           <span className="meta-chip">{formatScenarioSignal(scenario.updatedAt)} update</span>
                         </div>
                       </div>

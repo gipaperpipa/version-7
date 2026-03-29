@@ -38,7 +38,15 @@ export default async function ParcelPlanningPage({
         <PageHeader
           eyebrow="Parcel / Planning"
           title="Planning inputs"
-          description={`Interpret ${parcel.name ?? parcel.cadastralId ?? parcel.id} as a real site. These inputs drive readiness and the current heuristic engine.`}
+          description={`Interpret ${parcel.name ?? parcel.cadastralId ?? parcel.id} as a real site.`}
+          meta={(
+            <div className="action-row">
+              <span className="meta-chip">{filledCount} saved</span>
+              <span className="meta-chip">{readinessCount} readiness fields</span>
+              <span className="meta-chip">{derivedCount} derived</span>
+              <span className="meta-chip">{parcel.landAreaSqm ?? "n/a"} sqm parcel context</span>
+            </div>
+          )}
           actions={(
             <>
               <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels/${parcelId}`}>

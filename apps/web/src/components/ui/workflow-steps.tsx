@@ -21,20 +21,23 @@ export function WorkflowSteps({
       <div className="workflow-steps">
         {steps.map((step, index) => {
           const stepNumber = index + 1;
+          const isComplete = activeStep ? stepNumber < activeStep : false;
+          const isCurrent = activeStep ? stepNumber === activeStep : false;
           const stateClass = activeStep
-            ? stepNumber < activeStep
+            ? isComplete
               ? "workflow-step workflow-step--complete"
-              : stepNumber === activeStep
+              : isCurrent
                 ? "workflow-step workflow-step--current"
                 : "workflow-step"
             : "workflow-step";
+          const showDescription = !activeStep || isCurrent;
 
           const content = (
             <>
               <div className="workflow-step__index">{stepNumber}</div>
               <div>
                 <div className="workflow-step__label">{step.label}</div>
-                <div className="workflow-step__description">{step.description}</div>
+                {showDescription ? <div className="workflow-step__description">{step.description}</div> : null}
               </div>
             </>
           );

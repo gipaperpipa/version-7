@@ -77,10 +77,16 @@ export default async function ScenarioResultPage({
         <PageHeader
           eyebrow="Feasibility result"
           title={scenario.name}
-          description="Verdict first, weaknesses second, next move third."
+          description="Verdict first. Weaknesses and next move right after."
+          meta={(
+            <div className="action-row">
+              <StatusBadge tone={getRunStatusTone(run.status)}>{humanizeTokenLabel(run.status)}</StatusBadge>
+              {run.readinessStatus ? <StatusBadge tone="surface">Readiness {humanizeTokenLabel(run.readinessStatus)}</StatusBadge> : null}
+              {run.engineVersion ? <span className="meta-chip">{run.engineVersion}</span> : null}
+            </div>
+          )}
           actions={(
             <>
-              <StatusBadge tone={getRunStatusTone(run.status)}>{humanizeTokenLabel(run.status)}</StatusBadge>
               <Link className={buttonClasses({ variant: "secondary" })} href={builderHref}>
                 Back to builder
               </Link>

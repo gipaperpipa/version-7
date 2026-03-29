@@ -32,6 +32,12 @@ export default async function NewScenarioPage({
           eyebrow="Scenario studio"
           title="Create a scenario"
           description="Open a parcel-linked case, then continue in the builder."
+          meta={(
+            <div className="action-row">
+              <span className="meta-chip">{parcels.total} parcel option{parcels.total === 1 ? "" : "s"}</span>
+              {selectedParcel ? <span className="meta-chip">{selectedParcel.name ?? selectedParcel.cadastralId ?? "Selected parcel"}</span> : <span className="meta-chip">Select parcel first</span>}
+            </div>
+          )}
           actions={(
             <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios`}>
               Back to scenarios

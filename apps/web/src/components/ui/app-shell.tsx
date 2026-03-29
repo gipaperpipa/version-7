@@ -25,22 +25,22 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
   const navItems = [
     {
       title: "Parcels",
-      description: "Site trust, planning continuity, and scenario handoff.",
+      description: "Trust, planning, continuity.",
       href: `/${orgSlug}/parcels`,
     },
     {
       title: "Scenarios",
-      description: "Strategy, funding, readiness, and result review.",
+      description: "Strategy, funding, verdicts.",
       href: `/${orgSlug}/scenarios`,
     },
   ];
 
   const steps = [
-    { label: "Parcel intake", description: "Ground the case in a site record and its trust signal.", href: `/${orgSlug}/parcels` },
-    { label: "Planning inputs", description: "Interpret buildability and policy constraints for the parcel.", href: `/${orgSlug}/parcels` },
-    { label: "Scenario setup", description: "Frame the strategy, revenue, and cost assumptions.", href: `/${orgSlug}/scenarios` },
-    { label: "Readiness and run", description: "Resolve blockers, select funding, and launch the heuristic engine.", href: `/${orgSlug}/scenarios` },
-    { label: "Decision result", description: "Review KPIs, caveats, and the next action.", href: `/${orgSlug}/scenarios` },
+    { label: "Parcel intake", description: "Ground the case in a site record.", href: `/${orgSlug}/parcels` },
+    { label: "Planning inputs", description: "Interpret buildability for the parcel.", href: `/${orgSlug}/parcels` },
+    { label: "Scenario setup", description: "Frame the case and assumptions.", href: `/${orgSlug}/scenarios` },
+    { label: "Readiness and run", description: "Resolve blockers and launch.", href: `/${orgSlug}/scenarios` },
+    { label: "Decision result", description: "Review verdict, KPIs, and next move.", href: `/${orgSlug}/scenarios` },
   ];
   const activeStage = steps[Math.max(activeStep - 1, 0)]?.label ?? "Parcel intake";
 
@@ -50,9 +50,7 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
         <div>
           <div className="workspace-badge">Sprint 1</div>
           <div className="workspace-brand__title">Feasibility OS</div>
-          <div className="workspace-brand__description">
-            Internal workspace for sourced parcel context, planning interpretation, scenario design, and heuristic review.
-          </div>
+          <div className="workspace-brand__description">Parcel-led feasibility workspace for planning, scenarios, and heuristic review.</div>
         </div>
 
         <div className="workspace-sidebar__section">
@@ -90,9 +88,7 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
 
         <div className="workspace-sidebar__section">
           <div className="workspace-sidebar__label">Product direction</div>
-          <div className="workspace-sidebar__hint">
-            Source-selected parcels remain the target. Manual parcel entry stays fallback.
-          </div>
+          <div className="workspace-sidebar__hint">Source-selected parcels stay primary. Manual parcel entry stays fallback.</div>
           <div className="action-row">
             <span className="meta-chip">Source-first</span>
             <span className="meta-chip">Derived geometry</span>
@@ -119,11 +115,22 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
             <div className="workspace-topbar__value">/{orgSlug}</div>
           </div>
           <div className="workspace-topbar__trail">
-            <span className="workspace-topbar__stage">Parcel</span>
-            <span className="workspace-topbar__stage">Planning</span>
-            <span className="workspace-topbar__stage">Scenario</span>
-            <span className="workspace-topbar__stage">Readiness</span>
-            <span className="workspace-topbar__stage">Result</span>
+            {steps.map((step, index) => {
+              const stepNumber = index + 1;
+              const stateClass =
+                stepNumber < activeStep
+                  ? "workspace-topbar__stage workspace-topbar__stage--complete"
+                  : stepNumber === activeStep
+                    ? "workspace-topbar__stage workspace-topbar__stage--current"
+                    : "workspace-topbar__stage";
+
+              return (
+                <span key={step.label} className={stateClass}>
+                  <span className="workspace-topbar__stage-index">{stepNumber}</span>
+                  <span>{step.label.replace(" inputs", "").replace(" and run", "")}</span>
+                </span>
+              );
+            })}
           </div>
           <div className="workspace-topbar__active">
             <div className="workspace-topbar__label">Current stage</div>

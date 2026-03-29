@@ -41,8 +41,10 @@ function ParcelRow({
             <StatusBadge tone={summary.sourceStatus.tone}>{summary.sourceStatus.label}</StatusBadge>
             {linkedScenarios.length ? <StatusBadge tone="accent">{linkedScenarios.length} scenario(s)</StatusBadge> : null}
           </div>
-          <div className="list-row__description list-row__description--clamped">
-            {[parcel.city ?? "Unknown city", parcel.municipalityName ?? "Municipality not set", `${parcel.landAreaSqm ?? "n/a"} sqm`].join(" / ")}
+          <div className="inline-meta">
+            <span className="meta-chip">{parcel.city ?? "Unknown city"}</span>
+            <span className="meta-chip">{parcel.municipalityName ?? "Municipality not set"}</span>
+            <span className="meta-chip">{parcel.landAreaSqm ?? "n/a"} sqm</span>
           </div>
           <div className="list-row__meta list-row__meta--clamped">{parcel.addressLine1 ?? parcel.cadastralId ?? "No address saved yet"}</div>
           <ProvenanceConfidence
@@ -116,7 +118,15 @@ export default async function ParcelsPage({
         <PageHeader
           eyebrow="Workspace / Parcels"
           title="Site pipeline"
-          description="Scan trust, planning coverage, and next move. Manual intake remains fallback only."
+          description="Scan trust, planning coverage, and next move."
+          meta={(
+            <div className="action-row">
+              <span className="meta-chip">{parcels.total} parcels</span>
+              <span className="meta-chip">{sourceBackedCount} source-backed</span>
+              <span className="meta-chip">{planningStartedCount} planning started</span>
+              <span className="meta-chip">{manualCount} fallback manual</span>
+            </div>
+          )}
           actions={(
             <Link className={buttonClasses({ size: "lg" })} href={`/${orgSlug}/parcels/new`}>
               Add fallback parcel
