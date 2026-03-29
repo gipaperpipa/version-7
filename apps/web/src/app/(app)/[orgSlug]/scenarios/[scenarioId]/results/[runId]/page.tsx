@@ -89,6 +89,7 @@ export default async function ScenarioResultPage({
         />
 
         <VerdictPanel
+          className="dashboard-hero decision-hero"
           eyebrow="Decision verdict"
           title={verdict.title}
           summary={verdict.summary}
@@ -118,6 +119,7 @@ export default async function ScenarioResultPage({
           <>
             <div className="detail-grid detail-grid--decision">
               <SectionCard
+                className="summary-band decision-summary"
                 eyebrow="Headline metrics"
                 title="Decision summary"
                 description="Scan these first."
@@ -133,6 +135,7 @@ export default async function ScenarioResultPage({
               </SectionCard>
 
               <NextStepPanel
+                className="rail-panel rail-panel--action"
                 title={nextAction.title}
                 description={nextAction.description}
                 tone={verdict.tone === "success" ? "accent" : "muted"}
@@ -161,6 +164,7 @@ export default async function ScenarioResultPage({
             <ResultExplanationCard explanation={result.explanation ?? null} />
 
             <SectionCard
+              className="index-surface"
               eyebrow="Capital and cost context"
               title="Capital context"
               description="Supporting figures behind equity and break-even."

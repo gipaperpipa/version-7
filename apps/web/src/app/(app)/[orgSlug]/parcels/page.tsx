@@ -49,6 +49,7 @@ function ParcelRow({
             sourceType={parcel.sourceType}
             confidenceScore={parcel.confidenceScore}
             sourceReference={parcel.sourceReference}
+            variant="inline"
           />
         </div>
       </div>
@@ -124,9 +125,10 @@ export default async function ParcelsPage({
         />
 
         <SectionCard
+          className="summary-band"
           eyebrow="Operating summary"
           title="Portfolio scan"
-          description="Compare trust, planning momentum, and fallback exposure at a glance."
+          description="Compare trust, planning momentum, and fallback exposure fast."
           tone="accent"
           size="compact"
         >
@@ -155,8 +157,9 @@ export default async function ParcelsPage({
         </SectionCard>
 
         <SectionCard
+          className="index-surface"
           eyebrow="Acquisition workspace"
-          title="Parcel portfolio"
+          title="Acquisition grid"
           description="Scan identity, trust, continuity, and next move in one sweep."
         >
           {parcels.items.length ? (

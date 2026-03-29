@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cx } from "@/lib/ui/cx";
 import { StatusBadge } from "./status-badge";
 import { SectionCard } from "./section-card";
 
@@ -10,6 +11,7 @@ export function VerdictPanel({
   context,
   actions,
   size = "default",
+  className,
 }: {
   eyebrow?: string;
   title: string;
@@ -18,9 +20,11 @@ export function VerdictPanel({
   context?: ReactNode;
   actions?: ReactNode;
   size?: "default" | "compact";
+  className?: string;
 }) {
   return (
     <SectionCard
+      className={cx(className)}
       eyebrow={eyebrow}
       title={title}
       description={summary}

@@ -55,7 +55,7 @@ export default async function ScenarioBuilderPage({
         <PageHeader
           eyebrow="Scenario builder"
           title={scenario.name}
-          description="Read state, adjust the case, then act."
+          description="Current case, current blockers, key edits, then action."
           actions={(
             <>
               {scenario.parcelId ? (
@@ -78,8 +78,9 @@ export default async function ScenarioBuilderPage({
         ) : null}
 
         <SectionCard
+          className="dashboard-hero dashboard-hero--builder"
           eyebrow="Operating summary"
-          title="Operator header"
+          title="Case cockpit"
           description={readinessVerdict.summary}
           tone="accent"
           size="compact"
@@ -112,7 +113,7 @@ export default async function ScenarioBuilderPage({
               <div className="ops-summary-item">
                 <div className="ops-summary-item__label">Readiness</div>
                 <div className="ops-summary-item__value">{humanizeTokenLabel(readiness.status)}</div>
-                <div className="ops-summary-item__detail">{blockerCount ? `${blockerCount} blocker(s)` : `${warningCount} warning(s)`} · Checked {validatedLabel}</div>
+                <div className="ops-summary-item__detail">{blockerCount ? `${blockerCount} blocker(s)` : `${warningCount} warning(s)`} | Checked {validatedLabel}</div>
               </div>
             </div>
 
@@ -141,7 +142,7 @@ export default async function ScenarioBuilderPage({
           </div>
         </SectionCard>
 
-        <div className="dashboard-grid">
+        <div className="dashboard-grid dashboard-grid--builder">
           <ScenarioEditorForm
             action={updateAction}
             parcels={parcels.items}
@@ -158,6 +159,7 @@ export default async function ScenarioBuilderPage({
             />
 
             <SectionCard
+              className="rail-panel"
               eyebrow="Readiness details"
               title="Current issues"
               tone={readiness.canRun ? "muted" : "default"}
@@ -192,6 +194,7 @@ export default async function ScenarioBuilderPage({
             </SectionCard>
 
             <NextStepPanel
+              className="rail-panel rail-panel--action"
               title={readiness.canRun ? "Ready to run" : "Resolve blockers first"}
               description={readiness.canRun
                 ? "Directional enough to run. Review funding and planning once, then launch."

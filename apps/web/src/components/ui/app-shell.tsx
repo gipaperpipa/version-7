@@ -25,12 +25,12 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
   const navItems = [
     {
       title: "Parcels",
-      description: "Site intake, source trust, planning continuity, and scenario handoff.",
+      description: "Site trust, planning continuity, and scenario handoff.",
       href: `/${orgSlug}/parcels`,
     },
     {
       title: "Scenarios",
-      description: "Strategy framing, funding selection, readiness, runs, and result review.",
+      description: "Strategy, funding, readiness, and result review.",
       href: `/${orgSlug}/scenarios`,
     },
   ];
@@ -42,6 +42,7 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
     { label: "Readiness and run", description: "Resolve blockers, select funding, and launch the heuristic engine.", href: `/${orgSlug}/scenarios` },
     { label: "Decision result", description: "Review KPIs, caveats, and the next action.", href: `/${orgSlug}/scenarios` },
   ];
+  const activeStage = steps[Math.max(activeStep - 1, 0)]?.label ?? "Parcel intake";
 
   return (
     <div className="workspace-shell">
@@ -50,8 +51,7 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
           <div className="workspace-badge">Sprint 1</div>
           <div className="workspace-brand__title">Feasibility OS</div>
           <div className="workspace-brand__description">
-            A calm internal workspace for sourced parcel context, planning interpretation, scenario design, and
-            heuristic feasibility review.
+            Internal workspace for sourced parcel context, planning interpretation, scenario design, and heuristic review.
           </div>
         </div>
 
@@ -91,8 +91,12 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
         <div className="workspace-sidebar__section">
           <div className="workspace-sidebar__label">Product direction</div>
           <div className="workspace-sidebar__hint">
-            Manual parcel creation is still usable here, but the long-term intake model remains source-selected parcels
-            with derived geometry and area.
+            Source-selected parcels remain the target. Manual parcel entry stays fallback.
+          </div>
+          <div className="action-row">
+            <span className="meta-chip">Source-first</span>
+            <span className="meta-chip">Derived geometry</span>
+            <span className="meta-chip">Fallback edit</span>
           </div>
         </div>
 
@@ -110,12 +114,20 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
 
       <div className="workspace-main">
         <div className="workspace-topbar">
-          <div>
+          <div className="workspace-topbar__context">
             <div className="workspace-topbar__label">Current workspace</div>
             <div className="workspace-topbar__value">/{orgSlug}</div>
           </div>
-          <div className="workspace-topbar__label">
-            Working path: parcel -&gt; planning -&gt; scenario -&gt; readiness -&gt; result
+          <div className="workspace-topbar__trail">
+            <span className="workspace-topbar__stage">Parcel</span>
+            <span className="workspace-topbar__stage">Planning</span>
+            <span className="workspace-topbar__stage">Scenario</span>
+            <span className="workspace-topbar__stage">Readiness</span>
+            <span className="workspace-topbar__stage">Result</span>
+          </div>
+          <div className="workspace-topbar__active">
+            <div className="workspace-topbar__label">Current stage</div>
+            <div className="workspace-topbar__value">{activeStage}</div>
           </div>
         </div>
         <main className="workspace-main-content">

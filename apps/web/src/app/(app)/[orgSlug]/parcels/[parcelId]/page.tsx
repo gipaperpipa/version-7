@@ -63,6 +63,7 @@ export default async function ParcelDetailPage({
         />
 
         <SectionCard
+          className="summary-band"
           eyebrow="Operating summary"
           title="Parcel scan"
           description="Trust, planning, and continuity signals in one row."
@@ -105,6 +106,7 @@ export default async function ParcelDetailPage({
           />
 
           <NextStepPanel
+            className="rail-panel rail-panel--action"
             title={summary.nextBestAction.label}
             description={summary.nextBestAction.detail}
             tone="accent"
@@ -125,6 +127,7 @@ export default async function ParcelDetailPage({
         <div className="detail-grid">
           <div className="content-stack">
             <SectionCard
+              className="index-surface"
               eyebrow="Overview"
               title="Site"
               size="compact"
@@ -150,6 +153,7 @@ export default async function ParcelDetailPage({
             </SectionCard>
 
             <SectionCard
+              className="index-surface"
               eyebrow="Trust and provenance"
               title="Trust"
               description="Keep source-led context distinct from fallback manual entry."
@@ -172,6 +176,7 @@ export default async function ParcelDetailPage({
 
           <div className="sidebar-stack cockpit-rail">
             <SectionCard
+              className="rail-panel"
               eyebrow="Fallback only"
               title="Manual parcel edit"
               description="Usable in Sprint 1. Source-led parcel selection remains the intended model."

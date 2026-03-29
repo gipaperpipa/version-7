@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionCard } from "@/components/ui/section-card";
 import { Textarea } from "@/components/ui/textarea";
+import { cx } from "@/lib/ui/cx";
 import {
   acquisitionTypeLabels,
   optimizationTargetLabels,
@@ -204,6 +205,7 @@ export function ScenarioEditorForm({
       ) : null}
 
       <SectionCard
+        className="editor-panel editor-panel--primary"
         eyebrow="Scenario framing"
         title="Case definition"
         description="Anchor parcel, strategy, and decision lens."
@@ -328,55 +330,59 @@ export function ScenarioEditorForm({
         </div>
       </SectionCard>
 
-      <SectionCard
-        eyebrow="Revenue assumptions"
-        title="Revenue"
-        description="Fill the strategy-critical inputs first."
-        size="compact"
-      >
-        <div className="content-stack">
-          <div className="field-grid field-grid--quad">
-            {visibleRevenueFields.map((field) => renderTextField(field))}
-          </div>
+      <div className={cx("editor-secondary-grid", mode === "builder" && "editor-secondary-grid--builder")}>
+        <SectionCard
+          className="editor-panel"
+          eyebrow="Revenue assumptions"
+          title="Revenue"
+          description="Fill the strategy-critical inputs first."
+          size="compact"
+        >
+          <div className="content-stack">
+            <div className="field-grid field-grid--quad">
+              {visibleRevenueFields.map((field) => renderTextField(field))}
+            </div>
 
-          {hiddenRevenueFields.length ? (
-            <details className="compact-disclosure" open={hiddenRevenueFields.some((field) => hasValue(field.defaultValue))}>
-              <summary className="compact-disclosure__summary">Additional revenue inputs ({hiddenRevenueFields.length})</summary>
-              <div className="compact-disclosure__body">
-                <div className="field-grid field-grid--quad">
-                  {hiddenRevenueFields.map((field) => renderTextField(field))}
+            {hiddenRevenueFields.length ? (
+              <details className="compact-disclosure" open={hiddenRevenueFields.some((field) => hasValue(field.defaultValue))}>
+                <summary className="compact-disclosure__summary">Additional revenue inputs ({hiddenRevenueFields.length})</summary>
+                <div className="compact-disclosure__body">
+                  <div className="field-grid field-grid--quad">
+                    {hiddenRevenueFields.map((field) => renderTextField(field))}
+                  </div>
                 </div>
-              </div>
-            </details>
-          ) : null}
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        eyebrow="Finance and delivery"
-        title="Cost and program"
-        description="Cover the assumptions that move the result most."
-        size="compact"
-      >
-        <div className="content-stack">
-          <div className="field-grid field-grid--quad">
-            {financePartition.visible.map((field) => renderTextField(field))}
+              </details>
+            ) : null}
           </div>
+        </SectionCard>
 
-          {financePartition.hidden.length ? (
-            <details className="compact-disclosure" open={financePartition.hidden.some((field) => hasValue(field.defaultValue))}>
-              <summary className="compact-disclosure__summary">Additional cost inputs ({financePartition.hidden.length})</summary>
-              <div className="compact-disclosure__body">
-                <div className="field-grid field-grid--quad">
-                  {financePartition.hidden.map((field) => renderTextField(field))}
+        <SectionCard
+          className="editor-panel"
+          eyebrow="Finance and delivery"
+          title="Cost and program"
+          description="Cover the assumptions that move the result most."
+          size="compact"
+        >
+          <div className="content-stack">
+            <div className="field-grid field-grid--quad">
+              {financePartition.visible.map((field) => renderTextField(field))}
+            </div>
+
+            {financePartition.hidden.length ? (
+              <details className="compact-disclosure" open={financePartition.hidden.some((field) => hasValue(field.defaultValue))}>
+                <summary className="compact-disclosure__summary">Additional cost inputs ({financePartition.hidden.length})</summary>
+                <div className="compact-disclosure__body">
+                  <div className="field-grid field-grid--quad">
+                    {financePartition.hidden.map((field) => renderTextField(field))}
+                  </div>
                 </div>
-              </div>
-            </details>
-          ) : null}
-        </div>
-      </SectionCard>
+              </details>
+            ) : null}
+          </div>
+        </SectionCard>
+      </div>
 
-      <ActionRow spread className="form-actions-bar">
+      <ActionRow spread className={cx("form-actions-bar", mode === "builder" && "form-actions-bar--builder")}>
         <div className="field-help">Core now badges mark the inputs most likely to block readiness.</div>
         <Button type="submit" size="lg">{submitLabel}</Button>
       </ActionRow>

@@ -126,9 +126,10 @@ export function FundingStackForm({
 
   return (
     <SectionCard
+      className="rail-panel rail-panel--accent"
       eyebrow="Funding stack"
-      title="Funding lanes"
-      description="Save the full stack in one step."
+      title="Funding rail"
+      description="Select the active debt stack."
       size="compact"
     >
       <form action={action} className="form-stack form-stack--dense">

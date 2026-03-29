@@ -90,6 +90,7 @@ export function PlanningParameterForm({
 
         return (
           <SectionCard
+            className="planning-section"
             key={section}
             eyebrow={`Planning / ${section}`}
             title={section}
@@ -133,6 +134,7 @@ export function PlanningParameterForm({
                         confidenceScore={existing?.confidenceScore}
                         sourceReference={existing?.sourceReference}
                         readOnlyLabel={definition.storageKind === "readonlyValueNumber" ? "Read-only" : null}
+                        variant="inline"
                       />
                     </div>
 
@@ -179,25 +181,17 @@ export function PlanningParameterForm({
         );
       })}
 
-      <SectionCard
-        eyebrow="Save and continue"
-        title="Save and continue"
-        description="Save planning, then move into scenario design."
-        tone="muted"
-        size="compact"
-      >
-        <ActionRow spread className="form-footer">
-          <div className="field-help">Readiness-relevant fields are flagged inline.</div>
-          <div className="action-row">
-            {continueHref ? (
-              <Link className={buttonClasses({ variant: "secondary" })} href={continueHref}>
-                Continue to scenario
-              </Link>
-            ) : null}
-            <Button type="submit" size="lg">Save planning inputs</Button>
-          </div>
-        </ActionRow>
-      </SectionCard>
+      <ActionRow spread className="form-actions-bar">
+        <div className="field-help">Readiness-relevant fields are flagged inline.</div>
+        <div className="action-row">
+          {continueHref ? (
+            <Link className={buttonClasses({ variant: "secondary" })} href={continueHref}>
+              Continue to scenario
+            </Link>
+          ) : null}
+          <Button type="submit" size="lg">Save planning inputs</Button>
+        </div>
+      </ActionRow>
     </form>
   );
 }

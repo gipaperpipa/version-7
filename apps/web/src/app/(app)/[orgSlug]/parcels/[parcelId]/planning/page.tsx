@@ -52,6 +52,7 @@ export default async function ParcelPlanningPage({
         />
 
         <SectionCard
+          className="summary-band"
           eyebrow="Planning summary"
           title="Current planning state"
           description="Read readiness-relevant coverage first."
@@ -99,6 +100,7 @@ export default async function ParcelPlanningPage({
 
           <div className="sidebar-stack cockpit-rail">
             <NextStepPanel
+              className="rail-panel rail-panel--action"
               title="Move from site interpretation into scenario design"
               description="Use planning to make the parcel decision-ready enough for scenario framing, not to recreate a full planning document."
               size="compact"
@@ -115,6 +117,7 @@ export default async function ParcelPlanningPage({
             />
 
             <SectionCard
+              className="rail-panel"
               eyebrow="Form legend"
               title="Field state"
               description="Keep empty, saved, cleared, and derived values distinct."

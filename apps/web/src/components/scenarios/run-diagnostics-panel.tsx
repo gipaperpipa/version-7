@@ -26,6 +26,7 @@ export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
 
   return (
     <SectionCard
+      className="index-surface"
       eyebrow="Diagnostics"
       title="Risk and signal quality"
       description="Blockers, warnings, missing data, caveats, confidence."
@@ -68,6 +69,7 @@ export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
 
         {run.errorMessage ? (
           <SectionCard
+            className="rail-panel"
             eyebrow="Failure"
             title="Run failure"
             description="Use the surfaced backend reason before retrying."

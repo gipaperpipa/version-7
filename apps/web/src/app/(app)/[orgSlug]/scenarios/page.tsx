@@ -77,6 +77,7 @@ export default async function ScenariosPage({
         />
 
         <SectionCard
+          className="summary-band"
           eyebrow="Operating summary"
           title="Studio scan"
           description="Use this surface to decide what to open next."
@@ -108,8 +109,9 @@ export default async function ScenariosPage({
         </SectionCard>
 
         <SectionCard
+          className="index-surface"
           eyebrow="Decision workspace"
-          title="Scenario index"
+          title="Scenario studio"
           description="Open the right case fast by parcel, strategy, status, and latest signal."
         >
           {scenarios.items.length ? (

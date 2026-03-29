@@ -66,7 +66,7 @@ export default async function NewScenarioPage({
 
         {parcels.items.length ? (
           <>
-            <div className="detail-grid">
+            <div className="detail-grid detail-grid--setup">
               <ScenarioEditorForm
                 action={action}
                 parcels={parcels.items}
@@ -77,6 +77,7 @@ export default async function NewScenarioPage({
 
               <div className="sidebar-stack">
                 <NextStepPanel
+                  className="rail-panel rail-panel--action"
                   title={selectedParcel ? "Start from the selected parcel" : "Create a parcel-linked case"}
                   description={selectedParcel
                     ? `${selectedParcel.name ?? selectedParcel.cadastralId ?? "This parcel"} will carry straight into funding, readiness, and run.`
