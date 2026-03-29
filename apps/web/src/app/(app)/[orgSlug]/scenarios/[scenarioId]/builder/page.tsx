@@ -147,6 +147,7 @@ export default async function ScenarioBuilderPage({
             parcels={parcels.items}
             initialScenario={scenario}
             submitLabel="Save scenario"
+            mode="builder"
           />
 
           <div className="sidebar-stack cockpit-rail">

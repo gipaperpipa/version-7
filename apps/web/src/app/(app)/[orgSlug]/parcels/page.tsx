@@ -41,10 +41,10 @@ function ParcelRow({
             <StatusBadge tone={summary.sourceStatus.tone}>{summary.sourceStatus.label}</StatusBadge>
             {linkedScenarios.length ? <StatusBadge tone="accent">{linkedScenarios.length} scenario(s)</StatusBadge> : null}
           </div>
-          <div className="list-row__description">
+          <div className="list-row__description list-row__description--clamped">
             {[parcel.city ?? "Unknown city", parcel.municipalityName ?? "Municipality not set", `${parcel.landAreaSqm ?? "n/a"} sqm`].join(" / ")}
           </div>
-          <div className="list-row__meta">{parcel.addressLine1 ?? parcel.cadastralId ?? "No address saved yet"}</div>
+          <div className="list-row__meta list-row__meta--clamped">{parcel.addressLine1 ?? parcel.cadastralId ?? "No address saved yet"}</div>
           <ProvenanceConfidence
             sourceType={parcel.sourceType}
             confidenceScore={parcel.confidenceScore}

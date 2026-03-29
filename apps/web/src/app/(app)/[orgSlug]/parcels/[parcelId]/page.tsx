@@ -181,7 +181,12 @@ export default async function ParcelDetailPage({
               tone="muted"
               size="compact"
             >
-              <ParcelEditorForm action={action} initialParcel={parcel} submitLabel="Save parcel" />
+              <details className="compact-disclosure compact-disclosure--framed">
+                <summary className="compact-disclosure__summary">Open fallback parcel edit</summary>
+                <div className="compact-disclosure__body">
+                  <ParcelEditorForm action={action} initialParcel={parcel} submitLabel="Save parcel" />
+                </div>
+              </details>
             </SectionCard>
           </div>
         </div>

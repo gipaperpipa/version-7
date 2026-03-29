@@ -106,6 +106,7 @@ export default async function NewScenarioPage({
                 parcels={parcels.items}
                 initialParcelId={resolvedSearchParams?.parcelId ?? null}
                 submitLabel="Create scenario"
+                mode="create"
               />
 
               <div className="sidebar-stack">

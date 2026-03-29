@@ -137,7 +137,7 @@ export default async function ScenariosPage({
                           {scenario.parcelId ? <StatusBadge tone="accent">Parcel linked</StatusBadge> : <StatusBadge tone="warning">Parcel missing</StatusBadge>}
                         </div>
 
-                        {scenario.description ? <div className="list-row__meta">{scenario.description}</div> : null}
+                        {scenario.description ? <div className="list-row__meta list-row__meta--clamped">{scenario.description}</div> : null}
 
                         <div className="inline-meta">
                           <span className="meta-chip">{optimizationTargetLabels[scenario.optimizationTarget]}</span>
