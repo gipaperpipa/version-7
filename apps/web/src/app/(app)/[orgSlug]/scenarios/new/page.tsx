@@ -72,7 +72,7 @@ export default async function NewScenarioPage({
 
         {parcels.items.length ? (
           <>
-            <div className="detail-grid detail-grid--setup">
+            <div className="detail-grid detail-grid--setup setup-grid">
               <ScenarioEditorForm
                 action={action}
                 parcels={parcels.items}

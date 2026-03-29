@@ -55,7 +55,7 @@ export default async function ScenarioBuilderPage({
         <PageHeader
           eyebrow="Scenario builder"
           title={scenario.name}
-          description="Current state, key edits, then action."
+          description="Current case, readiness state, key edits, then action."
           meta={(
             <div className="action-row">
               {linkedParcel ? <span className="meta-chip">{linkedParcel.name ?? linkedParcel.cadastralId ?? "Linked parcel"}</span> : <StatusBadge tone="warning">Parcel missing</StatusBadge>}
@@ -86,7 +86,7 @@ export default async function ScenarioBuilderPage({
         ) : null}
 
         <SectionCard
-          className="dashboard-hero dashboard-hero--builder"
+          className="dashboard-hero dashboard-hero--builder builder-cockpit"
           eyebrow="Operating summary"
           title="Case cockpit"
           description={readinessVerdict.summary}
@@ -125,8 +125,8 @@ export default async function ScenarioBuilderPage({
               </div>
             </div>
 
-            <div className="action-row action-row--spread">
-              <div className="action-row">
+            <div className="builder-cockpit__bar">
+              <div className="builder-cockpit__signals">
                 <StatusBadge tone={getReadinessTone(readiness.status)}>{humanizeTokenLabel(readiness.status)}</StatusBadge>
                 <StatusBadge tone={blockerCount ? "danger" : "success"}>
                   {blockerCount} blocker{blockerCount === 1 ? "" : "s"}
@@ -136,7 +136,7 @@ export default async function ScenarioBuilderPage({
                 </StatusBadge>
               </div>
 
-              <div className="action-row">
+              <div className="builder-cockpit__actions">
                 {scenario.parcelId ? (
                   <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels/${scenario.parcelId}/planning`}>
                     Review planning

@@ -60,7 +60,7 @@ export default async function ParcelPlanningPage({
         />
 
         <SectionCard
-          className="summary-band"
+          className="summary-band summary-band--workspace"
           eyebrow="Planning summary"
           title="Current planning state"
           description="Read readiness-relevant coverage first."

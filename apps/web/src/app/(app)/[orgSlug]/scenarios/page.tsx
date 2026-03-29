@@ -67,8 +67,8 @@ export default async function ScenariosPage({
       <div className="workspace-page content-stack">
         <PageHeader
           eyebrow="Workspace / Scenarios"
-          title="Scenario studio"
-          description="Compare cases by parcel, strategy, status, and latest signal."
+          title="Scenario board"
+          description="Compare parcel, strategy, funding, readiness, and latest activity."
           meta={(
             <div className="action-row">
               <span className="meta-chip">{scenarios.total} cases</span>
@@ -85,10 +85,10 @@ export default async function ScenariosPage({
         />
 
         <SectionCard
-          className="summary-band"
+          className="summary-band summary-band--ledger"
           eyebrow="Operating summary"
           title="Studio scan"
-          description="Use this surface to decide what to open next."
+          description="Open the right case fast."
           tone="accent"
           size="compact"
         >
@@ -117,7 +117,7 @@ export default async function ScenariosPage({
         </SectionCard>
 
         <SectionCard
-          className="index-surface"
+          className="index-surface index-surface--ledger"
           eyebrow="Decision workspace"
           title="Scenario studio"
           description="Open the right case fast by parcel, strategy, status, and latest signal."

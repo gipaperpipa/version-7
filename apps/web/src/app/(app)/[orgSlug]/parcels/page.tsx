@@ -148,8 +148,8 @@ export default async function ParcelsPage({
       <div className="workspace-page content-stack">
         <PageHeader
           eyebrow="Workspace / Parcels"
-          title="Site pipeline"
-          description="Scan trust, planning coverage, and next move."
+          title="Acquisition board"
+          description="Compare trust, planning coverage, continuity, and next move."
           meta={(
             <div className="action-row">
               <span className="meta-chip">{parcels.total} parcels</span>
@@ -166,10 +166,10 @@ export default async function ParcelsPage({
         />
 
         <SectionCard
-          className="summary-band"
+          className="summary-band summary-band--ledger"
           eyebrow="Operating summary"
           title="Portfolio scan"
-          description="Compare trust, planning momentum, and fallback exposure fast."
+          description="Trust, planning momentum, fallback exposure."
           tone="accent"
           size="compact"
         >
@@ -198,7 +198,7 @@ export default async function ParcelsPage({
         </SectionCard>
 
         <SectionCard
-          className="index-surface"
+          className="index-surface index-surface--ledger"
           eyebrow="Acquisition workspace"
           title="Acquisition grid"
           description="Scan identity, trust, continuity, and next move in one sweep."

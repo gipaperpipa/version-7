@@ -49,7 +49,7 @@ export default async function ParcelDetailPage({
         <PageHeader
           eyebrow="Parcel workspace"
           title={parcel.name ?? parcel.cadastralId ?? "Parcel"}
-          description="Review parcel trust, planning coverage, and next move."
+          description="Review trust, planning coverage, continuity, and next move."
           meta={(
             <div className="action-row">
               <span className="meta-chip">{summary.sourceStatus.label}</span>
@@ -71,10 +71,10 @@ export default async function ParcelDetailPage({
         />
 
         <SectionCard
-          className="summary-band"
+          className="summary-band summary-band--workspace"
           eyebrow="Operating summary"
           title="Parcel scan"
-          description="Trust, planning, and continuity signals in one row."
+          description="Trust, planning, continuity."
           tone="accent"
           size="compact"
         >
@@ -135,7 +135,7 @@ export default async function ParcelDetailPage({
         <div className="detail-grid">
           <div className="content-stack">
             <SectionCard
-              className="index-surface"
+              className="index-surface index-surface--workspace"
               eyebrow="Overview"
               title="Site"
               size="compact"
@@ -161,7 +161,7 @@ export default async function ParcelDetailPage({
             </SectionCard>
 
             <SectionCard
-              className="index-surface"
+              className="index-surface index-surface--workspace"
               eyebrow="Trust and provenance"
               title="Trust"
               description="Keep source-led context distinct from fallback manual entry."

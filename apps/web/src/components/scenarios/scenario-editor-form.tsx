@@ -214,11 +214,17 @@ export function ScenarioEditorForm({
       ) : null}
 
       <SectionCard
-        className="editor-panel editor-panel--primary"
+        className={cx("editor-panel", mode === "builder" ? "editor-panel--framing" : "editor-panel--primary")}
         eyebrow="Scenario framing"
         title="Case definition"
         description="Anchor parcel, strategy, and decision lens."
         size="compact"
+        actions={mode === "builder" ? (
+          <div className="action-row action-row--compact">
+            <Badge variant="surface">{selectedParcel?.name ?? selectedParcel?.cadastralId ?? "Select parcel"}</Badge>
+            <Badge variant="accent">{strategyTypeLabels[strategyType]}</Badge>
+          </div>
+        ) : undefined}
       >
         <div className="content-stack">
           <div className="field-grid field-grid--quad">
@@ -342,7 +348,7 @@ export function ScenarioEditorForm({
       {mode === "builder" ? (
         <>
           <SectionCard
-            className="editor-panel editor-panel--primary"
+            className="editor-panel editor-panel--core"
             eyebrow="Operating assumptions"
             title="Core assumptions"
             description="Edit the few inputs most likely to move readiness and output."
@@ -384,7 +390,7 @@ export function ScenarioEditorForm({
           </SectionCard>
 
           <SectionCard
-            className="editor-panel"
+            className="editor-panel editor-panel--extensions"
             eyebrow="Model extensions"
             title="Secondary assumptions"
             description="Keep lower-priority inputs available without letting them dominate the page."
@@ -424,7 +430,7 @@ export function ScenarioEditorForm({
       ) : (
         <div className="editor-secondary-grid">
           <SectionCard
-            className="editor-panel"
+            className="editor-panel editor-panel--core"
             eyebrow="Revenue assumptions"
             title="Revenue"
             description="Fill the strategy-critical inputs first."
@@ -449,7 +455,7 @@ export function ScenarioEditorForm({
           </SectionCard>
 
           <SectionCard
-            className="editor-panel"
+            className="editor-panel editor-panel--core"
             eyebrow="Finance and delivery"
             title="Cost and program"
             description="Cover the assumptions that move the result most."

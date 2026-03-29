@@ -77,7 +77,7 @@ export default async function ScenarioResultPage({
         <PageHeader
           eyebrow="Feasibility result"
           title={scenario.name}
-          description="Verdict first. Weaknesses and next move right after."
+          description="Verdict first. Weaknesses, next move, and diagnostics right after."
           meta={(
             <div className="action-row">
               <StatusBadge tone={getRunStatusTone(run.status)}>{humanizeTokenLabel(run.status)}</StatusBadge>
@@ -95,7 +95,7 @@ export default async function ScenarioResultPage({
         />
 
         <VerdictPanel
-          className="dashboard-hero decision-hero"
+          className="dashboard-hero decision-hero result-hero"
           eyebrow="Decision verdict"
           title={verdict.title}
           summary={verdict.summary}

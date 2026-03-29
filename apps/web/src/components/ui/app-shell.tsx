@@ -47,15 +47,15 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
   return (
     <div className="workspace-shell">
       <aside className="workspace-sidebar">
-        <div>
-          <div className="workspace-badge">Sprint 1</div>
+        <div className="workspace-sidebar__head">
+          <div className="workspace-badge">Parcel-led alpha</div>
           <div className="workspace-brand__title">Feasibility OS</div>
-          <div className="workspace-brand__description">Parcel-led feasibility workspace for planning, scenarios, and heuristic review.</div>
+          <div className="workspace-brand__description">Premium internal workspace for parcel-led planning, scenarios, and heuristic review.</div>
         </div>
 
         <div className="workspace-sidebar__section">
           <div className="workspace-sidebar__label">Workspace</div>
-          <div className="workspace-nav__title">/{orgSlug}</div>
+          <div className="workspace-sidebar__workspace">/{orgSlug}</div>
           <div className="workspace-sidebar__hint">
             {orgSlug === localDevDemoWorkspace.slug
               ? `${localDevDemoWorkspace.name} demo workspace`
@@ -83,11 +83,16 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
         </div>
 
         <div className="workspace-sidebar__section">
-          <WorkflowSteps title="Workflow" steps={steps} activeStep={activeStep} />
+          <div className="workspace-sidebar__label">Workflow</div>
+          <div className="workspace-sidebar__focus">
+            <span className="workspace-sidebar__focus-label">Current stage</span>
+            <span className="workspace-sidebar__focus-value">{activeStage}</span>
+          </div>
+          <WorkflowSteps steps={steps} activeStep={activeStep} />
         </div>
 
-        <div className="workspace-sidebar__section">
-          <div className="workspace-sidebar__label">Product direction</div>
+        <div className="workspace-sidebar__section workspace-sidebar__section--product">
+          <div className="workspace-sidebar__label">Product mode</div>
           <div className="workspace-sidebar__hint">Source-selected parcels stay primary. Manual parcel entry stays fallback.</div>
           <div className="action-row">
             <span className="meta-chip">Source-first</span>
@@ -97,44 +102,51 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
         </div>
 
         <div className="workspace-sidebar__footer">
-          <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href="/">
-            Product entry
-          </Link>
-          {docsUrl ? (
-            <a className={buttonClasses({ variant: "ghost", size: "sm" })} href={docsUrl}>
-              API docs
-            </a>
-          ) : null}
+          <div className="workspace-sidebar__footer-note">Heuristic outputs stay directional. Trust signals stay attached to every step.</div>
         </div>
       </aside>
 
       <div className="workspace-main">
         <div className="workspace-topbar">
           <div className="workspace-topbar__context">
-            <div className="workspace-topbar__label">Current workspace</div>
+            <div className="workspace-topbar__label">Workspace</div>
             <div className="workspace-topbar__value">/{orgSlug}</div>
+            <div className="workspace-topbar__summary">Parcel-first feasibility workflow with planning, scenario, readiness, and result continuity.</div>
           </div>
-          <div className="workspace-topbar__trail">
-            {steps.map((step, index) => {
-              const stepNumber = index + 1;
-              const stateClass =
-                stepNumber < activeStep
-                  ? "workspace-topbar__stage workspace-topbar__stage--complete"
-                  : stepNumber === activeStep
-                    ? "workspace-topbar__stage workspace-topbar__stage--current"
-                    : "workspace-topbar__stage";
+          <div className="workspace-topbar__rail">
+            <div className="workspace-topbar__trail">
+              {steps.map((step, index) => {
+                const stepNumber = index + 1;
+                const stateClass =
+                  stepNumber < activeStep
+                    ? "workspace-topbar__stage workspace-topbar__stage--complete"
+                    : stepNumber === activeStep
+                      ? "workspace-topbar__stage workspace-topbar__stage--current"
+                      : "workspace-topbar__stage";
 
-              return (
-                <span key={step.label} className={stateClass}>
-                  <span className="workspace-topbar__stage-index">{stepNumber}</span>
-                  <span>{step.label.replace(" inputs", "").replace(" and run", "")}</span>
-                </span>
-              );
-            })}
+                return (
+                  <span key={step.label} className={stateClass}>
+                    <span className="workspace-topbar__stage-index">{stepNumber}</span>
+                    <span>{step.label.replace(" inputs", "").replace(" and run", "")}</span>
+                  </span>
+                );
+              })}
+            </div>
+            <div className="workspace-topbar__focus">
+              <span className="workspace-topbar__focus-label">Current stage</span>
+              <span className="workspace-topbar__focus-value">{activeStage}</span>
+            </div>
           </div>
-          <div className="workspace-topbar__active">
-            <div className="workspace-topbar__label">Current stage</div>
-            <div className="workspace-topbar__value">{activeStage}</div>
+
+          <div className="workspace-topbar__actions">
+            <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href="/">
+              Entry
+            </Link>
+            {docsUrl ? (
+              <a className={buttonClasses({ variant: "ghost", size: "sm" })} href={docsUrl}>
+                API docs
+              </a>
+            ) : null}
           </div>
         </div>
         <main className="workspace-main-content">

@@ -15,13 +15,15 @@ export function PageHeader({
 }) {
   return (
     <header className="page-header">
-      <div className="page-header__body">
-        {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
-        <h1 className="page-title">{title}</h1>
-        {description ? <p className="page-description">{description}</p> : null}
-        {meta ? <div className="page-meta">{meta}</div> : null}
+      <div className="page-header__surface">
+        <div className="page-header__body">
+          {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
+          <h1 className="page-title">{title}</h1>
+          {description ? <p className="page-description">{description}</p> : null}
+        </div>
+        {actions ? <div className="header-actions page-header__actions">{actions}</div> : null}
+        {meta ? <div className="page-meta page-header__meta">{meta}</div> : null}
       </div>
-      {actions ? <div className="header-actions">{actions}</div> : null}
     </header>
   );
 }
