@@ -1,4 +1,4 @@
-import { AcquisitionType, OptimizationTarget, ScenarioStatus, StrategyType } from "@repo/contracts";
+import { AcquisitionType, AssumptionProfileKey, OptimizationTarget, ScenarioStatus, StrategyType } from "@repo/contracts";
 
 export const strategyTypeLabels: Record<StrategyType, string> = {
   [StrategyType.FREE_MARKET_RENTAL]: "Free-Market Rental",
@@ -20,6 +20,13 @@ export const optimizationTargetLabels: Record<OptimizationTarget, string> = {
   [OptimizationTarget.MIN_REQUIRED_EQUITY]: "Minimize Required Equity",
   [OptimizationTarget.MAX_SUBSIDY_ADJUSTED_IRR]: "Maximize Subsidy-Adjusted IRR",
   [OptimizationTarget.MAX_UNIT_COUNT]: "Maximize Unit Count",
+};
+
+export const assumptionProfileLabels: Record<AssumptionProfileKey, string> = {
+  [AssumptionProfileKey.BASELINE]: "Baseline",
+  [AssumptionProfileKey.CONSERVATIVE]: "Conservative",
+  [AssumptionProfileKey.AGGRESSIVE]: "Aggressive",
+  [AssumptionProfileKey.CUSTOM]: "Custom",
 };
 
 export const scenarioStatusLabels: Record<ScenarioStatus, string> = {

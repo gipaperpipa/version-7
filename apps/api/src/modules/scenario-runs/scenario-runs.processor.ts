@@ -39,9 +39,27 @@ export class ScenarioRunsProcessor extends WorkerHost {
         run.scenarioId,
         run.organizationId,
       );
-      const result = this.feasibilityEngineV0Service.execute(
-        this.scenarioInputBuilderService.buildFeasibilityInput(scenario),
-      );
+      const feasibilityInput = this.scenarioInputBuilderService.buildFeasibilityInput(scenario);
+      const result = this.feasibilityEngineV0Service.execute(feasibilityInput);
+      const outputEnvelope = {
+        heuristicVersion: result.heuristicVersion,
+        objectiveValue: result.outputs.objectiveValue,
+        assumptions: result.confidence.inputConfidencePct != null ? feasibilityInput.assumptions : null,
+        planningAdjustedBgfSqm: result.outputs.planningAdjustedBgfSqm,
+        acquisitionCost: result.outputs.acquisitionCost,
+        contingencyCost: result.outputs.contingencyCost,
+        developerFee: result.outputs.developerFee,
+        totalCapitalizedUses: result.outputs.totalCapitalizedUses,
+        grossResidentialRevenueAnnual: result.outputs.grossResidentialRevenueAnnual,
+        vacancyAdjustedRevenueAnnual: result.outputs.vacancyAdjustedRevenueAnnual,
+        operatingCostAnnual: result.outputs.operatingCostAnnual,
+        parkingRevenueAnnual: result.outputs.parkingRevenueAnnual,
+        parkingSalesRevenue: result.outputs.parkingSalesRevenue,
+        netOperatingIncomeAnnual: result.outputs.netOperatingIncomeAnnual,
+        grossSalesRevenue: result.outputs.grossSalesRevenue,
+        netSalesRevenue: result.outputs.netSalesRevenue,
+        explanation: result.explanation,
+      };
 
       await this.prisma.$transaction([
         this.prisma.financialResult.upsert({
@@ -71,11 +89,7 @@ export class ScenarioRunsProcessor extends WorkerHost {
             missingDataFlagsJson: toPrismaJson(result.missingDataFlags),
             confidenceReasonsJson: toPrismaJson(result.confidence.reasons),
             outputConfidencePct: result.confidence.outputConfidencePct,
-            outputsJson: toPrismaJson({
-              heuristicVersion: result.heuristicVersion,
-              objectiveValue: result.outputs.objectiveValue,
-              explanation: result.explanation,
-            }),
+            outputsJson: toPrismaJson(outputEnvelope),
           },
           create: {
             scenarioRunId: run.id,
@@ -103,11 +117,7 @@ export class ScenarioRunsProcessor extends WorkerHost {
             missingDataFlagsJson: toPrismaJson(result.missingDataFlags),
             confidenceReasonsJson: toPrismaJson(result.confidence.reasons),
             outputConfidencePct: result.confidence.outputConfidencePct,
-            outputsJson: toPrismaJson({
-              heuristicVersion: result.heuristicVersion,
-              objectiveValue: result.outputs.objectiveValue,
-              explanation: result.explanation,
-            }),
+            outputsJson: toPrismaJson(outputEnvelope),
           },
         }),
         this.prisma.scenarioRun.update({

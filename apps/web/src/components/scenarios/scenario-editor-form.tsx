@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AcquisitionType, OptimizationTarget, StrategyType, type ParcelDto, type ScenarioDto } from "@repo/contracts";
+import {
+  AcquisitionType,
+  AssumptionProfileKey,
+  OptimizationTarget,
+  StrategyType,
+  type ParcelDto,
+  type ScenarioDto,
+} from "@repo/contracts";
 import { ActionRow } from "@/components/ui/action-row";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cx } from "@/lib/ui/cx";
 import {
   acquisitionTypeLabels,
+  assumptionProfileLabels,
   optimizationTargetLabels,
   strategyFieldHints,
   strategyTypeLabels,
@@ -83,8 +91,12 @@ export function ScenarioEditorForm({
 }) {
   const initialStrategy = initialScenario?.strategyType ?? StrategyType.FREE_MARKET_RENTAL;
   const initialSelectedParcelId = initialScenario?.parcelId ?? initialParcelId ?? "";
+  const initialAssumptionSet = initialScenario?.assumptionSet ?? null;
   const [strategyType, setStrategyType] = useState<StrategyType>(initialStrategy);
   const [selectedParcelId, setSelectedParcelId] = useState(initialSelectedParcelId);
+  const [assumptionProfileKey, setAssumptionProfileKey] = useState<AssumptionProfileKey>(
+    initialAssumptionSet?.profileKey ?? AssumptionProfileKey.BASELINE,
+  );
   const hint = strategyFieldHints[strategyType];
   const isRequiredNow = (label: string) => hint.requiredFields.includes(label);
   const selectedParcel = useMemo(
@@ -190,6 +202,86 @@ export function ScenarioEditorForm({
   const builderRevenueExtensions = revenueFields.filter((field) => !builderRevenuePrimaryFields.some((candidate) => candidate.id === field.id));
   const builderFinancePrimaryFields = financeFields.filter((field) => field.priority || field.requiredNow);
   const builderFinanceExtensions = financeFields.filter((field) => !builderFinancePrimaryFields.some((candidate) => candidate.id === field.id));
+  const assumptionOverrideCount = Object.values(initialAssumptionSet?.overrides ?? {}).filter((value) => value !== null).length;
+  const assumptionFieldsOperating: FieldConfig[] = [
+    {
+      id: "assumptionPlanningBufferPct",
+      label: "Planning buffer pct",
+      helpText: "Discount usable BGF to reflect entitlement slippage.",
+      defaultValue: initialAssumptionSet?.overrides.planningBufferPct ?? "",
+    },
+    {
+      id: "assumptionEfficiencyFactorPct",
+      label: "Efficiency factor pct",
+      helpText: "Net-to-gross efficiency used for revenue and unit estimates.",
+      defaultValue: initialAssumptionSet?.overrides.efficiencyFactorPct ?? "",
+    },
+    {
+      id: "assumptionVacancyPct",
+      label: "Vacancy pct",
+      helpText: "Used in rental and student revenue sizing.",
+      defaultValue: initialAssumptionSet?.overrides.vacancyPct ?? "",
+    },
+    {
+      id: "assumptionOperatingCostPerNlaSqmYear",
+      label: "Operating cost / NLA sqm / year",
+      helpText: "Annual opex burden in rental cases.",
+      defaultValue: initialAssumptionSet?.overrides.operatingCostPerNlaSqmYear ?? "",
+    },
+    {
+      id: "assumptionAcquisitionClosingCostPct",
+      label: "Acquisition closing cost pct",
+      helpText: "Added on top of land cost.",
+      defaultValue: initialAssumptionSet?.overrides.acquisitionClosingCostPct ?? "",
+    },
+    {
+      id: "assumptionContingencyPct",
+      label: "Contingency pct",
+      helpText: "Applied to delivery costs.",
+      defaultValue: initialAssumptionSet?.overrides.contingencyPct ?? "",
+    },
+  ];
+  const assumptionFieldsCommercial: FieldConfig[] = [
+    {
+      id: "assumptionDeveloperFeePct",
+      label: "Developer fee pct",
+      helpText: "Adds delivery overhead on top of total uses.",
+      defaultValue: initialAssumptionSet?.overrides.developerFeePct ?? "",
+    },
+    {
+      id: "assumptionTargetProfitPct",
+      label: "Target profit pct",
+      helpText: "Capitalized return layer for break-even logic.",
+      defaultValue: initialAssumptionSet?.overrides.targetProfitPct ?? "",
+    },
+    {
+      id: "assumptionExitCapRatePct",
+      label: "Exit cap rate pct",
+      helpText: "Used for rental IRR and terminal value.",
+      defaultValue: initialAssumptionSet?.overrides.exitCapRatePct ?? "",
+    },
+    {
+      id: "assumptionSalesClosingCostPct",
+      label: "Sales closing cost pct",
+      helpText: "Applied to gross sale proceeds.",
+      defaultValue: initialAssumptionSet?.overrides.salesClosingCostPct ?? "",
+    },
+    {
+      id: "assumptionParkingRevenuePerSpaceMonth",
+      label: "Parking revenue / space / month",
+      helpText: "Rental parking income assumption.",
+      defaultValue: initialAssumptionSet?.overrides.parkingRevenuePerSpaceMonth ?? "",
+    },
+    {
+      id: "assumptionParkingSalePricePerSpace",
+      label: "Parking sale price / space",
+      helpText: "Sale-side parking monetization assumption.",
+      defaultValue: initialAssumptionSet?.overrides.parkingSalePricePerSpace ?? "",
+    },
+  ];
+  const assumptionSalesAbsorptionDefault = initialAssumptionSet?.overrides.salesAbsorptionMonths != null
+    ? String(initialAssumptionSet.overrides.salesAbsorptionMonths)
+    : "";
 
   return (
     <form action={action} className="form-stack form-stack--dense">
@@ -202,6 +294,7 @@ export function ScenarioEditorForm({
           <div className="scenario-focus-strip__signals">
             <span className="meta-chip">{selectedParcel?.name ?? selectedParcel?.cadastralId ?? "Select parcel"}</span>
             <span className="meta-chip">{strategyTypeLabels[strategyType]}</span>
+            <span className="meta-chip">{assumptionProfileLabels[assumptionProfileKey]}</span>
             <span className="meta-chip">{summarizeRequiredFields(hint.requiredFields)}</span>
           </div>
           <div className="chip-row">
@@ -342,6 +435,101 @@ export function ScenarioEditorForm({
               </div>
             </div>
           </details>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        className={cx("editor-panel", mode === "builder" ? "editor-panel--framing" : "editor-panel--primary")}
+        eyebrow="Assumption set"
+        title="Assumption posture"
+        description="Explicitly manage the baseline heuristic posture before comparing outputs."
+        size="compact"
+        actions={(
+          <div className="action-row action-row--compact">
+            <Badge variant="accent">{assumptionProfileLabels[assumptionProfileKey]}</Badge>
+            <Badge variant="surface">{assumptionOverrideCount} override{assumptionOverrideCount === 1 ? "" : "s"}</Badge>
+          </div>
+        )}
+      >
+        <div className="content-stack">
+          <div className="field-grid field-grid--tri">
+            <div className="field-stack">
+              <div className="field-row">
+                <Label htmlFor="assumptionProfileKey">Profile</Label>
+                <FieldTag requiredNow={mode === "builder"} />
+              </div>
+              <select
+                id="assumptionProfileKey"
+                name="assumptionProfileKey"
+                defaultValue={initialAssumptionSet?.profileKey ?? AssumptionProfileKey.BASELINE}
+                onChange={(event) => setAssumptionProfileKey(event.target.value as AssumptionProfileKey)}
+                className="ui-select"
+              >
+                {Object.values(AssumptionProfileKey).map((value) => (
+                  <option key={value} value={value}>{assumptionProfileLabels[value]}</option>
+                ))}
+              </select>
+              <div className="field-help">Choose the default realism posture, then override only what is case-specific.</div>
+            </div>
+
+            <div className="field-stack field-stack--span-full">
+              <div className="field-row">
+                <Label htmlFor="assumptionNotes">Assumption notes</Label>
+                <FieldTag requiredNow={false} />
+              </div>
+              <Textarea
+                id="assumptionNotes"
+                name="assumptionNotes"
+                rows={3}
+                defaultValue={initialAssumptionSet?.notes ?? ""}
+                className="ui-textarea--compact"
+              />
+            </div>
+          </div>
+
+          <div className="editor-extension-grid">
+            <details className="editor-extension-panel" open={mode === "builder" || assumptionFieldsOperating.some((field) => hasValue(field.defaultValue))}>
+              <summary className="editor-extension-panel__summary">
+                <span>Planning and operating overrides</span>
+                <span className="editor-extension-panel__meta">
+                  {countFilledFields(assumptionFieldsOperating)}/{assumptionFieldsOperating.length} filled
+                </span>
+              </summary>
+              <div className="editor-extension-panel__body">
+                <div className="field-grid field-grid--quad">
+                  {assumptionFieldsOperating.map((field) => renderTextField(field))}
+                </div>
+              </div>
+            </details>
+
+            <details className="editor-extension-panel" open={mode === "builder" || assumptionFieldsCommercial.some((field) => hasValue(field.defaultValue)) || Boolean(assumptionSalesAbsorptionDefault)}>
+              <summary className="editor-extension-panel__summary">
+                <span>Commercial and exit overrides</span>
+                <span className="editor-extension-panel__meta">
+                  {countFilledFields(assumptionFieldsCommercial) + (assumptionSalesAbsorptionDefault ? 1 : 0)}/{assumptionFieldsCommercial.length + 1} filled
+                </span>
+              </summary>
+              <div className="editor-extension-panel__body">
+                <div className="field-grid field-grid--quad">
+                  {assumptionFieldsCommercial.map((field) => renderTextField(field))}
+                  <div className="field-stack">
+                    <div className="field-row">
+                      <Label htmlFor="assumptionSalesAbsorptionMonths">Sales absorption months</Label>
+                      <FieldTag requiredNow={false} />
+                    </div>
+                    <Input
+                      id="assumptionSalesAbsorptionMonths"
+                      name="assumptionSalesAbsorptionMonths"
+                      type="number"
+                      min={1}
+                      defaultValue={assumptionSalesAbsorptionDefault}
+                    />
+                    <div className="field-help">Used when build-to-sell outputs estimate sale-side IRR timing.</div>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
         </div>
       </SectionCard>
 

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ScenarioStatus, type ScenarioDto } from "@repo/contracts";
+import { OptimizationTarget, ScenarioStatus, type ScenarioDto } from "@repo/contracts";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -123,123 +123,154 @@ export default async function ScenariosPage({
           description="Open the right case fast by parcel, strategy, status, and latest signal."
         >
           {scenarios.items.length ? (
-            <div className="ops-table">
-              <div className="ops-table__header ops-table__header--scenarios">
-                <div>Scenario</div>
-                <div>Parcel</div>
-                <div>Strategy</div>
-                <div>Funding</div>
-                <div>Status</div>
-                <div>Activity</div>
-                <div>Next</div>
+            <form action={`/${orgSlug}/scenarios/compare`} method="GET" className="content-stack">
+              <div className="comparison-toolbar">
+                <div className="comparison-toolbar__summary">
+                  <div className="ops-summary-item__label">Comparison</div>
+                  <div className="ops-summary-item__value">Select cases to rank and compare</div>
+                  <div className="ops-summary-item__detail">Rank the selected set by optimization target, then inspect KPI and warning deltas.</div>
+                </div>
+                <div className="comparison-toolbar__form">
+                  <label className="field-stack">
+                    <span className="field-help">Ranking target</span>
+                    <select name="rankingTarget" defaultValue={OptimizationTarget.MIN_REQUIRED_EQUITY} className="ui-select">
+                      {Object.values(OptimizationTarget).map((value) => (
+                        <option key={value} value={value}>{optimizationTargetLabels[value]}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className={buttonClasses({ variant: "secondary" })} type="submit">
+                    Compare selected
+                  </button>
+                </div>
               </div>
-              {scenarios.items.map((scenario) => {
-                const linkedParcel = scenario.parcelId ? parcelById.get(scenario.parcelId) : null;
-                const selectedFundingCount = scenario.fundingVariants.filter((item) => item.isEnabled).length;
-                const selectedFundingLabels = scenario.fundingVariants
-                  .filter((item) => item.isEnabled)
-                  .slice(0, 2)
-                  .map((item) => humanizeTokenLabel(item.financingSourceType));
-                const nextAction = getScenarioNextAction(scenario);
 
-                return (
-                  <div key={scenario.id} className="ops-table__row ops-table__row--scenarios">
-                    <div className="ops-table__cell">
-                      <div className="list-row__body">
-                        <div className="list-row__title">
-                          <span className="list-row__title-text">{scenario.name}</span>
-                          <StatusBadge tone={getScenarioStatusTone(scenario.status)}>
-                            {humanizeTokenLabel(scenario.status)}
-                          </StatusBadge>
-                          {scenario.latestRunAt ? <StatusBadge tone="success">Has run</StatusBadge> : null}
-                          {scenario.parcelId ? <StatusBadge tone="accent">Parcel linked</StatusBadge> : <StatusBadge tone="warning">Parcel missing</StatusBadge>}
-                        </div>
+              <div className="ops-table">
+                <div className="ops-table__header ops-table__header--scenarios">
+                  <div>Select</div>
+                  <div>Scenario</div>
+                  <div>Parcel</div>
+                  <div>Strategy</div>
+                  <div>Funding</div>
+                  <div>Status</div>
+                  <div>Activity</div>
+                  <div>Next</div>
+                </div>
+                {scenarios.items.map((scenario) => {
+                  const linkedParcel = scenario.parcelId ? parcelById.get(scenario.parcelId) : null;
+                  const selectedFundingCount = scenario.fundingVariants.filter((item) => item.isEnabled).length;
+                  const selectedFundingLabels = scenario.fundingVariants
+                    .filter((item) => item.isEnabled)
+                    .slice(0, 2)
+                    .map((item) => humanizeTokenLabel(item.financingSourceType));
+                  const nextAction = getScenarioNextAction(scenario);
 
-                        {scenario.description ? <div className="list-row__meta list-row__meta--clamped">{scenario.description}</div> : null}
+                  return (
+                    <div key={scenario.id} className="ops-table__row ops-table__row--scenarios">
+                      <div className="ops-table__cell ops-table__cell--select">
+                        <label className="compare-checkbox">
+                          <input type="checkbox" name="scenarioId" value={scenario.id} />
+                          <span>Compare</span>
+                        </label>
+                      </div>
 
-                        <div className="inline-meta">
-                          <span className="meta-chip">{optimizationTargetLabels[scenario.optimizationTarget]}</span>
-                          <span className="meta-chip">{formatScenarioSignal(scenario.updatedAt)} update</span>
+                      <div className="ops-table__cell">
+                        <div className="list-row__body">
+                          <div className="list-row__title">
+                            <span className="list-row__title-text">{scenario.name}</span>
+                            <StatusBadge tone={getScenarioStatusTone(scenario.status)}>
+                              {humanizeTokenLabel(scenario.status)}
+                            </StatusBadge>
+                            {scenario.latestRunAt ? <StatusBadge tone="success">Has run</StatusBadge> : null}
+                            {scenario.parcelId ? <StatusBadge tone="accent">Parcel linked</StatusBadge> : <StatusBadge tone="warning">Parcel missing</StatusBadge>}
+                          </div>
+
+                          {scenario.description ? <div className="list-row__meta list-row__meta--clamped">{scenario.description}</div> : null}
+
+                          <div className="inline-meta">
+                            <span className="meta-chip">{optimizationTargetLabels[scenario.optimizationTarget]}</span>
+                            <span className="meta-chip">{formatScenarioSignal(scenario.updatedAt)} update</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="ops-table__cell">
-                      <div className="ops-cell-stack">
-                        <div className="ops-scan__label">Parcel</div>
-                        <div className="ops-scan__value">
-                          {linkedParcel?.name ?? linkedParcel?.cadastralId ?? (scenario.parcelId ? "Linked parcel" : "Unlinked")}
-                        </div>
-                        <div className="ops-scan__detail">
-                          {linkedParcel?.municipalityName ?? (scenario.parcelId ? "Parcel context attached" : "Needs site anchor")}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="ops-table__cell">
-                      <div className="ops-cell-stack">
-                        <div className="ops-scan__label">Strategy</div>
-                        <div className="ops-scan__value">{strategyTypeLabels[scenario.strategyType]}</div>
-                        <div className="ops-scan__detail">{optimizationTargetLabels[scenario.optimizationTarget]}</div>
-                      </div>
-                    </div>
-
-                    <div className="ops-table__cell">
-                      <div className="ops-cell-stack">
-                        <div className="ops-scan__label">Funding</div>
-                        <div className="ops-scan__value">{selectedFundingCount} lane(s)</div>
-                        <div className="ops-scan__detail">
-                          {selectedFundingLabels.length ? selectedFundingLabels.join(" / ") : "No active stack"}
+                      <div className="ops-table__cell">
+                        <div className="ops-cell-stack">
+                          <div className="ops-scan__label">Parcel</div>
+                          <div className="ops-scan__value">
+                            {linkedParcel?.name ?? linkedParcel?.cadastralId ?? (scenario.parcelId ? "Linked parcel" : "Unlinked")}
+                          </div>
+                          <div className="ops-scan__detail">
+                            {linkedParcel?.municipalityName ?? (scenario.parcelId ? "Parcel context attached" : "Needs site anchor")}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="ops-table__cell">
-                      <div className="ops-cell-stack">
-                        <div className="ops-scan__label">Status</div>
+                      <div className="ops-table__cell">
+                        <div className="ops-cell-stack">
+                          <div className="ops-scan__label">Strategy</div>
+                          <div className="ops-scan__value">{strategyTypeLabels[scenario.strategyType]}</div>
+                          <div className="ops-scan__detail">{optimizationTargetLabels[scenario.optimizationTarget]}</div>
+                        </div>
+                      </div>
+
+                      <div className="ops-table__cell">
+                        <div className="ops-cell-stack">
+                          <div className="ops-scan__label">Funding</div>
+                          <div className="ops-scan__value">{selectedFundingCount} lane(s)</div>
+                          <div className="ops-scan__detail">
+                            {selectedFundingLabels.length ? selectedFundingLabels.join(" / ") : "No active stack"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="ops-table__cell">
+                        <div className="ops-cell-stack">
+                          <div className="ops-scan__label">Status</div>
+                          <div className="action-row">
+                            <StatusBadge tone={getScenarioStatusTone(scenario.status)}>
+                              {humanizeTokenLabel(scenario.status)}
+                            </StatusBadge>
+                          </div>
+                          <div className="ops-scan__detail">
+                            {scenario.latestRunAt ? "Run history present" : "No completed run yet"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="ops-table__cell">
+                        <div className="ops-cell-stack">
+                          <div className="ops-scan__label">Activity</div>
+                          <div className="ops-scan__value">
+                            {scenario.latestRunAt ? `Ran ${formatScenarioSignal(scenario.latestRunAt)}` : `Updated ${formatScenarioSignal(scenario.updatedAt)}`}
+                          </div>
+                          <div className="ops-scan__detail">
+                            {scenario.latestRunAt ? "Latest engine output recorded" : "Builder edits only"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="ops-table__actions ops-table__actions--dense">
                         <div className="action-row">
-                          <StatusBadge tone={getScenarioStatusTone(scenario.status)}>
-                            {humanizeTokenLabel(scenario.status)}
-                          </StatusBadge>
+                          <StatusBadge tone={nextAction.tone}>{nextAction.label}</StatusBadge>
                         </div>
-                        <div className="ops-scan__detail">
-                          {scenario.latestRunAt ? "Run history present" : "No completed run yet"}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="ops-table__cell">
-                      <div className="ops-cell-stack">
-                        <div className="ops-scan__label">Activity</div>
-                        <div className="ops-scan__value">
-                          {scenario.latestRunAt ? `Ran ${formatScenarioSignal(scenario.latestRunAt)}` : `Updated ${formatScenarioSignal(scenario.updatedAt)}`}
-                        </div>
-                        <div className="ops-scan__detail">
-                          {scenario.latestRunAt ? "Latest engine output recorded" : "Builder edits only"}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="ops-table__actions ops-table__actions--dense">
-                      <div className="action-row">
-                        <StatusBadge tone={nextAction.tone}>{nextAction.label}</StatusBadge>
-                      </div>
-                      <div className="ops-scan__detail">{nextAction.detail}</div>
-                      <div className="action-row action-row--compact">
-                        {scenario.parcelId ? (
-                          <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${scenario.parcelId}`}>
-                            Parcel
+                        <div className="ops-scan__detail">{nextAction.detail}</div>
+                        <div className="action-row action-row--compact">
+                          {scenario.parcelId ? (
+                            <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${scenario.parcelId}`}>
+                              Parcel
+                            </Link>
+                          ) : null}
+                          <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/scenarios/${scenario.id}/builder`}>
+                            Builder
                           </Link>
-                        ) : null}
-                        <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/scenarios/${scenario.id}/builder`}>
-                          Builder
-                        </Link>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </form>
           ) : (
             <EmptyState
               eyebrow="No scenarios yet"

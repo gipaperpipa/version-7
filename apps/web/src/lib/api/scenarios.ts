@@ -1,5 +1,7 @@
 import type {
   ListFundingProgramsResponseDto,
+  OptimizationTarget,
+  ScenarioComparisonResponseDto,
   ListScenariosResponseDto,
   ScenarioDto,
   ScenarioReadinessDto,
@@ -9,6 +11,18 @@ import { apiFetch } from "./client";
 
 export function getScenarios(orgSlug: string) {
   return apiFetch<ListScenariosResponseDto>(orgSlug, "/api/v1/scenarios");
+}
+
+export function getScenarioComparison(
+  orgSlug: string,
+  scenarioIds: string[],
+  rankingTarget?: OptimizationTarget,
+) {
+  const search = new URLSearchParams();
+  scenarioIds.forEach((scenarioId) => search.append("scenarioId", scenarioId));
+  if (rankingTarget) search.set("rankingTarget", rankingTarget);
+
+  return apiFetch<ScenarioComparisonResponseDto>(orgSlug, `/api/v1/scenarios/compare?${search.toString()}`);
 }
 
 export function getScenario(orgSlug: string, scenarioId: string) {

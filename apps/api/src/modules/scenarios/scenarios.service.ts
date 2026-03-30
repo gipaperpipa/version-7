@@ -1,14 +1,23 @@
-import { Injectable, NotFoundException, Scope } from "@nestjs/common";
+import { Injectable, NotFoundException, Scope, UnprocessableEntityException } from "@nestjs/common";
 import type {
   CreateScenarioRequestDto,
   ListScenariosResponseDto,
+  ScenarioComparisonResponseDto,
   ScenarioDto,
   UpdateScenarioRequestDto,
   UpsertScenarioFundingStackRequestDto,
 } from "../../generated-contracts/scenarios";
+import type { OptimizationTarget, ScenarioReadinessDto, ScenarioRunDto } from "../../generated-contracts";
 import { toApiDate, toApiDecimal, toApiJson, toPrismaDecimal, toPrismaJson } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";
+import { mapScenarioRunDto } from "../scenario-runs/scenario-run.mapper";
+import { scenarioRunWithResultArgs } from "../scenario-runs/scenario-run.types";
+import { ScenarioValidationService } from "./scenario-validation.service";
+import {
+  extractScenarioAssumptionSet,
+  withScenarioAssumptionSet,
+} from "./scenario-assumptions";
 import { scenarioWithFundingArgs, type ScenarioWithFunding } from "./scenario.types";
 
 @Injectable({ scope: Scope.REQUEST })
@@ -16,6 +25,7 @@ export class ScenariosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly requestContext: RequestContextService,
+    private readonly scenarioValidationService: ScenarioValidationService,
   ) {}
 
   async list(params: { page: number; pageSize: number }): Promise<ListScenariosResponseDto> {
@@ -66,7 +76,7 @@ export class ScenariosService {
         parkingCostPerSpace: toPrismaDecimal(dto.parkingCostPerSpace),
         landCost: toPrismaDecimal(dto.landCost),
         equityTargetPct: toPrismaDecimal(dto.equityTargetPct),
-        inputsJson: toPrismaJson(dto.inputsJson ?? null),
+        inputsJson: toPrismaJson(withScenarioAssumptionSet(dto.inputsJson ?? null, dto.assumptionSet) ?? null),
       },
     });
 
@@ -90,7 +100,7 @@ export class ScenariosService {
   }
 
   async update(scenarioId: string, dto: UpdateScenarioRequestDto): Promise<ScenarioDto> {
-    await this.assertScenarioAccess(scenarioId);
+    const existing = await this.assertScenarioAccess(scenarioId);
 
     await this.prisma.scenario.update({
       where: { id: scenarioId },
@@ -118,7 +128,10 @@ export class ScenariosService {
         parkingCostPerSpace: dto.parkingCostPerSpace === undefined ? undefined : toPrismaDecimal(dto.parkingCostPerSpace),
         landCost: dto.landCost === undefined ? undefined : toPrismaDecimal(dto.landCost),
         equityTargetPct: dto.equityTargetPct === undefined ? undefined : toPrismaDecimal(dto.equityTargetPct),
-        inputsJson: toPrismaJson(dto.inputsJson),
+        inputsJson: toPrismaJson(withScenarioAssumptionSet(
+          dto.inputsJson === undefined ? toApiJson(existing.inputsJson) : dto.inputsJson,
+          dto.assumptionSet,
+        )),
         status: dto.status,
       },
     });
@@ -153,18 +166,162 @@ export class ScenariosService {
     return this.getById(scenarioId);
   }
 
+  async compare(params: {
+    scenarioIds: string[];
+    rankingTarget?: OptimizationTarget;
+  }): Promise<ScenarioComparisonResponseDto> {
+    const scenarioIds = Array.from(new Set(params.scenarioIds.filter(Boolean)));
+    if (scenarioIds.length < 2) {
+      throw new UnprocessableEntityException("Select at least two scenarios to compare.");
+    }
+
+    const scenarios = await Promise.all(scenarioIds.map((scenarioId) => this.getById(scenarioId)));
+    const mixedOptimizationTargets = new Set(scenarios.map((scenario) => scenario.optimizationTarget)).size > 1;
+    const rankingTarget = params.rankingTarget ?? scenarios[0].optimizationTarget;
+    const objectiveDirection = this.getObjectiveDirection(rankingTarget);
+
+    const parcelIds = Array.from(new Set(scenarios.map((scenario) => scenario.parcelId).filter((value): value is string => Boolean(value))));
+    const parcels = parcelIds.length
+      ? await this.prisma.parcel.findMany({
+          where: {
+            organizationId: this.requestContext.organizationId,
+            id: { in: parcelIds },
+          },
+          select: {
+            id: true,
+            name: true,
+            cadastralId: true,
+            municipalityName: true,
+            landAreaSqm: true,
+            confidenceScore: true,
+            sourceType: true,
+          },
+        })
+      : [];
+    const parcelById = new Map(parcels.map((parcel) => [parcel.id, parcel]));
+
+    const readinessPairs = await Promise.all(
+      scenarioIds.map(async (scenarioId) => {
+        const loaded = await this.scenarioValidationService.loadScenarioForOrganization(
+          scenarioId,
+          this.requestContext.organizationId,
+        );
+        return [scenarioId, this.scenarioValidationService.evaluateLoadedScenario(loaded).readiness] as const;
+      }),
+    );
+    const readinessByScenario = new Map<string, ScenarioReadinessDto>(readinessPairs);
+
+    const runs = await this.prisma.scenarioRun.findMany({
+      ...scenarioRunWithResultArgs,
+      where: {
+        organizationId: this.requestContext.organizationId,
+        scenarioId: { in: scenarioIds },
+      },
+      orderBy: [{ scenarioId: "asc" }, { requestedAt: "desc" }],
+    });
+    const latestRunByScenario = new Map<string, ScenarioRunDto>();
+    for (const run of runs) {
+      if (!latestRunByScenario.has(run.scenarioId)) {
+        latestRunByScenario.set(run.scenarioId, mapScenarioRunDto(run));
+      }
+    }
+
+    const entries = scenarios.map((scenario) => {
+      const latestRun = latestRunByScenario.get(scenario.id) ?? null;
+      const readiness = readinessByScenario.get(scenario.id)!;
+      const objectiveValue = this.getObjectiveValue(latestRun, rankingTarget);
+      const blockerCount = readiness.issues.filter((issue) => issue.severity === "BLOCKING").length;
+      const warningCount = latestRun
+        ? new Set([
+            ...readiness.issues.filter((issue) => issue.severity === "WARNING").map((issue) => issue.message),
+            ...latestRun.warnings.map((warning) => warning.message),
+          ]).size
+        : readiness.issues.filter((issue) => issue.severity === "WARNING").length;
+
+      return {
+        scenario,
+        parcel: scenario.parcelId ? parcelById.get(scenario.parcelId) ?? null : null,
+        readiness,
+        latestRun,
+        rank: null as number | null,
+        objectiveValue,
+        deltaToLeader: null as string | null,
+        warningCount,
+        blockerCount,
+        missingDataCount: latestRun?.missingDataFlags.length ?? 0,
+        topDrivers: latestRun?.financialResult?.explanation?.dominantDrivers.slice(0, 3) ?? [],
+        assumptionSummary: this.getAssumptionSummary(scenario),
+        recommendation: this.getComparisonRecommendation(readiness, latestRun),
+      };
+    });
+
+    const ranked = entries
+      .filter((entry) => entry.objectiveValue !== null)
+      .sort((left, right) => this.compareObjectiveValues(left.objectiveValue!, right.objectiveValue!, objectiveDirection));
+    const leader = ranked[0] ?? null;
+    const leaderValue = leader?.objectiveValue ? Number(leader.objectiveValue) : null;
+
+    ranked.forEach((entry, index) => {
+      entry.rank = index + 1;
+      const entryValue = entry.objectiveValue ? Number(entry.objectiveValue) : null;
+      if (leaderValue == null || entryValue == null || index === 0) {
+        entry.deltaToLeader = index === 0 ? "0" : null;
+        return;
+      }
+      const delta = objectiveDirection === "min" ? entryValue - leaderValue : leaderValue - entryValue;
+      entry.deltaToLeader = this.formatMetricValue(delta);
+    });
+
+    return {
+      rankingTarget,
+      objectiveDirection,
+      mixedOptimizationTargets,
+      leaderScenarioId: leader?.scenario.id ?? null,
+      entries: [
+        ...ranked,
+        ...entries.filter((entry) => entry.objectiveValue === null),
+      ].map((entry) => ({
+        scenario: entry.scenario,
+        parcel: entry.parcel
+          ? {
+              id: entry.parcel.id,
+              name: entry.parcel.name,
+              cadastralId: entry.parcel.cadastralId,
+              municipalityName: entry.parcel.municipalityName,
+              landAreaSqm: toApiDecimal(entry.parcel.landAreaSqm),
+              confidenceScore: entry.parcel.confidenceScore,
+              sourceType: entry.parcel.sourceType,
+            }
+          : null,
+        readiness: entry.readiness,
+        latestRun: entry.latestRun,
+        rank: entry.rank,
+        objectiveValue: entry.objectiveValue,
+        deltaToLeader: entry.deltaToLeader,
+        warningCount: entry.warningCount,
+        blockerCount: entry.blockerCount,
+        missingDataCount: entry.missingDataCount,
+        topDrivers: entry.topDrivers,
+        assumptionSummary: entry.assumptionSummary,
+        recommendation: entry.recommendation,
+      })),
+    };
+  }
+
   private async assertScenarioAccess(scenarioId: string) {
     const scenario = await this.prisma.scenario.findFirst({
       where: {
         id: scenarioId,
         organizationId: this.requestContext.organizationId,
       },
-      select: { id: true },
+      select: { id: true, inputsJson: true },
     });
 
     if (!scenario) {
       throw new NotFoundException("Scenario not found");
     }
+
+    return scenario;
   }
 
   private mapScenario(item: ScenarioWithFunding): ScenarioDto {
@@ -191,6 +348,7 @@ export class ScenariosService {
       parkingCostPerSpace: toApiDecimal(item.parkingCostPerSpace),
       landCost: toApiDecimal(item.landCost),
       equityTargetPct: toApiDecimal(item.equityTargetPct),
+      assumptionSet: extractScenarioAssumptionSet(toApiJson(item.inputsJson)),
       inputsJson: toApiJson(item.inputsJson),
       latestRunAt: toApiDate(item.latestRunAt),
       fundingVariants: item.fundingVariants.map((variant) => ({
@@ -210,5 +368,72 @@ export class ScenariosService {
       createdAt: toApiDate(item.createdAt)!,
       updatedAt: toApiDate(item.updatedAt)!,
     };
+  }
+
+  private getObjectiveDirection(target: OptimizationTarget): "min" | "max" {
+    return target === "MAX_SUBSIDY_ADJUSTED_IRR" || target === "MAX_UNIT_COUNT" ? "max" : "min";
+  }
+
+  private getObjectiveValue(run: ScenarioRunDto | null, target: OptimizationTarget) {
+    const result = run?.financialResult;
+    if (!result) return null;
+
+    switch (target) {
+      case "MIN_BREAK_EVEN_RENT":
+        return result.breakEvenRentEurSqm;
+      case "MIN_BREAK_EVEN_SALES_PRICE":
+        return result.breakEvenSalesPriceEurSqm;
+      case "MIN_REQUIRED_EQUITY":
+        return result.requiredEquity;
+      case "MAX_SUBSIDY_ADJUSTED_IRR":
+        return result.subsidyAdjustedIrrPct;
+      case "MAX_UNIT_COUNT":
+        return result.estimatedUnitCount != null ? String(result.estimatedUnitCount) : null;
+      default:
+        return result.objectiveValue;
+    }
+  }
+
+  private compareObjectiveValues(left: string, right: string, direction: "min" | "max") {
+    const leftValue = Number(left);
+    const rightValue = Number(right);
+    if (direction === "min") {
+      return leftValue - rightValue;
+    }
+    return rightValue - leftValue;
+  }
+
+  private formatMetricValue(value: number) {
+    if (!Number.isFinite(value)) return null;
+    if (Number.isInteger(value)) return String(value);
+    return value.toFixed(Math.abs(value) >= 100 ? 0 : 2).replace(/\.?0+$/, "");
+  }
+
+  private getAssumptionSummary(scenario: ScenarioDto) {
+    const assumptionSet = scenario.assumptionSet;
+    if (!assumptionSet) return "Baseline assumptions";
+    const overrideCount = Object.values(assumptionSet.overrides).filter((value) => value !== null).length;
+    return overrideCount
+      ? `${assumptionSet.profileKey} profile + ${overrideCount} override${overrideCount === 1 ? "" : "s"}`
+      : `${assumptionSet.profileKey} profile`;
+  }
+
+  private getComparisonRecommendation(readiness: ScenarioReadinessDto, latestRun: ScenarioRunDto | null) {
+    if (!latestRun) {
+      return readiness.canRun
+        ? "Run the scenario once to unlock ranking and KPI deltas."
+        : readiness.issues[0]?.message ?? "Resolve blockers before comparing this case.";
+    }
+
+    if (latestRun.status === "FAILED") {
+      return latestRun.errorMessage ?? "Fix the failing run path before using this case in a decision set.";
+    }
+
+    if (latestRun.missingDataFlags.length) {
+      return `Tighten ${latestRun.missingDataFlags.slice(0, 2).join(", ")} before relying on the ranking.`;
+    }
+
+    return latestRun.financialResult?.explanation?.nextActions[0]
+      ?? "Use the leader ranking directionally, then test the weakest assumptions.";
   }
 }

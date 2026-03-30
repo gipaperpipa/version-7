@@ -6,10 +6,17 @@ import type {
   ScenarioSnapshotInput,
 } from "../finance/feasibility.types";
 import type { ScenarioForValidation } from "./scenario.types";
+import {
+  extractScenarioAssumptionSet,
+  getEffectiveScenarioAssumptions,
+} from "./scenario-assumptions";
 
 @Injectable()
 export class ScenarioInputBuilderService {
   buildSnapshot(scenario: ScenarioForValidation): ScenarioSnapshotInput {
+    const assumptionSet = extractScenarioAssumptionSet(toApiJson<Record<string, unknown>>(scenario.inputsJson));
+    const overrideCount = Object.values(assumptionSet?.overrides ?? {}).filter((value) => value !== null).length;
+
     return {
       scenarioId: scenario.id,
       strategyType: scenario.strategyType,
@@ -17,6 +24,11 @@ export class ScenarioInputBuilderService {
       optimizationTarget: scenario.optimizationTarget,
       parcelId: scenario.parcelId,
       strategyMixJson: toApiJson<Record<string, unknown>>(scenario.strategyMixJson),
+      assumptionSet: {
+        profileKey: assumptionSet?.profileKey ?? "BASELINE",
+        notes: assumptionSet?.notes ?? null,
+        overrideCount,
+      },
       fundingVariants: scenario.fundingVariants.map((item) => ({
         id: item.id,
         label: item.label,
@@ -38,6 +50,9 @@ export class ScenarioInputBuilderService {
       const item = params.find((parameter) => parameter.keySlug === slug);
       return item?.valueBoolean ?? undefined;
     };
+    const effectiveAssumptions = getEffectiveScenarioAssumptions(
+      extractScenarioAssumptionSet(toApiJson<Record<string, unknown>>(scenario.inputsJson)),
+    );
 
     return {
       organizationId: scenario.organizationId,
@@ -54,6 +69,22 @@ export class ScenarioInputBuilderService {
       parkingCostPerSpace: scenario.parkingCostPerSpace ? Number(scenario.parkingCostPerSpace.toString()) : undefined,
       landCost: scenario.landCost ? Number(scenario.landCost.toString()) : undefined,
       equityTargetPct: scenario.equityTargetPct ? Number(scenario.equityTargetPct.toString()) : undefined,
+      assumptions: {
+        profileKey: effectiveAssumptions.profileKey,
+        planningBufferPct: Number(effectiveAssumptions.planningBufferPct),
+        efficiencyFactorPct: Number(effectiveAssumptions.efficiencyFactorPct),
+        vacancyPct: Number(effectiveAssumptions.vacancyPct),
+        operatingCostPerNlaSqmYear: Number(effectiveAssumptions.operatingCostPerNlaSqmYear),
+        acquisitionClosingCostPct: Number(effectiveAssumptions.acquisitionClosingCostPct),
+        contingencyPct: Number(effectiveAssumptions.contingencyPct),
+        developerFeePct: Number(effectiveAssumptions.developerFeePct),
+        targetProfitPct: Number(effectiveAssumptions.targetProfitPct),
+        exitCapRatePct: Number(effectiveAssumptions.exitCapRatePct),
+        salesClosingCostPct: Number(effectiveAssumptions.salesClosingCostPct),
+        salesAbsorptionMonths: effectiveAssumptions.salesAbsorptionMonths ?? 12,
+        parkingRevenuePerSpaceMonth: Number(effectiveAssumptions.parkingRevenuePerSpaceMonth),
+        parkingSalePricePerSpace: Number(effectiveAssumptions.parkingSalePricePerSpace),
+      },
       planning: {
         parcelAreaSqm: scenario.parcel?.landAreaSqm ? Number(scenario.parcel.landAreaSqm.toString()) : 0,
         grz: getNumber(CORE_PLANNING_KEY_SLUGS.GRZ),

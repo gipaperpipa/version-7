@@ -43,6 +43,14 @@ export const OptimizationTarget = {
 } as const;
 export type OptimizationTarget = (typeof OptimizationTarget)[keyof typeof OptimizationTarget];
 
+export const AssumptionProfileKey = {
+  BASELINE: "BASELINE",
+  CONSERVATIVE: "CONSERVATIVE",
+  AGGRESSIVE: "AGGRESSIVE",
+  CUSTOM: "CUSTOM",
+} as const;
+export type AssumptionProfileKey = (typeof AssumptionProfileKey)[keyof typeof AssumptionProfileKey];
+
 export const ScenarioStatus = {
   DRAFT: "DRAFT",
   READY: "READY",

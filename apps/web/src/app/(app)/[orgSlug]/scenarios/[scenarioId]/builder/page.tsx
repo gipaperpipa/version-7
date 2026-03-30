@@ -3,7 +3,12 @@ import { getParcels } from "@/lib/api/parcels";
 import { getPlanningParameters } from "@/lib/api/planning";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { getFundingPrograms, getScenario, getScenarioReadiness } from "@/lib/api/scenarios";
-import { humanizeTokenLabel, optimizationTargetLabels, strategyTypeLabels } from "@/lib/ui/enum-labels";
+import {
+  assumptionProfileLabels,
+  humanizeTokenLabel,
+  optimizationTargetLabels,
+  strategyTypeLabels,
+} from "@/lib/ui/enum-labels";
 import { getReadinessVerdict } from "@/lib/ui/verdicts";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
 import { FundingStackForm } from "@/components/scenarios/funding-stack-form";
@@ -49,6 +54,7 @@ export default async function ScenarioBuilderPage({
     const warningCount = readiness.issues.filter((issue) => issue.severity === "WARNING").length;
     const readinessVerdict = getReadinessVerdict(readiness);
     const validatedLabel = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(readiness.validatedAt));
+    const assumptionOverrideCount = Object.values(scenario.assumptionSet?.overrides ?? {}).filter((value) => value !== null).length;
 
     return (
       <div className="workspace-page content-stack">
@@ -60,6 +66,10 @@ export default async function ScenarioBuilderPage({
             <div className="action-row">
               {linkedParcel ? <span className="meta-chip">{linkedParcel.name ?? linkedParcel.cadastralId ?? "Linked parcel"}</span> : <StatusBadge tone="warning">Parcel missing</StatusBadge>}
               <span className="meta-chip">{strategyTypeLabels[scenario.strategyType]}</span>
+              <span className="meta-chip">
+                {assumptionProfileLabels[scenario.assumptionSet?.profileKey ?? "BASELINE"]}
+                {assumptionOverrideCount ? ` + ${assumptionOverrideCount} override${assumptionOverrideCount === 1 ? "" : "s"}` : ""}
+              </span>
               <span className="meta-chip">{selectedFundingCount ? `${selectedFundingCount} funding lane(s)` : "No funding lanes"}</span>
               <StatusBadge tone={getReadinessTone(readiness.status)}>{humanizeTokenLabel(readiness.status)}</StatusBadge>
             </div>
@@ -116,6 +126,15 @@ export default async function ScenarioBuilderPage({
                 <div className="ops-summary-item__value">{selectedFundingCount ? `${selectedFundingCount} lane(s)` : "No lanes"}</div>
                 <div className="ops-summary-item__detail">
                   {enabledFundingLabels.length ? enabledFundingLabels.join(" / ") : "Select stack items before running."}
+                </div>
+              </div>
+              <div className="ops-summary-item">
+                <div className="ops-summary-item__label">Assumptions</div>
+                <div className="ops-summary-item__value">
+                  {assumptionProfileLabels[scenario.assumptionSet?.profileKey ?? "BASELINE"]}
+                </div>
+                <div className="ops-summary-item__detail">
+                  {assumptionOverrideCount ? `${assumptionOverrideCount} case-specific override(s)` : "Profile defaults only"}
                 </div>
               </div>
               <div className="ops-summary-item">

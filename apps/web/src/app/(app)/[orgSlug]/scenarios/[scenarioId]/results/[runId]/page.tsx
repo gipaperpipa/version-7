@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { getScenario, getScenarioRun } from "@/lib/api/scenarios";
-import { humanizeTokenLabel } from "@/lib/ui/enum-labels";
+import { assumptionProfileLabels, humanizeTokenLabel } from "@/lib/ui/enum-labels";
 import { getRunVerdict } from "@/lib/ui/verdicts";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
 import { buttonClasses } from "@/components/ui/button";
@@ -136,7 +136,11 @@ export default async function ScenarioResultPage({
                   <StatBlock label="Buildable BGF" value={result.buildableBgfSqm ?? "n/a"} caption="Estimated total gross floor area" tone="accent" />
                   <StatBlock label="Required equity" value={result.requiredEquity ?? "n/a"} caption="Residual capital after debt layers" tone="warning" />
                   <StatBlock label="Break-even rent" value={result.breakEvenRentEurSqm ?? "n/a"} caption="EUR/sqm equivalent" tone="success" />
-                  <StatBlock label="Estimated units" value={result.estimatedUnitCount ?? "n/a"} caption="Current unit-count signal from the v0 engine" />
+                  <StatBlock
+                    label={result.netSalesRevenue ? "Net sales revenue" : "NOI annual"}
+                    value={result.netSalesRevenue ?? result.netOperatingIncomeAnnual ?? "n/a"}
+                    caption={result.netSalesRevenue ? "Sale-side proceeds after closing costs" : "Operating signal after vacancy and opex"}
+                  />
                 </div>
               </SectionCard>
 
@@ -171,15 +175,19 @@ export default async function ScenarioResultPage({
 
             <SectionCard
               className="index-surface"
-              eyebrow="Capital and cost context"
+              eyebrow="Capital and assumption context"
               title="Capital context"
-              description="Supporting figures behind equity and break-even."
+              description="Supporting figures behind equity, break-even, and realism posture."
               size="compact"
             >
               <div className="key-value-grid">
                 <div className="key-value-card">
                   <div className="key-value-card__label">Total development cost</div>
                   <div className="key-value-card__value">{result.totalDevelopmentCost ?? "n/a"}</div>
+                </div>
+                <div className="key-value-card">
+                  <div className="key-value-card__label">Capitalized uses</div>
+                  <div className="key-value-card__value">{result.totalCapitalizedUses ?? "n/a"}</div>
                 </div>
                 <div className="key-value-card">
                   <div className="key-value-card__label">State subsidy</div>
@@ -192,6 +200,24 @@ export default async function ScenarioResultPage({
                 <div className="key-value-card">
                   <div className="key-value-card__label">Free financing</div>
                   <div className="key-value-card__value">{result.freeFinancingAmount ?? "n/a"}</div>
+                </div>
+                <div className="key-value-card">
+                  <div className="key-value-card__label">Contingency</div>
+                  <div className="key-value-card__value">{result.contingencyCost ?? "n/a"}</div>
+                </div>
+                <div className="key-value-card">
+                  <div className="key-value-card__label">Developer fee</div>
+                  <div className="key-value-card__value">{result.developerFee ?? "n/a"}</div>
+                </div>
+                <div className="key-value-card">
+                  <div className="key-value-card__label">Assumption profile</div>
+                  <div className="key-value-card__value">
+                    {result.assumptions ? assumptionProfileLabels[result.assumptions.profileKey] : "Baseline"}
+                  </div>
+                </div>
+                <div className="key-value-card">
+                  <div className="key-value-card__label">Planning-adjusted BGF</div>
+                  <div className="key-value-card__value">{result.planningAdjustedBgfSqm ?? "n/a"}</div>
                 </div>
               </div>
             </SectionCard>

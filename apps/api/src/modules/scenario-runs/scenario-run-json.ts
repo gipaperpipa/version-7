@@ -56,13 +56,23 @@ export function decodeReadinessIssues(value: unknown): ScenarioReadinessIssueDto
 
 export function decodeExplanation(value: unknown): ScenarioResultExplanationDto | null {
   if (!isRecord(value)) return null;
-  if (typeof value.heuristicVersion !== "string" || typeof value.summary !== "string") return null;
+  if (
+    typeof value.heuristicVersion !== "string" ||
+    typeof value.summary !== "string" ||
+    typeof value.objectiveNarrative !== "string"
+  ) {
+    return null;
+  }
 
   return {
     heuristicVersion: value.heuristicVersion,
     summary: value.summary,
+    objectiveNarrative: value.objectiveNarrative,
     dominantDrivers: decodeStringArray(value.dominantDrivers),
     fallbackAssumptions: decodeStringArray(value.fallbackAssumptions),
     capitalStackNarrative: decodeStringArray(value.capitalStackNarrative),
+    weakestLinks: decodeStringArray(value.weakestLinks),
+    tradeoffs: decodeStringArray(value.tradeoffs),
+    nextActions: decodeStringArray(value.nextActions),
   };
 }

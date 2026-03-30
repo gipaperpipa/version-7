@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   AcquisitionType,
+  AssumptionProfileKey,
   FinancingSourceType,
   OptimizationTarget,
   StrategyType,
   type CreateScenarioRequestDto,
+  type ScenarioAssumptionSetDto,
   type ScenarioDto,
   type ScenarioRunDto,
   type UpdateScenarioRequestDto,
@@ -18,6 +20,47 @@ import { apiFetch } from "@/lib/api/client";
 function optionalString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function optionalInteger(formData: FormData, key: string) {
+  const value = formData.get(key);
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function buildAssumptionSet(formData: FormData): ScenarioAssumptionSetDto | null {
+  const profileValue = String(formData.get("assumptionProfileKey") ?? AssumptionProfileKey.BASELINE);
+  const profileKey = Object.values(AssumptionProfileKey).includes(profileValue as typeof AssumptionProfileKey[keyof typeof AssumptionProfileKey])
+    ? (profileValue as ScenarioAssumptionSetDto["profileKey"])
+    : AssumptionProfileKey.BASELINE;
+  const overrides: ScenarioAssumptionSetDto["overrides"] = {
+    planningBufferPct: optionalString(formData, "assumptionPlanningBufferPct"),
+    efficiencyFactorPct: optionalString(formData, "assumptionEfficiencyFactorPct"),
+    vacancyPct: optionalString(formData, "assumptionVacancyPct"),
+    operatingCostPerNlaSqmYear: optionalString(formData, "assumptionOperatingCostPerNlaSqmYear"),
+    acquisitionClosingCostPct: optionalString(formData, "assumptionAcquisitionClosingCostPct"),
+    contingencyPct: optionalString(formData, "assumptionContingencyPct"),
+    developerFeePct: optionalString(formData, "assumptionDeveloperFeePct"),
+    targetProfitPct: optionalString(formData, "assumptionTargetProfitPct"),
+    exitCapRatePct: optionalString(formData, "assumptionExitCapRatePct"),
+    salesClosingCostPct: optionalString(formData, "assumptionSalesClosingCostPct"),
+    salesAbsorptionMonths: optionalInteger(formData, "assumptionSalesAbsorptionMonths"),
+    parkingRevenuePerSpaceMonth: optionalString(formData, "assumptionParkingRevenuePerSpaceMonth"),
+    parkingSalePricePerSpace: optionalString(formData, "assumptionParkingSalePricePerSpace"),
+  };
+  const hasOverride = Object.values(overrides).some((value) => value !== null);
+  const notes = optionalString(formData, "assumptionNotes");
+
+  if (profileKey === AssumptionProfileKey.BASELINE && !hasOverride && !notes) {
+    return null;
+  }
+
+  return {
+    profileKey,
+    notes,
+    overrides,
+  };
 }
 
 function safeParseOptionalJsonField(formData: FormData, key: string) {
@@ -54,6 +97,7 @@ function buildScenarioPayload(formData: FormData, strategyMixJson: Record<string
     parkingCostPerSpace: optionalString(formData, "parkingCostPerSpace"),
     landCost: optionalString(formData, "landCost"),
     equityTargetPct: optionalString(formData, "equityTargetPct"),
+    assumptionSet: buildAssumptionSet(formData),
   };
 }
 

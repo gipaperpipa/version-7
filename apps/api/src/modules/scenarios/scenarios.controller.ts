@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiHeader, ApiTags } from "@nestjs/swagger";
 import type {
   CreateScenarioRequestDto,
   ListScenariosResponseDto,
+  ScenarioComparisonResponseDto,
   ScenarioDto,
   UpdateScenarioRequestDto,
   UpsertScenarioFundingStackRequestDto,
@@ -32,6 +33,16 @@ export class ScenariosController {
   @Version("1")
   list(@Query("page") page = "1", @Query("pageSize") pageSize = "20"): Promise<ListScenariosResponseDto> {
     return this.scenariosService.list({ page: Number(page), pageSize: Number(pageSize) });
+  }
+
+  @Get("compare")
+  @Version("1")
+  compare(
+    @Query("scenarioId") scenarioIds: string | string[],
+    @Query("rankingTarget") rankingTarget?: CreateScenarioRequestDto["optimizationTarget"],
+  ): Promise<ScenarioComparisonResponseDto> {
+    const ids = Array.isArray(scenarioIds) ? scenarioIds : scenarioIds ? [scenarioIds] : [];
+    return this.scenariosService.compare({ scenarioIds: ids, rankingTarget });
   }
 
   @Post()
