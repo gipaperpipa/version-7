@@ -14,12 +14,20 @@ function getConfidenceStatTone(band: string) {
 }
 
 export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
-  const inputBand = getConfidenceBand(run.confidence.inputConfidencePct);
-  const outputBand = getConfidenceBand(run.confidence.outputConfidencePct);
-  const blockers = run.readinessIssues.filter((issue) => issue.severity === "BLOCKING");
-  const readinessWarnings = run.readinessIssues.filter((issue) => issue.severity === "WARNING");
-  const heuristicCaveats = run.warnings.filter((warning) => warning.code.startsWith("HEURISTIC_"));
-  const otherWarnings = run.warnings.filter((warning) => !warning.code.startsWith("HEURISTIC_"));
+  const confidence = run.confidence ?? {
+    inputConfidencePct: null,
+    outputConfidencePct: null,
+    reasons: [],
+  };
+  const readinessIssues = run.readinessIssues ?? [];
+  const warnings = run.warnings ?? [];
+  const missingDataFlags = run.missingDataFlags ?? [];
+  const inputBand = getConfidenceBand(confidence.inputConfidencePct);
+  const outputBand = getConfidenceBand(confidence.outputConfidencePct);
+  const blockers = readinessIssues.filter((issue) => issue.severity === "BLOCKING");
+  const readinessWarnings = readinessIssues.filter((issue) => issue.severity === "WARNING");
+  const heuristicCaveats = warnings.filter((warning) => warning.code.startsWith("HEURISTIC_"));
+  const otherWarnings = warnings.filter((warning) => !warning.code.startsWith("HEURISTIC_"));
   const combinedWarnings = Array.from(
     new Set([...readinessWarnings.map((warning) => warning.message), ...otherWarnings.map((warning) => warning.message)]),
   );
@@ -55,14 +63,14 @@ export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
           />
           <StatBlock
             label="Missing data"
-            value={run.missingDataFlags.length}
-            caption={run.missingDataFlags.length ? "Fallback-dependent inputs" : "No missing-data flags"}
-            tone={run.missingDataFlags.length ? "warning" : "success"}
+            value={missingDataFlags.length}
+            caption={missingDataFlags.length ? "Fallback-dependent inputs" : "No missing-data flags"}
+            tone={missingDataFlags.length ? "warning" : "success"}
           />
           <StatBlock
             label="Output confidence"
             value={outputBand}
-            caption={run.confidence.outputConfidencePct != null ? `Score ${run.confidence.outputConfidencePct}` : "No numeric score returned"}
+            caption={confidence.outputConfidencePct != null ? `Score ${confidence.outputConfidencePct}` : "No numeric score returned"}
             tone={getConfidenceStatTone(outputBand)}
           />
         </div>
@@ -115,9 +123,9 @@ export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
 
         <div className="diagnostic-grid">
           <DiagnosticGroup title="Missing data" emptyLabel="No missing-data flags were raised.">
-            {run.missingDataFlags.length ? (
+            {missingDataFlags.length ? (
               <div className="chip-row">
-                {run.missingDataFlags.map((flag) => (
+                {missingDataFlags.map((flag) => (
                   <StatusBadge key={flag} tone="warning">{humanizeTokenLabel(flag)}</StatusBadge>
                 ))}
               </div>
@@ -141,9 +149,9 @@ export function RunDiagnosticsPanel({ run }: { run: ScenarioRunDto }) {
         </div>
 
         <DiagnosticGroup title="Confidence notes" emptyLabel="No confidence reasoning text was returned.">
-          {run.confidence.reasons.length ? (
+          {confidence.reasons.length ? (
             <div className="signal-list">
-              {run.confidence.reasons.map((reason) => (
+              {confidence.reasons.map((reason) => (
                 <div key={reason} className="signal-row">
                   <div className="signal-row__badges">
                     <StatusBadge tone="surface">Confidence</StatusBadge>

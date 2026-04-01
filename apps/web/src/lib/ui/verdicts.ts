@@ -8,7 +8,7 @@ export interface DecisionVerdict {
 }
 
 function hasPlanningCriticalMissingData(run: ScenarioRunDto) {
-  return run.missingDataFlags.some((flag) => ["BUILDABLE_WINDOW", "GRZ", "GFZ"].includes(flag));
+  return (run.missingDataFlags ?? []).some((flag) => ["BUILDABLE_WINDOW", "GRZ", "GFZ"].includes(flag));
 }
 
 export function getReadinessVerdict(readiness: ScenarioReadinessDto): DecisionVerdict {
@@ -69,9 +69,9 @@ export function getRunVerdict(run: ScenarioRunDto): DecisionVerdict {
   }
 
   if (
-    run.confidence.outputConfidencePct == null ||
+    run.confidence?.outputConfidencePct == null ||
     run.confidence.outputConfidencePct < 60 ||
-    run.missingDataFlags.length >= 2
+    (run.missingDataFlags ?? []).length >= 2
   ) {
     return {
       title: "Not ready for decision",

@@ -149,14 +149,22 @@ export function ResultAnalysisPanels({
   run: ScenarioRunDto;
   result: FinancialResultDto;
 }) {
+  const confidence = run.confidence ?? {
+    inputConfidencePct: null,
+    outputConfidencePct: null,
+    reasons: [],
+  };
+  const readinessIssues = run.readinessIssues ?? [];
+  const warningsList = run.warnings ?? [];
+  const missingDataFlags = run.missingDataFlags ?? [];
   const capitalSegments = buildCapitalStackSegments(result);
   const usesSegments = buildUsesOfFundsSegments(result);
   const revenueChart = buildRevenueItems(result);
-  const inputBand = getConfidenceBand(run.confidence.inputConfidencePct);
-  const outputBand = getConfidenceBand(run.confidence.outputConfidencePct);
-  const blockers = run.readinessIssues.filter((issue) => issue.severity === "BLOCKING");
-  const warnings = run.readinessIssues.filter((issue) => issue.severity === "WARNING").length + run.warnings.length;
-  const heuristicCaveats = run.warnings.filter((warning) => warning.code.startsWith("HEURISTIC_"));
+  const inputBand = getConfidenceBand(confidence.inputConfidencePct);
+  const outputBand = getConfidenceBand(confidence.outputConfidencePct);
+  const blockers = readinessIssues.filter((issue) => issue.severity === "BLOCKING");
+  const warnings = readinessIssues.filter((issue) => issue.severity === "WARNING").length + warningsList.length;
+  const heuristicCaveats = warningsList.filter((warning) => warning.code.startsWith("HEURISTIC_"));
   const tradeoffItems = [...(result.explanation?.tradeoffs ?? []), ...(result.explanation?.weakestLinks ?? [])];
 
   return (
@@ -192,16 +200,16 @@ export function ResultAnalysisPanels({
           {
             label: "Input confidence",
             detail: "How stable the scenario inputs were",
-            valueLabel: run.confidence.inputConfidencePct != null ? `${formatMetricValue(run.confidence.inputConfidencePct)}%` : "n/a",
-            ratio: Math.max(0, Math.min(1, (run.confidence.inputConfidencePct ?? 0) / 100)),
+            valueLabel: confidence.inputConfidencePct != null ? `${formatMetricValue(confidence.inputConfidencePct)}%` : "n/a",
+            ratio: Math.max(0, Math.min(1, (confidence.inputConfidencePct ?? 0) / 100)),
             tone: getConfidenceTone(inputBand),
             badge: inputBand,
           },
           {
             label: "Output confidence",
             detail: "How much of the output can be treated directionally",
-            valueLabel: run.confidence.outputConfidencePct != null ? `${formatMetricValue(run.confidence.outputConfidencePct)}%` : "n/a",
-            ratio: Math.max(0, Math.min(1, (run.confidence.outputConfidencePct ?? 0) / 100)),
+            valueLabel: confidence.outputConfidencePct != null ? `${formatMetricValue(confidence.outputConfidencePct)}%` : "n/a",
+            ratio: Math.max(0, Math.min(1, (confidence.outputConfidencePct ?? 0) / 100)),
             tone: getConfidenceTone(outputBand),
             badge: outputBand,
           },
@@ -216,7 +224,7 @@ export function ResultAnalysisPanels({
         segments={[
           { label: "Blockers", value: blockers.length, tone: "danger" },
           { label: "Warnings", value: warnings, tone: "warning" },
-          { label: "Missing data", value: run.missingDataFlags.length, tone: "surface" },
+          { label: "Missing data", value: missingDataFlags.length, tone: "surface" },
           { label: "Heuristic caveats", value: heuristicCaveats.length, tone: "accent" },
         ]}
         footer={`Readiness ${run.readinessStatus ? humanizeTokenLabel(run.readinessStatus) : "not returned"}.`}
