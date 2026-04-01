@@ -8,6 +8,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NextStepPanel } from "@/components/ui/next-step-panel";
 import { PageHeader } from "@/components/ui/page-header";
+import { ResultAnalysisPanels } from "@/components/analysis/result-analysis-panels";
 import { ResultExplanationCard } from "@/components/scenarios/result-explanation-card";
 import { RunDiagnosticsPanel } from "@/components/scenarios/run-diagnostics-panel";
 import { SectionCard } from "@/components/ui/section-card";
@@ -68,6 +69,7 @@ export default async function ScenarioResultPage({
     const result = run.financialResult;
     const verdict = getRunVerdict(run);
     const builderHref = `/${orgSlug}/scenarios/${scenarioId}/builder`;
+    const reportHref = `/${orgSlug}/scenarios/${scenarioId}/results/${runId}/report`;
     const parcelHref = scenario.parcelId ? `/${orgSlug}/parcels/${scenario.parcelId}` : null;
     const planningHref = scenario.parcelId ? `/${orgSlug}/parcels/${scenario.parcelId}/planning` : null;
     const nextAction = getNextActionCopy(runId, scenarioId, verdict.title, Boolean(planningHref));
@@ -90,6 +92,11 @@ export default async function ScenarioResultPage({
               <Link className={buttonClasses({ variant: "secondary" })} href={builderHref}>
                 Back to builder
               </Link>
+              {result ? (
+                <Link className={buttonClasses()} href={reportHref}>
+                  Open report
+                </Link>
+              ) : null}
             </>
           )}
         />
@@ -170,6 +177,7 @@ export default async function ScenarioResultPage({
               />
             </div>
 
+            <ResultAnalysisPanels run={run} result={result} />
             <RunDiagnosticsPanel run={run} />
             <ResultExplanationCard explanation={result.explanation ?? null} />
 

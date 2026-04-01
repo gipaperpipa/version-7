@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { OptimizationTarget, type ScenarioComparisonEntryDto } from "@repo/contracts";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
+import { ComparisonAnalysisPanels } from "@/components/analysis/comparison-analysis-panels";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -115,6 +116,7 @@ export default async function ScenarioComparePage({
     const comparison = await getScenarioComparison(orgSlug, scenarioIds, resolvedSearchParams?.rankingTarget);
     const leader = comparison.entries.find((entry) => entry.scenario.id === comparison.leaderScenarioId) ?? null;
     const metricRows = buildMetricRows(comparison.entries);
+    const reportHref = `/${orgSlug}/scenarios/compare/report?${scenarioIds.map((scenarioId) => `scenarioId=${encodeURIComponent(scenarioId)}`).join("&")}${comparison.rankingTarget ? `&rankingTarget=${encodeURIComponent(comparison.rankingTarget)}` : ""}`;
 
     return (
       <div className="workspace-page content-stack">
@@ -130,9 +132,14 @@ export default async function ScenarioComparePage({
             </div>
           )}
           actions={(
-            <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios`}>
-              Back to scenarios
-            </Link>
+            <>
+              <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios`}>
+                Back to scenarios
+              </Link>
+              <Link className={buttonClasses()} href={reportHref}>
+                Open report
+              </Link>
+            </>
           )}
         />
 
@@ -174,6 +181,8 @@ export default async function ScenarioComparePage({
             </form>
           </div>
         </SectionCard>
+
+        <ComparisonAnalysisPanels comparison={comparison} />
 
         <SectionCard
           className="index-surface index-surface--ledger"
