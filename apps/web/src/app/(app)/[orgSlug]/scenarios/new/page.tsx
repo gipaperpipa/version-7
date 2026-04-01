@@ -15,7 +15,7 @@ export default async function NewScenarioPage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string }>;
-  searchParams?: Promise<{ error?: string; parcelId?: string }>;
+  searchParams?: Promise<{ error?: string; parcelId?: string; message?: string }>;
 }) {
   const { orgSlug } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -49,6 +49,13 @@ export default async function NewScenarioPage({
           <Alert tone="danger">
             <AlertTitle>Invalid mix configuration JSON</AlertTitle>
             <AlertDescription>The temporary mixed-strategy JSON could not be parsed. Please fix the JSON and try again.</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {resolvedSearchParams?.error === "create-request-failed" ? (
+          <Alert tone="danger">
+            <AlertTitle>Scenario creation failed</AlertTitle>
+            <AlertDescription>{resolvedSearchParams.message ?? "The API rejected the new scenario request. Review the setup inputs and try again."}</AlertDescription>
           </Alert>
         ) : null}
 

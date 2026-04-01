@@ -16,6 +16,7 @@ import {
   type UpsertScenarioFundingStackRequestDto,
 } from "@repo/contracts";
 import { apiFetch } from "@/lib/api/client";
+import { isApiResponseError, isApiUnavailableError } from "@/lib/api/errors";
 
 function optionalString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -101,6 +102,17 @@ function buildScenarioPayload(formData: FormData, strategyMixJson: Record<string
   };
 }
 
+function buildErrorRedirect(pathname: string, code: string, message?: string, extraParams?: Record<string, string | null | undefined>) {
+  const search = new URLSearchParams({ error: code });
+  if (message) search.set("message", message.slice(0, 220));
+
+  for (const [key, value] of Object.entries(extraParams ?? {})) {
+    if (value) search.set(key, value);
+  }
+
+  return `${pathname}?${search.toString()}`;
+}
+
 export async function createScenarioAction(orgSlug: string, formData: FormData) {
   const parsedMix = safeParseOptionalJsonField(formData, "strategyMixJson");
   const parcelId = optionalString(formData, "parcelId");
@@ -109,12 +121,20 @@ export async function createScenarioAction(orgSlug: string, formData: FormData) 
     redirect(`/${orgSlug}/scenarios/new?error=invalid-strategy-mix-json${parcelId ? `&parcelId=${parcelId}` : ""}`);
   }
 
-  const scenario = await apiFetch<ScenarioDto>(orgSlug, "/api/v1/scenarios", {
-    method: "POST",
-    body: JSON.stringify(buildScenarioPayload(formData, parsedMix.value)),
-  });
+  try {
+    const scenario = await apiFetch<ScenarioDto>(orgSlug, "/api/v1/scenarios", {
+      method: "POST",
+      body: JSON.stringify(buildScenarioPayload(formData, parsedMix.value)),
+    });
 
-  redirect(`/${orgSlug}/scenarios/${scenario.id}/builder`);
+    redirect(`/${orgSlug}/scenarios/${scenario.id}/builder`);
+  } catch (error) {
+    if (isApiResponseError(error) || isApiUnavailableError(error)) {
+      redirect(buildErrorRedirect(`/${orgSlug}/scenarios/new`, "create-request-failed", error.message, { parcelId }));
+    }
+
+    throw error;
+  }
 }
 
 export async function updateScenarioAction(orgSlug: string, scenarioId: string, formData: FormData) {
@@ -124,13 +144,21 @@ export async function updateScenarioAction(orgSlug: string, scenarioId: string, 
   }
 
   const payload: UpdateScenarioRequestDto = buildScenarioPayload(formData, parsedMix.value);
-  await apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  try {
+    await apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
 
-  revalidatePath(`/${orgSlug}/scenarios/${scenarioId}/builder`);
-  redirect(`/${orgSlug}/scenarios/${scenarioId}/builder`);
+    revalidatePath(`/${orgSlug}/scenarios/${scenarioId}/builder`);
+    redirect(`/${orgSlug}/scenarios/${scenarioId}/builder`);
+  } catch (error) {
+    if (isApiResponseError(error) || isApiUnavailableError(error)) {
+      redirect(buildErrorRedirect(`/${orgSlug}/scenarios/${scenarioId}/builder`, "save-request-failed", error.message));
+    }
+
+    throw error;
+  }
 }
 
 export async function replaceFundingStackAction(orgSlug: string, scenarioId: string, formData: FormData) {
@@ -171,19 +199,35 @@ export async function replaceFundingStackAction(orgSlug: string, scenarioId: str
     });
   }
 
-  await apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}/funding-stack`, {
-    method: "PUT",
-    body: JSON.stringify({ items }),
-  });
+  try {
+    await apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}/funding-stack`, {
+      method: "PUT",
+      body: JSON.stringify({ items }),
+    });
 
-  revalidatePath(`/${orgSlug}/scenarios/${scenarioId}/builder`);
-  redirect(`/${orgSlug}/scenarios/${scenarioId}/builder`);
+    revalidatePath(`/${orgSlug}/scenarios/${scenarioId}/builder`);
+    redirect(`/${orgSlug}/scenarios/${scenarioId}/builder`);
+  } catch (error) {
+    if (isApiResponseError(error) || isApiUnavailableError(error)) {
+      redirect(buildErrorRedirect(`/${orgSlug}/scenarios/${scenarioId}/builder`, "funding-request-failed", error.message));
+    }
+
+    throw error;
+  }
 }
 
 export async function triggerFeasibilityRunAction(orgSlug: string, scenarioId: string) {
-  const run = await apiFetch<ScenarioRunDto>(orgSlug, `/api/v1/scenarios/${scenarioId}/feasibility-runs`, {
-    method: "POST",
-  });
+  try {
+    const run = await apiFetch<ScenarioRunDto>(orgSlug, `/api/v1/scenarios/${scenarioId}/feasibility-runs`, {
+      method: "POST",
+    });
 
-  redirect(`/${orgSlug}/scenarios/${scenarioId}/results/${run.id}`);
+    redirect(`/${orgSlug}/scenarios/${scenarioId}/results/${run.id}`);
+  } catch (error) {
+    if (isApiResponseError(error) || isApiUnavailableError(error)) {
+      redirect(buildErrorRedirect(`/${orgSlug}/scenarios/${scenarioId}/builder`, "run-request-failed", error.message));
+    }
+
+    throw error;
+  }
 }

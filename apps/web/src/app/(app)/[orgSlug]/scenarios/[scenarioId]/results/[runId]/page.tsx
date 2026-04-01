@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { isApiUnavailableError } from "@/lib/api/errors";
+import { isApiResponseError } from "@/lib/api/errors";
 import { getScenario, getScenarioRun } from "@/lib/api/scenarios";
 import { assumptionProfileLabels, humanizeTokenLabel } from "@/lib/ui/enum-labels";
 import { getRunVerdict } from "@/lib/ui/verdicts";
@@ -278,6 +279,28 @@ export default async function ScenarioResultPage({
           title="Result view unavailable"
           description="The result page could not load because the configured API is not reachable."
         />
+      );
+    }
+
+    if (isApiResponseError(error)) {
+      return (
+        <div className="workspace-page content-stack">
+          <EmptyState
+            eyebrow="Result unavailable"
+            title="This run result could not be loaded"
+            description={error.message || "The API returned an error while loading the result. Return to the builder, then try the run again or review the scenario state."}
+            actions={(
+              <>
+                <Link className={buttonClasses()} href={`/${orgSlug}/scenarios/${scenarioId}/builder`}>
+                  Back to builder
+                </Link>
+                <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios`}>
+                  Scenario list
+                </Link>
+              </>
+            )}
+          />
+        </div>
       );
     }
 

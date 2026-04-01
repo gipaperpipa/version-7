@@ -27,7 +27,7 @@ export default async function ScenarioBuilderPage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string; scenarioId: string }>;
-  searchParams?: Promise<{ error?: string }>;
+  searchParams?: Promise<{ error?: string; message?: string }>;
 }) {
   const { orgSlug, scenarioId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -92,6 +92,27 @@ export default async function ScenarioBuilderPage({
           <Alert tone="danger">
             <AlertTitle>Invalid mix configuration JSON</AlertTitle>
             <AlertDescription>The temporary mixed-strategy JSON could not be parsed. Please fix it and save the scenario again.</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {resolvedSearchParams?.error === "save-request-failed" ? (
+          <Alert tone="danger">
+            <AlertTitle>Scenario save failed</AlertTitle>
+            <AlertDescription>{resolvedSearchParams.message ?? "The API rejected the scenario update. Review the current inputs and try again."}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {resolvedSearchParams?.error === "funding-request-failed" ? (
+          <Alert tone="danger">
+            <AlertTitle>Funding stack update failed</AlertTitle>
+            <AlertDescription>{resolvedSearchParams.message ?? "The API could not save the current funding stack. Review the selected lanes and try again."}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {resolvedSearchParams?.error === "run-request-failed" ? (
+          <Alert tone="danger">
+            <AlertTitle>Feasibility run could not start</AlertTitle>
+            <AlertDescription>{resolvedSearchParams.message ?? "The API could not create a run from the current scenario state. Review readiness, funding, and required assumptions, then try again."}</AlertDescription>
           </Alert>
         ) : null}
 

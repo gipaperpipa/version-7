@@ -1,7 +1,7 @@
 import "server-only";
 import { LOCAL_DEV_DEMO_ORGANIZATION_SLUG } from "@repo/contracts";
 import { cookies } from "next/headers";
-import { ApiUnavailableError } from "./errors";
+import { ApiResponseError, ApiUnavailableError } from "./errors";
 import { getConfiguredApiBaseUrl, isLocalDevFallbackEnabled } from "@/lib/local-dev";
 
 type Membership = {
@@ -38,6 +38,26 @@ async function resolveOrganizationId(orgSlug: string) {
   throw new Error(`No organization membership found for slug "${orgSlug}"`);
 }
 
+function extractApiErrorMessage(status: number, body: unknown) {
+  if (typeof body === "string" && body.trim()) return body.trim();
+
+  if (typeof body === "object" && body !== null) {
+    const record = body as Record<string, unknown>;
+    if (Array.isArray(record.message)) {
+      const joined = record.message.filter((item): item is string => typeof item === "string").join(" ");
+      if (joined) return joined;
+    }
+
+    if (typeof record.message === "string" && record.message.trim()) return record.message.trim();
+    if (typeof record.error === "string" && record.error.trim()) return record.error.trim();
+  }
+
+  if (status === 422) return "The API rejected the request because the scenario is not currently runnable.";
+  if (status === 404) return "The requested scenario data could not be found.";
+  if (status >= 500) return "The API failed while processing this request.";
+  return `API request failed with status ${status}.`;
+}
+
 export async function apiFetch<T>(orgSlug: string, path: string, init?: RequestInit): Promise<T> {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
@@ -71,7 +91,25 @@ export async function apiFetch<T>(orgSlug: string, path: string, init?: RequestI
   }
 
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`);
+    const rawText = await response.text();
+    let parsedBody: unknown = rawText;
+
+    if (rawText) {
+      try {
+        parsedBody = JSON.parse(rawText) as unknown;
+      } catch {
+        parsedBody = rawText;
+      }
+    } else {
+      parsedBody = null;
+    }
+
+    throw new ApiResponseError(
+      extractApiErrorMessage(response.status, parsedBody),
+      response.status,
+      requestUrl,
+      parsedBody,
+    );
   }
 
   return response.json() as Promise<T>;
