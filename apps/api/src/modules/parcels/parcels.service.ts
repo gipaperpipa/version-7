@@ -160,8 +160,12 @@ function buildGroupName(sourceParcels: SourceParcelSearchResultDto[], siteName?:
     return sourceParcels[0].displayName;
   }
 
-  const municipality = sourceParcels[0]?.municipalityName ?? sourceParcels[0]?.city ?? "Site";
-  return `${municipality} assembled site`;
+  const locality = sourceParcels
+    .map((item) => item.municipalityName ?? item.city ?? item.displayName)
+    .filter((item): item is string => Boolean(item))
+    .sort((left, right) => left.localeCompare(right))[0] ?? "Source-selected";
+
+  return `${locality} grouped site (${sourceParcels.length} parcels)`;
 }
 
 function buildSourceSelectionSignature(
@@ -242,6 +246,8 @@ function buildGroupDerivedProvenance(args: {
 }) {
   const geometryComplete = args.unresolvedGeometryMemberIds.length === 0 && Boolean(args.mergedGeom);
   const areaComplete = args.unresolvedAreaMemberIds.length === 0 && Boolean(args.combinedAreaSqm);
+  const geometryResolution = geometryComplete ? "COMPLETE" : args.mergedGeom ? "PARTIAL" : "ABSENT";
+  const areaResolution = areaComplete ? "COMPLETE" : args.combinedAreaSqm ? "PARTIAL" : "ABSENT";
 
   return {
     providerName: "Merged source parcel set",
@@ -259,9 +265,17 @@ function buildGroupDerivedProvenance(args: {
       providerNames: Array.from(new Set(args.sourceParcels.map((item) => item.providerName))),
       unresolvedAreaMemberIds: args.unresolvedAreaMemberIds,
       unresolvedGeometryMemberIds: args.unresolvedGeometryMemberIds,
-      partialResolution: {
-        geometryAvailable: Boolean(args.mergedGeom),
-        areaAvailable: Boolean(args.combinedAreaSqm),
+      resolution: {
+        geometry: {
+          state: geometryResolution,
+          rule: "MERGE_AVAILABLE_MEMBER_GEOMETRIES_ONLY",
+          available: Boolean(args.mergedGeom),
+        },
+        area: {
+          state: areaResolution,
+          rule: "SUM_RESOLVABLE_MEMBER_AREAS_ONLY",
+          available: Boolean(args.combinedAreaSqm),
+        },
       },
       confidence: {
         score: args.confidenceScore,

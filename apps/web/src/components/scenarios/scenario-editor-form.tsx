@@ -88,6 +88,14 @@ function getParcelSelectionRank(parcel: ParcelDto) {
   return 2;
 }
 
+function getWritableParcelId(parcel: ParcelDto | null | undefined) {
+  if (!parcel) return "";
+  if (parcel.parcelGroupId && !parcel.isGroupSite) {
+    return parcel.parcelGroup?.siteParcelId ?? parcel.id;
+  }
+  return parcel.id;
+}
+
 function getDefaultTemplate(
   templates: ScenarioAssumptionTemplateDto[],
   initialScenario?: ScenarioDto,
@@ -132,20 +140,30 @@ export function ScenarioEditorForm({
   mode?: FormMode;
 }) {
   const initialStrategy = initialScenario?.strategyType ?? StrategyType.FREE_MARKET_RENTAL;
-  const initialSelectedParcelId = initialScenario?.parcelId ?? initialParcelId ?? "";
+  const initialSelectedParcelId = useMemo(() => {
+    const requestedParcelId = initialScenario?.parcelId ?? initialParcelId ?? "";
+    if (!requestedParcelId) return "";
+
+    const requestedParcel = parcels.find((parcel) => parcel.id === requestedParcelId) ?? null;
+    return getWritableParcelId(requestedParcel) || requestedParcelId;
+  }, [initialParcelId, initialScenario?.parcelId, parcels]);
   const initialAssumptionSet = initialScenario?.assumptionSet ?? null;
   const defaultTemplate = getDefaultTemplate(templates, initialScenario);
   const [strategyType, setStrategyType] = useState<StrategyType>(initialStrategy);
   const [selectedParcelId, setSelectedParcelId] = useState(initialSelectedParcelId);
   const hint = strategyFieldHints[strategyType];
   const isRequiredNow = (label: string) => hint.requiredFields.includes(label);
+  const selectableParcels = useMemo(
+    () => parcels.filter((parcel) => parcel.isGroupSite || !parcel.parcelGroupId),
+    [parcels],
+  );
   const selectedParcel = useMemo(
-    () => parcels.find((parcel) => parcel.id === selectedParcelId) ?? null,
-    [parcels, selectedParcelId],
+    () => selectableParcels.find((parcel) => parcel.id === selectedParcelId) ?? null,
+    [selectableParcels, selectedParcelId],
   );
   const [selectedTemplateKey, setSelectedTemplateKey] = useState(defaultTemplate?.key ?? "");
   const sortedParcels = useMemo(
-    () => [...parcels].sort((left, right) => {
+    () => [...selectableParcels].sort((left, right) => {
       const rankDiff = getParcelSelectionRank(left) - getParcelSelectionRank(right);
       if (rankDiff !== 0) return rankDiff;
 
@@ -153,7 +171,7 @@ export function ScenarioEditorForm({
       const rightLabel = right.name ?? right.cadastralId ?? right.id;
       return leftLabel.localeCompare(rightLabel);
     }),
-    [parcels],
+    [selectableParcels],
   );
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.key === selectedTemplateKey) ?? defaultTemplate,

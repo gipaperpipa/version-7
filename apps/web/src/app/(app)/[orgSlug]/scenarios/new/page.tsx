@@ -27,9 +27,12 @@ export default async function NewScenarioPage({
       getScenarioAssumptionTemplates(orgSlug),
     ]);
     const action = createScenarioAction.bind(null, orgSlug);
-    const selectedParcel = resolvedSearchParams?.parcelId
+    const requestedParcel = resolvedSearchParams?.parcelId
       ? parcels.items.find((parcel) => parcel.id === resolvedSearchParams.parcelId) ?? null
       : null;
+    const selectedParcel = requestedParcel?.parcelGroupId && !requestedParcel.isGroupSite
+      ? parcels.items.find((parcel) => parcel.id === requestedParcel.parcelGroup?.siteParcelId) ?? requestedParcel
+      : requestedParcel;
     const sourceBackedCount = parcels.items.filter((parcel) => {
       return parcel.provenance?.trustMode === "SOURCE_PRIMARY" || parcel.provenance?.trustMode === "SOURCE_INCOMPLETE";
     }).length;

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Scope, UnprocessableEntityException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException, Scope, UnprocessableEntityException } from "@nestjs/common";
 import type {
   CreateScenarioRequestDto,
   ListScenarioAssumptionTemplatesResponseDto,
@@ -62,7 +62,7 @@ export class ScenariosService {
   }
 
   async create(dto: CreateScenarioRequestDto): Promise<ScenarioDto> {
-    const parcelAnchor = await this.resolveScenarioParcelAnchor(dto.parcelId ?? null, dto.parcelGroupId ?? null);
+    const parcelAnchor = await this.resolveScenarioParcelAnchor(dto.parcelId ?? null, dto.parcelGroupId ?? null, true);
     const created = await this.prisma.scenario.create({
       data: {
         organizationId: this.requestContext.organizationId,
@@ -113,6 +113,7 @@ export class ScenariosService {
     const parcelAnchor = await this.resolveScenarioParcelAnchor(
       dto.parcelId === undefined ? undefined : dto.parcelId,
       dto.parcelGroupId === undefined ? undefined : dto.parcelGroupId,
+      true,
     );
 
     await this.prisma.scenario.update({
@@ -338,7 +339,11 @@ export class ScenariosService {
     return scenario;
   }
 
-  private async resolveScenarioParcelAnchor(parcelId: string | null | undefined, parcelGroupId: string | null | undefined) {
+  private async resolveScenarioParcelAnchor(
+    parcelId: string | null | undefined,
+    parcelGroupId: string | null | undefined,
+    rejectGroupedMemberWrite = false,
+  ) {
     if (parcelId === undefined) {
       return {
         parcelId: undefined,
@@ -364,7 +369,15 @@ export class ScenariosService {
         isGroupSite: true,
         parcelGroup: {
           select: {
+            id: true,
+            name: true,
             siteParcelId: true,
+            siteParcel: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
@@ -375,6 +388,15 @@ export class ScenariosService {
     }
 
     if (parcel.parcelGroupId && !parcel.isGroupSite) {
+      if (rejectGroupedMemberWrite) {
+        throw new ConflictException({
+          code: "GROUPED_SITE_WRITE_REQUIRED",
+          message: `This parcel is a grouped-site member. Create or update scenarios against ${parcel.parcelGroup?.siteParcel?.name ?? parcel.parcelGroup?.name ?? "the grouped site"} instead.`,
+          siteParcelId: parcel.parcelGroup?.siteParcel?.id ?? parcel.parcelGroup?.siteParcelId ?? null,
+          parcelGroupId: parcel.parcelGroupId,
+        });
+      }
+
       return {
         parcelId: parcel.parcelGroup?.siteParcelId ?? parcel.id,
         parcelGroupId: parcel.parcelGroupId,

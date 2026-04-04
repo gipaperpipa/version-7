@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, Scope } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import type {
   ListPlanningParametersResponseDto,
   PlanningParameterDto,
@@ -44,7 +44,7 @@ export class PlanningParametersService {
   }
 
   async createForParcel(parcelId: string, dto: UpsertPlanningParameterRequestDto): Promise<PlanningParameterDto> {
-    const parcel = await this.assertParcelAccess(parcelId);
+    const parcel = await this.assertWritableParcelAccess(parcelId);
     const key = this.resolveKey(dto);
 
     const created = await this.prisma.planningParameter.create({
@@ -75,7 +75,7 @@ export class PlanningParametersService {
   }
 
   async updateForParcel(parcelId: string, planningParameterId: string, dto: UpsertPlanningParameterRequestDto) {
-    const parcel = await this.assertParcelAccess(parcelId);
+    const parcel = await this.assertWritableParcelAccess(parcelId);
     const existing = await this.prisma.planningParameter.findFirst({
       where: {
         id: planningParameterId,
@@ -143,7 +143,15 @@ export class PlanningParametersService {
         isGroupSite: true,
         parcelGroup: {
           select: {
+            id: true,
+            name: true,
             siteParcelId: true,
+            siteParcel: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
@@ -159,6 +167,21 @@ export class PlanningParametersService {
         ? parcel.parcelGroup?.siteParcelId ?? parcel.id
         : parcel.id,
     };
+  }
+
+  private async assertWritableParcelAccess(parcelId: string) {
+    const parcel = await this.assertParcelAccess(parcelId);
+
+    if (parcel.parcelGroupId && !parcel.isGroupSite) {
+      throw new ConflictException({
+        code: "GROUPED_SITE_WRITE_REQUIRED",
+        message: `This parcel is a grouped-site member. Write planning inputs against ${parcel.parcelGroup?.siteParcel?.name ?? parcel.parcelGroup?.name ?? "the grouped site"} instead.`,
+        siteParcelId: parcel.parcelGroup?.siteParcel?.id ?? parcel.parcelGroup?.siteParcelId ?? null,
+        parcelGroupId: parcel.parcelGroupId,
+      });
+    }
+
+    return parcel;
   }
 
   private resolveKey(dto: UpsertPlanningParameterRequestDto) {
