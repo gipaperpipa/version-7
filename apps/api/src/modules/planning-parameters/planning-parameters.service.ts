@@ -17,12 +17,20 @@ export class PlanningParametersService {
   ) {}
 
   async listForParcel(parcelId: string): Promise<ListPlanningParametersResponseDto> {
-    await this.assertParcelAccess(parcelId);
+    const parcel = await this.assertParcelAccess(parcelId);
 
     const items = await this.prisma.planningParameter.findMany({
       where: {
         parcelId,
         organizationId: this.requestContext.organizationId,
+        ...(parcel.parcelGroupId
+          ? {
+              OR: [
+                { parcelGroupId: parcel.parcelGroupId },
+                { parcelGroupId: null },
+              ],
+            }
+          : {}),
       },
       orderBy: [{ keyNamespace: "asc" }, { keySlug: "asc" }, { createdAt: "desc" }],
     });
@@ -36,13 +44,14 @@ export class PlanningParametersService {
   }
 
   async createForParcel(parcelId: string, dto: UpsertPlanningParameterRequestDto): Promise<PlanningParameterDto> {
-    await this.assertParcelAccess(parcelId);
+    const parcel = await this.assertParcelAccess(parcelId);
     const key = this.resolveKey(dto);
 
     const created = await this.prisma.planningParameter.create({
       data: {
         organizationId: this.requestContext.organizationId,
         parcelId,
+        parcelGroupId: parcel.parcelGroupId,
         planningDocumentId: dto.planningDocumentId ?? null,
         parameterKey: key.parameterKey,
         customKey: key.customKey,
@@ -66,12 +75,20 @@ export class PlanningParametersService {
   }
 
   async updateForParcel(parcelId: string, planningParameterId: string, dto: UpsertPlanningParameterRequestDto) {
-    await this.assertParcelAccess(parcelId);
+    const parcel = await this.assertParcelAccess(parcelId);
     const existing = await this.prisma.planningParameter.findFirst({
       where: {
         id: planningParameterId,
         parcelId,
         organizationId: this.requestContext.organizationId,
+        ...(parcel.parcelGroupId
+          ? {
+              OR: [
+                { parcelGroupId: parcel.parcelGroupId },
+                { parcelGroupId: null },
+              ],
+            }
+          : {}),
       },
     });
 
@@ -91,6 +108,7 @@ export class PlanningParametersService {
     const updated = await this.prisma.planningParameter.update({
       where: { id: planningParameterId },
       data: {
+        parcelGroupId: parcel.parcelGroupId,
         planningDocumentId: dto.planningDocumentId === undefined ? undefined : dto.planningDocumentId,
         parameterKey: key.parameterKey,
         customKey: key.customKey,
@@ -119,12 +137,17 @@ export class PlanningParametersService {
         id: parcelId,
         organizationId: this.requestContext.organizationId,
       },
-      select: { id: true },
+      select: {
+        id: true,
+        parcelGroupId: true,
+      },
     });
 
     if (!parcel) {
       throw new NotFoundException("Parcel not found");
     }
+
+    return parcel;
   }
 
   private resolveKey(dto: UpsertPlanningParameterRequestDto) {

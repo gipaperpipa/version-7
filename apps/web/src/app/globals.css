@@ -1529,12 +1529,13 @@ button {
 .ops-table__header--parcels,
 .ops-table__row--parcels {
   grid-template-columns:
-    minmax(220px, 1.55fr)
-    minmax(110px, 0.72fr)
-    minmax(150px, 0.92fr)
-    minmax(170px, 1fr)
-    minmax(170px, 1fr)
-    minmax(150px, 1.02fr);
+    minmax(220px, 1.45fr)
+    minmax(110px, 0.7fr)
+    minmax(140px, 0.82fr)
+    minmax(150px, 0.88fr)
+    minmax(130px, 0.75fr)
+    minmax(180px, 1.04fr)
+    minmax(140px, 0.84fr);
 }
 
 .ops-table__header--scenarios,

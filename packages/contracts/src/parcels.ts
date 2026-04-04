@@ -122,6 +122,10 @@ export interface SourceParcelSearchResultDto {
   sourceReference: string;
   hasGeometry: boolean;
   hasLandArea: boolean;
+  workspaceState: "NEW" | "STANDALONE_PARCEL" | "GROUPED_SITE_MEMBER";
+  existingParcelId: Id | null;
+  existingSiteParcelId: Id | null;
+  existingSiteName: string | null;
   rawMetadata: Record<string, unknown> | null;
 }
 

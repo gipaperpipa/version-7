@@ -88,6 +88,12 @@ function getParcelSelectionLabel(parcel: ParcelDto) {
   return `${base} / source-backed`;
 }
 
+function getParcelSelectionRank(parcel: ParcelDto) {
+  if (parcel.isGroupSite) return 0;
+  if (parcel.provenance?.trustMode === "SOURCE_PRIMARY" || parcel.provenance?.trustMode === "SOURCE_INCOMPLETE") return 1;
+  return 2;
+}
+
 export function ScenarioEditorForm({
   action,
   parcels,
@@ -116,6 +122,17 @@ export function ScenarioEditorForm({
   const selectedParcel = useMemo(
     () => parcels.find((parcel) => parcel.id === selectedParcelId) ?? null,
     [parcels, selectedParcelId],
+  );
+  const sortedParcels = useMemo(
+    () => [...parcels].sort((left, right) => {
+      const rankDiff = getParcelSelectionRank(left) - getParcelSelectionRank(right);
+      if (rankDiff !== 0) return rankDiff;
+
+      const leftLabel = left.name ?? left.cadastralId ?? left.id;
+      const rightLabel = right.name ?? right.cadastralId ?? right.id;
+      return leftLabel.localeCompare(rightLabel);
+    }),
+    [parcels],
   );
   const selectedParcelSignal = selectedParcel
     ? selectedParcel.isGroupSite
@@ -347,7 +364,7 @@ export function ScenarioEditorForm({
 
             <div className="field-stack">
               <div className="field-row">
-                <Label htmlFor="parcelId">Linked parcel</Label>
+                <Label htmlFor="parcelId">Linked site</Label>
                 <FieldTag requiredNow />
               </div>
               <select
@@ -357,15 +374,15 @@ export function ScenarioEditorForm({
                 onChange={(event) => setSelectedParcelId(event.target.value)}
                 className="ui-select"
               >
-                <option value="">Select parcel</option>
-                {parcels.map((parcel) => (
+                <option value="">Select parcel or grouped site</option>
+                {sortedParcels.map((parcel) => (
                   <option key={parcel.id} value={parcel.id}>
                     {getParcelSelectionLabel(parcel)}
                   </option>
                 ))}
               </select>
               <input type="hidden" name="parcelGroupId" value={selectedParcel?.parcelGroupId ?? initialScenario?.parcelGroupId ?? ""} />
-              <div className="field-help">Keep the case tied to the source-backed parcel or grouped site that will carry into planning and feasibility.</div>
+              <div className="field-help">Grouped sites and source-backed parcels are listed first so the case stays tied to sourced site identity before feasibility work begins.</div>
             </div>
 
             <div className="field-stack">

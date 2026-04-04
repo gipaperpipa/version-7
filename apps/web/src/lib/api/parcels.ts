@@ -97,6 +97,37 @@ function normalizeParcel(parcel: Partial<ParcelDto>): ParcelDto {
   };
 }
 
+function normalizeSourceParcelResult(
+  item: Partial<SearchSourceParcelsResponseDto["items"][number]>,
+): SearchSourceParcelsResponseDto["items"][number] {
+  return {
+    id: item.id ?? "",
+    providerName: item.providerName ?? "Source",
+    providerParcelId: item.providerParcelId ?? "",
+    displayName: item.displayName ?? "Source parcel",
+    cadastralId: item.cadastralId ?? null,
+    addressLine1: item.addressLine1 ?? null,
+    city: item.city ?? null,
+    postalCode: item.postalCode ?? null,
+    stateCode: item.stateCode ?? null,
+    countryCode: item.countryCode ?? "DE",
+    municipalityName: item.municipalityName ?? null,
+    districtName: item.districtName ?? null,
+    landAreaSqm: item.landAreaSqm ?? null,
+    confidenceScore: item.confidenceScore ?? null,
+    geom: item.geom ?? null,
+    centroid: item.centroid ?? null,
+    sourceReference: item.sourceReference ?? "",
+    hasGeometry: Boolean(item.hasGeometry),
+    hasLandArea: Boolean(item.hasLandArea),
+    workspaceState: item.workspaceState ?? "NEW",
+    existingParcelId: item.existingParcelId ?? null,
+    existingSiteParcelId: item.existingSiteParcelId ?? null,
+    existingSiteName: item.existingSiteName ?? null,
+    rawMetadata: item.rawMetadata ?? null,
+  };
+}
+
 export async function getParcels(orgSlug: string) {
   const response = await apiFetch<ListParcelsResponseDto>(orgSlug, "/api/v1/parcels");
   return {
@@ -124,7 +155,10 @@ export function searchSourceParcels(
   if (params.limit) search.set("limit", String(params.limit));
 
   const suffix = search.size ? `?${search.toString()}` : "";
-  return apiFetch<SearchSourceParcelsResponseDto>(orgSlug, `/api/v1/parcels/source/search${suffix}`);
+  return apiFetch<SearchSourceParcelsResponseDto>(orgSlug, `/api/v1/parcels/source/search${suffix}`).then((response) => ({
+    ...response,
+    items: Array.isArray(response.items) ? response.items.map((item) => normalizeSourceParcelResult(item)) : [],
+  }));
 }
 
 export function intakeSourceParcels(

@@ -24,6 +24,34 @@ function getGeometryStateBadge(hasGeometry: boolean, hasLandArea: boolean) {
   return <StatusBadge tone="danger">Source thin</StatusBadge>;
 }
 
+function getWorkspaceStateBadge(
+  workspaceState: Awaited<ReturnType<typeof searchSourceParcels>>["items"][number]["workspaceState"],
+) {
+  switch (workspaceState) {
+    case "STANDALONE_PARCEL":
+      return <StatusBadge tone="accent">Already in workspace</StatusBadge>;
+    case "GROUPED_SITE_MEMBER":
+      return <StatusBadge tone="warning">Grouped site member</StatusBadge>;
+    default:
+      return <StatusBadge tone="success">New to intake</StatusBadge>;
+  }
+}
+
+function getWorkspaceStateDetail(
+  item: Awaited<ReturnType<typeof searchSourceParcels>>["items"][number],
+) {
+  switch (item.workspaceState) {
+    case "STANDALONE_PARCEL":
+      return "This source parcel already exists as a standalone site record.";
+    case "GROUPED_SITE_MEMBER":
+      return item.existingSiteName
+        ? `Already folded into ${item.existingSiteName}. Reuse that grouped site.`
+        : "Already folded into an existing grouped site.";
+    default:
+      return "Ready to ingest into the workspace.";
+  }
+}
+
 export default async function NewParcelPage({
   params,
   searchParams,
@@ -151,6 +179,9 @@ export default async function NewParcelPage({
 
     const action = ingestSourceParcelsAction.bind(null, orgSlug);
     const sourceReadyCount = sourceResults.items.filter((item) => item.hasGeometry && item.hasLandArea).length;
+    const newCandidateCount = sourceResults.items.filter((item) => item.workspaceState === "NEW").length;
+    const existingStandaloneCount = sourceResults.items.filter((item) => item.workspaceState === "STANDALONE_PARCEL").length;
+    const groupedMemberCount = sourceResults.items.filter((item) => item.workspaceState === "GROUPED_SITE_MEMBER").length;
 
     return (
       <div className="workspace-page content-stack">
@@ -162,6 +193,8 @@ export default async function NewParcelPage({
             <div className="action-row">
               <span className="meta-chip">{sourceResults.total} source candidates shown</span>
               <span className="meta-chip">{sourceReadyCount} geometry-ready</span>
+              <span className="meta-chip">{newCandidateCount} new to intake</span>
+              <span className="meta-chip">{groupedMemberCount} already grouped</span>
               <span className="meta-chip">{existingParcels.total} parcels already in workspace</span>
             </div>
           )}
@@ -199,9 +232,9 @@ export default async function NewParcelPage({
           tone="accent"
           size="compact"
         >
-          <div className="ops-summary-grid ops-summary-grid--planning">
-            <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Source-selected</div>
+            <div className="ops-summary-grid ops-summary-grid--planning">
+              <div className="ops-summary-item">
+                <div className="ops-summary-item__label">Source-selected</div>
               <div className="ops-summary-item__value">Primary</div>
               <div className="ops-summary-item__detail">Parcel geometry and area come from source-backed intake.</div>
             </div>
@@ -210,18 +243,18 @@ export default async function NewParcelPage({
               <div className="ops-summary-item__value">Automatic</div>
               <div className="ops-summary-item__detail">No parcel drawing required.</div>
             </div>
-            <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Multi-parcel site</div>
-              <div className="ops-summary-item__value">Supported</div>
-              <div className="ops-summary-item__detail">Select multiple parcels to build a grouped site foundation.</div>
+              <div className="ops-summary-item">
+                <div className="ops-summary-item__label">Multi-parcel site</div>
+                <div className="ops-summary-item__value">Supported</div>
+                <div className="ops-summary-item__detail">Select multiple parcels to build a grouped site foundation.</div>
+              </div>
+              <div className="ops-summary-item">
+                <div className="ops-summary-item__label">Workspace collisions</div>
+                <div className="ops-summary-item__value">{existingStandaloneCount + groupedMemberCount}</div>
+                <div className="ops-summary-item__detail">Already-ingested parcels are surfaced before a second site identity is created.</div>
+              </div>
             </div>
-            <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Manual entry</div>
-              <div className="ops-summary-item__value">Fallback</div>
-              <div className="ops-summary-item__detail">Available for source gaps or testing only.</div>
-            </div>
-          </div>
-        </SectionCard>
+          </SectionCard>
 
         <div className="detail-grid">
           <div className="content-stack">
@@ -272,7 +305,7 @@ export default async function NewParcelPage({
               className="index-surface index-surface--ledger"
               eyebrow="Source candidates"
               title="Select parcels to ingest"
-              description="Single selection creates a source parcel. Multi-selection creates a grouped site foundation with derived combined area."
+              description="Single selection creates or reopens a source parcel. Multi-selection creates a grouped site foundation with derived combined area when the selected parcels are not already bound to another site."
               size="compact"
             >
               {sourceResults.items.length ? (
@@ -297,6 +330,7 @@ export default async function NewParcelPage({
                       <div>Source</div>
                       <div>Geometry</div>
                       <div>Confidence</div>
+                      <div>Workspace</div>
                       <div>Select</div>
                     </div>
                     {sourceResults.items.map((item) => (
@@ -356,11 +390,36 @@ export default async function NewParcelPage({
                           </div>
                         </div>
 
+                        <div className="ops-table__cell">
+                          <div className="ops-cell-stack">
+                            <div className="ops-scan__label">Workspace</div>
+                            <div className="action-row">
+                              {getWorkspaceStateBadge(item.workspaceState)}
+                            </div>
+                            <div className="ops-scan__detail">{getWorkspaceStateDetail(item)}</div>
+                          </div>
+                        </div>
+
                         <div className="ops-table__actions ops-table__actions--dense">
-                          <label className="field-row">
-                            <input type="checkbox" name="sourceParcelId" value={item.id} />
-                            <span className="field-help">Select</span>
-                          </label>
+                          {item.workspaceState === "GROUPED_SITE_MEMBER" ? (
+                            item.existingSiteParcelId ? (
+                              <Link
+                                className={buttonClasses({ variant: "secondary", size: "sm" })}
+                                href={`/${orgSlug}/parcels/${item.existingSiteParcelId}`}
+                              >
+                                Open site
+                              </Link>
+                            ) : (
+                              <StatusBadge tone="warning">Locked</StatusBadge>
+                            )
+                          ) : (
+                            <label className="field-row">
+                              <input type="checkbox" name="sourceParcelId" value={item.id} />
+                              <span className="field-help">
+                                {item.workspaceState === "STANDALONE_PARCEL" ? "Reuse parcel" : "Select"}
+                              </span>
+                            </label>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -424,6 +483,7 @@ export default async function NewParcelPage({
                 <div>Each selected parcel is stored with its source identifier and provenance.</div>
                 <div>A grouped site parcel is derived automatically so planning and scenarios can continue without manual geometry authoring.</div>
                 <div>The grouped site detail links back to the included constituent parcels.</div>
+                <div>Parcels that already belong to another grouped site stay locked to that existing site identity for now.</div>
               </div>
             </SectionCard>
 

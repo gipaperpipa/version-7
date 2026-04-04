@@ -78,6 +78,10 @@ function buildGroupDerivedProvenance(
   mergedGeom: ParcelDto["geom"],
   combinedAreaSqm: string | null,
 ) {
+  const sourceSelectionIds = sourceParcels
+    .map((item) => `${item.providerName}::${item.providerParcelId}`)
+    .sort((left, right) => left.localeCompare(right));
+
   return {
     providerName: "Merged source parcel set",
     providerParcelId: null,
@@ -86,7 +90,7 @@ function buildGroupDerivedProvenance(
     areaDerived: Boolean(combinedAreaSqm),
     rawMetadata: {
       intakeMode: "MULTI_PARCEL_SOURCE_GROUP",
-      sourceParcelIds: sourceParcels.map((item) => item.providerParcelId),
+      sourceParcelIds: sourceSelectionIds,
       providerNames: Array.from(new Set(sourceParcels.map((item) => item.providerName))),
     },
   };
@@ -108,6 +112,16 @@ function buildGroupName(sourceParcels: SourceParcelSearchResultDto[], siteName?:
 
   const municipality = sourceParcels[0]?.municipalityName ?? sourceParcels[0]?.city ?? "Site";
   return `${municipality} assembled site`;
+}
+
+function buildSourceSelectionSignature(
+  sourceParcels: Array<Pick<SourceParcelSearchResultDto, "providerName" | "providerParcelId">>,
+) {
+  const parts = sourceParcels
+    .map((item) => `${item.providerName}::${item.providerParcelId}`)
+    .sort((left, right) => left.localeCompare(right));
+
+  return `source-group:${parts.join("+")}`;
 }
 
 @Injectable({ scope: Scope.REQUEST })
@@ -158,7 +172,85 @@ export class ParcelsService {
   }
 
   async searchSource(query?: string | null, municipality?: string | null, limit = 12): Promise<SearchSourceParcelsResponseDto> {
-    return searchSourceParcels(query, municipality, limit);
+    const results = searchSourceParcels(query, municipality, limit);
+    if (!results.items.length) {
+      return results;
+    }
+
+    const existingMatches = await this.prisma.parcel.findMany({
+      where: {
+        organizationId: this.requestContext.organizationId,
+        OR: results.items.map((item) => ({
+          sourceProviderName: item.providerName,
+          sourceProviderParcelId: item.providerParcelId,
+        })),
+      },
+      select: {
+        id: true,
+        sourceProviderName: true,
+        sourceProviderParcelId: true,
+        parcelGroupId: true,
+        isGroupSite: true,
+        parcelGroup: {
+          select: {
+            id: true,
+            name: true,
+            siteParcelId: true,
+            siteParcel: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const matchesBySourceKey = new Map<string, typeof existingMatches>();
+    for (const match of existingMatches) {
+      const key = `${match.sourceProviderName ?? ""}::${match.sourceProviderParcelId ?? ""}`;
+      const bucket = matchesBySourceKey.get(key) ?? [];
+      bucket.push(match);
+      matchesBySourceKey.set(key, bucket);
+    }
+
+    return {
+      ...results,
+      items: results.items.map((item) => {
+        const matches = matchesBySourceKey.get(`${item.providerName}::${item.providerParcelId}`) ?? [];
+        const groupedMember = matches.find((match) => !match.isGroupSite && Boolean(match.parcelGroupId)) ?? null;
+        const standalone = matches.find((match) => !match.isGroupSite && !match.parcelGroupId) ?? null;
+
+        if (groupedMember) {
+          return {
+            ...item,
+            workspaceState: "GROUPED_SITE_MEMBER" as const,
+            existingParcelId: groupedMember.id,
+            existingSiteParcelId: groupedMember.parcelGroup?.siteParcel?.id ?? groupedMember.parcelGroup?.siteParcelId ?? null,
+            existingSiteName: groupedMember.parcelGroup?.siteParcel?.name ?? groupedMember.parcelGroup?.name ?? null,
+          };
+        }
+
+        if (standalone) {
+          return {
+            ...item,
+            workspaceState: "STANDALONE_PARCEL" as const,
+            existingParcelId: standalone.id,
+            existingSiteParcelId: null,
+            existingSiteName: null,
+          };
+        }
+
+        return {
+          ...item,
+          workspaceState: "NEW" as const,
+          existingParcelId: null,
+          existingSiteParcelId: null,
+          existingSiteName: null,
+        };
+      }),
+    };
   }
 
   async create(dto: CreateParcelRequestDto): Promise<ParcelDto> {
@@ -210,8 +302,49 @@ export class ParcelsService {
       throw new BadRequestException("One or more selected source parcels are no longer available.");
     }
 
+    const selectionSignature = buildSourceSelectionSignature(sourceParcels);
+
     if (sourceParcels.length === 1) {
       const sourceParcel = sourceParcels[0];
+      const groupedMember = await this.prisma.parcel.findFirst({
+        where: {
+          organizationId: this.requestContext.organizationId,
+          sourceProviderName: sourceParcel.providerName,
+          sourceProviderParcelId: sourceParcel.providerParcelId,
+          parcelGroupId: { not: null },
+          isGroupSite: false,
+        },
+        include: {
+          parcelGroup: {
+            include: {
+              siteParcel: {
+                include: {
+                  parcelGroup: {
+                    include: {
+                      parcels: {
+                        where: { isGroupSite: false },
+                        orderBy: { createdAt: "asc" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (groupedMember?.parcelGroup?.siteParcel) {
+        const mappedExistingSite = this.mapParcel(groupedMember.parcelGroup.siteParcel);
+        return {
+          primaryParcel: mappedExistingSite,
+          createdParcels: Array.isArray(groupedMember.parcelGroup.siteParcel.parcelGroup?.parcels)
+            ? groupedMember.parcelGroup.siteParcel.parcelGroup.parcels.map((item: any) => this.mapParcel(item))
+            : [],
+          parcelGroup: mappedExistingSite.parcelGroup,
+        };
+      }
+
       const existing = await this.prisma.parcel.findFirst({
         where: {
           organizationId: this.requestContext.organizationId,
@@ -283,6 +416,86 @@ export class ParcelsService {
       };
     }
 
+    const existingGroup = await this.prisma.parcelGroup.findFirst({
+      where: {
+        organizationId: this.requestContext.organizationId,
+        sourceReference: selectionSignature,
+      },
+      include: {
+        siteParcel: {
+          include: {
+            parcelGroup: {
+              include: {
+                parcels: {
+                  where: { isGroupSite: false },
+                  orderBy: { createdAt: "asc" },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (existingGroup?.siteParcel) {
+      const mappedExistingSite = this.mapParcel(existingGroup.siteParcel);
+      return {
+        primaryParcel: mappedExistingSite,
+        createdParcels: Array.isArray(existingGroup.siteParcel.parcelGroup?.parcels)
+          ? existingGroup.siteParcel.parcelGroup.parcels.map((item: any) => this.mapParcel(item))
+          : [],
+        parcelGroup: mappedExistingSite.parcelGroup,
+      };
+    }
+
+    const existingSelectedParcels = await this.prisma.parcel.findMany({
+      where: {
+        organizationId: this.requestContext.organizationId,
+        OR: sourceParcels.map((item) => ({
+          sourceProviderName: item.providerName,
+          sourceProviderParcelId: item.providerParcelId,
+        })),
+      },
+      select: {
+        id: true,
+        name: true,
+        sourceProviderName: true,
+        sourceProviderParcelId: true,
+        parcelGroupId: true,
+        isGroupSite: true,
+        parcelGroup: {
+          select: {
+            id: true,
+            name: true,
+            siteParcelId: true,
+            siteParcel: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const groupedMembers = existingSelectedParcels.filter((item) => !item.isGroupSite && Boolean(item.parcelGroupId));
+    if (groupedMembers.length) {
+      const siteName = groupedMembers[0].parcelGroup?.siteParcel?.name
+        ?? groupedMembers[0].parcelGroup?.name
+        ?? "existing grouped site";
+      throw new BadRequestException(
+        `One or more selected source parcels already belong to ${siteName}. Reuse that grouped site instead of creating a second site identity.`,
+      );
+    }
+
+    const existingStandalones = existingSelectedParcels.filter((item) => !item.isGroupSite && !item.parcelGroupId);
+    if (existingStandalones.length) {
+      throw new BadRequestException(
+        "One or more selected source parcels already exist as standalone site records. Multi-parcel site assembly currently requires parcels that have not already been ingested as standalone records.",
+      );
+    }
+
     const mergedGeom = mergeMultiPolygons(sourceParcels.map((item) => item.geom));
     const combinedAreaSqm = toNullableDecimalString(
       sourceParcels.reduce((sum, item) => sum + Number(item.landAreaSqm ?? 0), 0),
@@ -299,7 +512,7 @@ export class ParcelsService {
           name: siteName,
           landAreaSqm: combinedAreaSqm,
           sourceType: SourceType.SYSTEM_DERIVED,
-          sourceReference: `source-group:${sourceParcels.map((item) => item.providerParcelId).join("+")}`,
+          sourceReference: selectionSignature,
           sourceProviderName: "Merged source parcel set",
           confidenceScore: groupConfidence,
           geom: toPrismaJson(mergedGeom),
