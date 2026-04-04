@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException, Scope } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  Scope,
+} from "@nestjs/common";
 import { SourceType } from "@prisma/client";
 import type {
   CreateParcelRequestDto,
@@ -7,18 +13,56 @@ import type {
   ParcelDto,
   ParcelGroupSummaryDto,
   SearchSourceParcelsResponseDto,
+  SourceParcelIntakeConflictCode,
+  SourceParcelIntakeOutcome,
   SourceParcelIntakeResponseDto,
   SourceParcelSearchResultDto,
   UpdateParcelRequestDto,
 } from "../../generated-contracts/parcels";
-import { calculateMultiPolygonAreaSqm, calculateMultiPolygonCentroid, mergeMultiPolygons } from "../../common/geo/geometry-metrics";
+import { calculateMultiPolygonCentroid, mergeMultiPolygons } from "../../common/geo/geometry-metrics";
 import { normalizePolygonGeometryToMultiPolygon } from "../../common/geo/polygon-normalization";
 import { toApiDate, toApiDecimal, toApiJson, toPrismaJson } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";
 import { getSourceParcelsByIds, searchSourceParcels } from "./source-parcel-catalog";
+import {
+  getParcelConfidenceBand,
+  normalizeConfidenceScore,
+  toNullableDecimalString,
+} from "./source-parcel-model";
 
 type ParcelTrustMode = NonNullable<ParcelDto["provenance"]>["trustMode"];
+
+type ExistingParcelMatch = {
+  id: string;
+  name: string | null;
+  sourceProviderName: string | null;
+  sourceProviderParcelId: string | null;
+  parcelGroupId: string | null;
+  isGroupSite: boolean;
+  planningParameters: Array<{
+    id: string;
+    valueNumber: unknown | null;
+    valueBoolean: boolean | null;
+    valueJson: unknown | null;
+    geom: unknown | null;
+  }>;
+  scenarios: Array<{
+    id: string;
+    name: string;
+    status: string;
+    latestRunAt: Date | null;
+  }>;
+  parcelGroup: {
+    id: string;
+    name: string;
+    siteParcelId: string | null;
+    siteParcel: {
+      id: string;
+      name: string | null;
+    } | null;
+  } | null;
+};
 
 function deriveTrustMode({
   sourceType,
@@ -34,10 +78,35 @@ function deriveTrustMode({
   }
 
   if (sourceType === SourceType.SYSTEM_DERIVED) {
-    return "GROUP_DERIVED";
+    return geometryDerived && areaDerived ? "GROUP_DERIVED" : "SOURCE_INCOMPLETE";
   }
 
   return geometryDerived && areaDerived ? "SOURCE_PRIMARY" : "SOURCE_INCOMPLETE";
+}
+
+function hasPlanningValue(item: ExistingParcelMatch["planningParameters"][number]) {
+  return item.valueNumber !== null || item.valueBoolean !== null || item.valueJson !== null || item.geom !== null;
+}
+
+function getDownstreamWorkSummary(match: ExistingParcelMatch) {
+  const planningValueCount = match.planningParameters.filter(hasPlanningValue).length;
+  const scenarios = match.scenarios.map((item) => ({
+    id: item.id,
+    name: item.name,
+    status: item.status as SearchSourceParcelsResponseDto["items"][number]["downstreamWork"]["scenarios"][number]["status"],
+    latestRunAt: item.latestRunAt?.toISOString() ?? null,
+  }));
+
+  return {
+    planningValueCount,
+    scenarioCount: match.scenarios.length,
+    scenarios,
+  };
+}
+
+function hasDownstreamWork(match: ExistingParcelMatch) {
+  const summary = getDownstreamWorkSummary(match);
+  return summary.planningValueCount > 0 || summary.scenarioCount > 0;
 }
 
 function buildManualFallbackProvenance(dto: CreateParcelRequestDto | UpdateParcelRequestDto) {
@@ -69,36 +138,17 @@ function buildSourceParcelProvenance(sourceParcel: SourceParcelSearchResultDto) 
     }),
     geometryDerived: sourceParcel.hasGeometry,
     areaDerived: sourceParcel.hasLandArea,
-    rawMetadata: sourceParcel.rawMetadata,
-  } as const;
-}
-
-function buildGroupDerivedProvenance(
-  sourceParcels: SourceParcelSearchResultDto[],
-  mergedGeom: ParcelDto["geom"],
-  combinedAreaSqm: string | null,
-) {
-  const sourceSelectionIds = sourceParcels
-    .map((item) => `${item.providerName}::${item.providerParcelId}`)
-    .sort((left, right) => left.localeCompare(right));
-
-  return {
-    providerName: "Merged source parcel set",
-    providerParcelId: null,
-    trustMode: "GROUP_DERIVED" as const,
-    geometryDerived: Boolean(mergedGeom),
-    areaDerived: Boolean(combinedAreaSqm),
     rawMetadata: {
-      intakeMode: "MULTI_PARCEL_SOURCE_GROUP",
-      sourceParcelIds: sourceSelectionIds,
-      providerNames: Array.from(new Set(sourceParcels.map((item) => item.providerName))),
+      ...(sourceParcel.rawMetadata ?? {}),
+      sourceReference: sourceParcel.sourceReference,
+      confidenceScore: sourceParcel.confidenceScore,
+      confidenceBand: sourceParcel.confidenceBand,
+      completeness: {
+        hasGeometry: sourceParcel.hasGeometry,
+        hasLandArea: sourceParcel.hasLandArea,
+      },
     },
-  };
-}
-
-function toNullableDecimalString(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return null;
-  return String(Math.round(value * 100) / 100);
+  } as const;
 }
 
 function buildGroupName(sourceParcels: SourceParcelSearchResultDto[], siteName?: string | null) {
@@ -122,6 +172,105 @@ function buildSourceSelectionSignature(
     .sort((left, right) => left.localeCompare(right));
 
   return `source-group:${parts.join("+")}`;
+}
+
+function buildIntakeBadRequest(
+  code: SourceParcelIntakeConflictCode,
+  message: string,
+  extra?: Record<string, unknown>,
+): BadRequestException {
+  return new BadRequestException({ code, message, ...(extra ?? {}) });
+}
+
+function buildIntakeConflict(
+  code: SourceParcelIntakeConflictCode,
+  message: string,
+  extra?: Record<string, unknown>,
+): ConflictException {
+  return new ConflictException({ code, message, ...(extra ?? {}) });
+}
+
+function computeGroupedConfidence(sourceParcels: SourceParcelSearchResultDto[]) {
+  const memberScores = sourceParcels.map((item) => normalizeConfidenceScore(item.confidenceScore) ?? 55);
+  const baseAverage = memberScores.reduce((sum, item) => sum + item, 0) / Math.max(memberScores.length, 1);
+  const missingGeometryCount = sourceParcels.filter((item) => !item.hasGeometry).length;
+  const unresolvedAreaCount = sourceParcels.filter((item) => !item.hasLandArea).length;
+  const incompleteMemberCount = sourceParcels.filter((item) => !item.hasGeometry || !item.hasLandArea).length;
+  const penalties = {
+    missingGeometryPenalty: missingGeometryCount * 8,
+    unresolvedAreaPenalty: unresolvedAreaCount * 6,
+    incompleteSourcePenalty: incompleteMemberCount * 4,
+  };
+  const finalScore = Math.max(
+    25,
+    Math.min(
+      100,
+      Math.round(
+        baseAverage
+        - penalties.missingGeometryPenalty
+        - penalties.unresolvedAreaPenalty
+        - penalties.incompleteSourcePenalty,
+      ),
+    ),
+  );
+
+  return {
+    score: finalScore,
+    band: getParcelConfidenceBand(finalScore),
+    inputs: {
+      memberScores,
+      baseAverage: Math.round(baseAverage * 100) / 100,
+      missingGeometryCount,
+      unresolvedAreaCount,
+      incompleteMemberCount,
+      penalties,
+    },
+  };
+}
+
+function buildGroupDerivedProvenance(args: {
+  sourceParcels: SourceParcelSearchResultDto[];
+  mergedGeom: ParcelDto["geom"];
+  combinedAreaSqm: string | null;
+  selectionSignature: string;
+  unresolvedAreaMemberIds: string[];
+  unresolvedGeometryMemberIds: string[];
+  confidenceScore: number;
+  confidenceBand: ParcelDto["confidenceBand"];
+  confidenceInputs: Record<string, unknown>;
+  migrationMetadata: Record<string, unknown> | null;
+}) {
+  const geometryComplete = args.unresolvedGeometryMemberIds.length === 0 && Boolean(args.mergedGeom);
+  const areaComplete = args.unresolvedAreaMemberIds.length === 0 && Boolean(args.combinedAreaSqm);
+
+  return {
+    providerName: "Merged source parcel set",
+    providerParcelId: null,
+    trustMode: geometryComplete && areaComplete ? "GROUP_DERIVED" as const : "SOURCE_INCOMPLETE" as const,
+    geometryDerived: geometryComplete,
+    areaDerived: areaComplete,
+    rawMetadata: {
+      intakeMode: "MULTI_PARCEL_SOURCE_GROUP",
+      membershipStable: true,
+      normalizedMemberSetSignature: args.selectionSignature,
+      constituentSourceParcelIds: args.sourceParcels
+        .map((item) => `${item.providerName}::${item.providerParcelId}`)
+        .sort((left, right) => left.localeCompare(right)),
+      providerNames: Array.from(new Set(args.sourceParcels.map((item) => item.providerName))),
+      unresolvedAreaMemberIds: args.unresolvedAreaMemberIds,
+      unresolvedGeometryMemberIds: args.unresolvedGeometryMemberIds,
+      partialResolution: {
+        geometryAvailable: Boolean(args.mergedGeom),
+        areaAvailable: Boolean(args.combinedAreaSqm),
+      },
+      confidence: {
+        score: args.confidenceScore,
+        band: args.confidenceBand,
+        ...args.confidenceInputs,
+      },
+      safeMigration: args.migrationMetadata,
+    },
+  };
 }
 
 @Injectable({ scope: Scope.REQUEST })
@@ -187,15 +336,29 @@ export class ParcelsService {
       },
       select: {
         id: true,
+        name: true,
         sourceProviderName: true,
         sourceProviderParcelId: true,
         parcelGroupId: true,
         isGroupSite: true,
-        _count: {
+        planningParameters: {
           select: {
-            planningParameters: true,
-            scenarios: true,
+            id: true,
+            valueNumber: true,
+            valueBoolean: true,
+            valueJson: true,
+            geom: true,
           },
+        },
+        scenarios: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            latestRunAt: true,
+          },
+          orderBy: [{ latestRunAt: "desc" }, { updatedAt: "desc" }],
+          take: 3,
         },
         parcelGroup: {
           select: {
@@ -211,9 +374,9 @@ export class ParcelsService {
           },
         },
       },
-    });
+    }) satisfies ExistingParcelMatch[];
 
-    const matchesBySourceKey = new Map<string, typeof existingMatches>();
+    const matchesBySourceKey = new Map<string, ExistingParcelMatch[]>();
     for (const match of existingMatches) {
       const key = `${match.sourceProviderName ?? ""}::${match.sourceProviderParcelId ?? ""}`;
       const bucket = matchesBySourceKey.get(key) ?? [];
@@ -232,39 +395,46 @@ export class ParcelsService {
           return {
             ...item,
             workspaceState: "GROUPED_SITE_MEMBER" as const,
+            regroupingEligible: false,
+            lockReason: "GROUP_SITE_MEMBERSHIP_STABLE" as const,
             existingParcelId: groupedMember.id,
-            existingSiteParcelId: groupedMember.parcelGroup?.siteParcel?.id ?? groupedMember.parcelGroup?.siteParcelId ?? null,
-            existingSiteName: groupedMember.parcelGroup?.siteParcel?.name ?? groupedMember.parcelGroup?.name ?? null,
-            existingPlanningCount: groupedMember._count?.planningParameters ?? 0,
-            existingScenarioCount: groupedMember._count?.scenarios ?? 0,
-            canAssembleIntoSite: false,
+            existingSite: groupedMember.parcelGroup
+              ? {
+                  id: groupedMember.parcelGroup.id,
+                  name: groupedMember.parcelGroup.siteParcel?.name ?? groupedMember.parcelGroup.name,
+                  siteParcelId: groupedMember.parcelGroup.siteParcel?.id ?? groupedMember.parcelGroup.siteParcelId ?? null,
+                }
+              : null,
+            downstreamWork: getDownstreamWorkSummary(groupedMember),
           };
         }
 
         if (standalone) {
-          const existingPlanningCount = standalone._count?.planningParameters ?? 0;
-          const existingScenarioCount = standalone._count?.scenarios ?? 0;
+          const downstreamWork = getDownstreamWorkSummary(standalone);
+          const locked = downstreamWork.planningValueCount > 0 || downstreamWork.scenarioCount > 0;
           return {
             ...item,
-            workspaceState: "STANDALONE_PARCEL" as const,
+            workspaceState: locked ? "EXISTING_STANDALONE_LOCKED" as const : "EXISTING_STANDALONE_REUSABLE" as const,
+            regroupingEligible: true,
+            lockReason: locked ? "DOWNSTREAM_WORK_PRESENT" as const : "NONE" as const,
             existingParcelId: standalone.id,
-            existingSiteParcelId: null,
-            existingSiteName: null,
-            existingPlanningCount,
-            existingScenarioCount,
-            canAssembleIntoSite: existingPlanningCount === 0 && existingScenarioCount === 0,
+            existingSite: null,
+            downstreamWork,
           };
         }
 
         return {
           ...item,
           workspaceState: "NEW" as const,
+          regroupingEligible: true,
+          lockReason: "NONE" as const,
           existingParcelId: null,
-          existingSiteParcelId: null,
-          existingSiteName: null,
-          existingPlanningCount: 0,
-          existingScenarioCount: 0,
-          canAssembleIntoSite: true,
+          existingSite: null,
+          downstreamWork: {
+            planningValueCount: 0,
+            scenarioCount: 0,
+            scenarios: [],
+          },
         };
       }),
     };
@@ -288,7 +458,7 @@ export class ParcelsService {
         sourceReference: dto.sourceReference ?? null,
         sourceProviderName: dto.sourceProviderName ?? null,
         sourceProviderParcelId: dto.sourceProviderParcelId ?? null,
-        confidenceScore: dto.confidenceScore ?? null,
+        confidenceScore: normalizeConfidenceScore(dto.confidenceScore),
         geom: toPrismaJson(normalizePolygonGeometryToMultiPolygon(dto.geom) ?? null),
         centroid: toPrismaJson(calculateMultiPolygonCentroid(normalizePolygonGeometryToMultiPolygon(dto.geom) ?? null)),
         provenanceJson: toPrismaJson(dto.provenance ?? buildManualFallbackProvenance(dto)),
@@ -311,12 +481,15 @@ export class ParcelsService {
   async intakeFromSource(dto: CreateSourceParcelIntakeRequestDto): Promise<SourceParcelIntakeResponseDto> {
     const sourceParcelIds = Array.from(new Set(dto.sourceParcelIds.filter((item) => item.trim())));
     if (!sourceParcelIds.length) {
-      throw new BadRequestException("At least one source parcel must be selected.");
+      throw buildIntakeBadRequest("EMPTY_SOURCE_SELECTION", "At least one source parcel must be selected.");
     }
 
     const sourceParcels = getSourceParcelsByIds(sourceParcelIds);
     if (sourceParcels.length !== sourceParcelIds.length) {
-      throw new BadRequestException("One or more selected source parcels are no longer available.");
+      throw buildIntakeBadRequest(
+        "SOURCE_RECORD_UNAVAILABLE",
+        "One or more selected source parcels are no longer available.",
+      );
     }
 
     const selectionSignature = buildSourceSelectionSignature(sourceParcels);
@@ -354,6 +527,7 @@ export class ParcelsService {
       if (groupedMember?.parcelGroup?.siteParcel) {
         const mappedExistingSite = this.mapParcel(groupedMember.parcelGroup.siteParcel);
         return {
+          outcome: "REUSED_GROUPED_SITE",
           primaryParcel: mappedExistingSite,
           createdParcels: Array.isArray(groupedMember.parcelGroup.siteParcel.parcelGroup?.parcels)
             ? groupedMember.parcelGroup.siteParcel.parcelGroup.parcels.map((item: any) => this.mapParcel(item))
@@ -385,6 +559,7 @@ export class ParcelsService {
       if (existing) {
         const mappedExisting = this.mapParcel(existing);
         return {
+          outcome: "REUSED_STANDALONE_SOURCE_PARCEL",
           primaryParcel: mappedExisting,
           createdParcels: [mappedExisting],
           parcelGroup: null,
@@ -408,7 +583,7 @@ export class ParcelsService {
           sourceReference: sourceParcel.sourceReference,
           sourceProviderName: sourceParcel.providerName,
           sourceProviderParcelId: sourceParcel.providerParcelId,
-          confidenceScore: sourceParcel.confidenceScore,
+          confidenceScore: normalizeConfidenceScore(sourceParcel.confidenceScore),
           geom: toPrismaJson(sourceParcel.geom),
           centroid: toPrismaJson(sourceParcel.centroid),
           provenanceJson: toPrismaJson(buildSourceParcelProvenance(sourceParcel)),
@@ -427,6 +602,7 @@ export class ParcelsService {
 
       const mappedCreated = this.mapParcel(created);
       return {
+        outcome: "CREATED_STANDALONE_SOURCE_PARCEL",
         primaryParcel: mappedCreated,
         createdParcels: [mappedCreated],
         parcelGroup: null,
@@ -457,12 +633,20 @@ export class ParcelsService {
     if (existingGroup?.siteParcel) {
       const mappedExistingSite = this.mapParcel(existingGroup.siteParcel);
       return {
+        outcome: "REUSED_GROUPED_SITE",
         primaryParcel: mappedExistingSite,
         createdParcels: Array.isArray(existingGroup.siteParcel.parcelGroup?.parcels)
           ? existingGroup.siteParcel.parcelGroup.parcels.map((item: any) => this.mapParcel(item))
           : [],
         parcelGroup: mappedExistingSite.parcelGroup,
       };
+    }
+
+    if (!sourceParcels.some((item) => item.hasGeometry || item.hasLandArea)) {
+      throw buildIntakeBadRequest(
+        "SOURCE_CONTEXT_INCOMPLETE_FOR_GROUP",
+        "The selected source parcels do not contain enough geometry or area context to create a grouped site yet.",
+      );
     }
 
     const existingSelectedParcels = await this.prisma.parcel.findMany({
@@ -480,11 +664,24 @@ export class ParcelsService {
         sourceProviderParcelId: true,
         parcelGroupId: true,
         isGroupSite: true,
-        _count: {
+        planningParameters: {
           select: {
-            planningParameters: true,
-            scenarios: true,
+            id: true,
+            valueNumber: true,
+            valueBoolean: true,
+            valueJson: true,
+            geom: true,
           },
+        },
+        scenarios: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            latestRunAt: true,
+          },
+          orderBy: [{ latestRunAt: "desc" }, { updatedAt: "desc" }],
+          take: 3,
         },
         parcelGroup: {
           select: {
@@ -500,41 +697,73 @@ export class ParcelsService {
           },
         },
       },
-    });
+    }) satisfies ExistingParcelMatch[];
 
     const groupedMembers = existingSelectedParcels.filter((item) => !item.isGroupSite && Boolean(item.parcelGroupId));
     if (groupedMembers.length) {
-      const siteName = groupedMembers[0].parcelGroup?.siteParcel?.name
-        ?? groupedMembers[0].parcelGroup?.name
-        ?? "existing grouped site";
-      throw new BadRequestException(
-        `One or more selected source parcels already belong to ${siteName}. Reuse that grouped site instead of creating a second site identity.`,
+      const site = groupedMembers[0].parcelGroup
+        ? {
+            id: groupedMembers[0].parcelGroup.id,
+            name: groupedMembers[0].parcelGroup.siteParcel?.name ?? groupedMembers[0].parcelGroup.name,
+            siteParcelId: groupedMembers[0].parcelGroup.siteParcel?.id ?? groupedMembers[0].parcelGroup.siteParcelId ?? null,
+          }
+        : null;
+
+      throw buildIntakeConflict(
+        "GROUP_MEMBER_ALREADY_ASSIGNED",
+        `One or more selected source parcels already belong to ${site?.name ?? "an existing grouped site"}. Reuse that grouped site instead of creating a second site identity.`,
+        {
+          parcelIds: groupedMembers.map((item) => item.id),
+          existingSite: site,
+        },
       );
     }
 
     const existingStandalones = existingSelectedParcels.filter((item) => !item.isGroupSite && !item.parcelGroupId);
-    const lockedStandalones = existingStandalones.filter(
-      (item) => (item._count?.planningParameters ?? 0) > 0 || (item._count?.scenarios ?? 0) > 0,
-    );
-    if (lockedStandalones.length) {
-      throw new BadRequestException(
-        "One or more selected source parcels already have planning or scenario work attached. Group them before downstream analysis begins, or keep using them as standalone site records.",
+    const lockedStandalones = existingStandalones.filter((item) => hasDownstreamWork(item));
+
+    if (lockedStandalones.length > 1) {
+      throw buildIntakeConflict(
+        "DOWNSTREAM_RECONCILIATION_REQUIRED",
+        "Multiple selected source parcels already have planning or scenario work attached. Reconcile those workstreams before forming a grouped site.",
+        {
+          parcelIds: lockedStandalones.map((item) => item.id),
+        },
       );
     }
+
+    const safeMigrationCandidate = lockedStandalones[0] ?? null;
     const standaloneBySourceKey = new Map(
       existingStandalones.map((item) => [`${item.sourceProviderName ?? ""}::${item.sourceProviderParcelId ?? ""}`, item]),
     );
 
     const mergedGeom = mergeMultiPolygons(sourceParcels.map((item) => item.geom));
+    const unresolvedAreaMemberIds = sourceParcels
+      .filter((item) => !item.hasLandArea)
+      .map((item) => `${item.providerName}::${item.providerParcelId}`);
+    const unresolvedGeometryMemberIds = sourceParcels
+      .filter((item) => !item.hasGeometry)
+      .map((item) => `${item.providerName}::${item.providerParcelId}`);
     const combinedAreaSqm = toNullableDecimalString(
       sourceParcels.reduce((sum, item) => sum + Number(item.landAreaSqm ?? 0), 0),
     );
-    const groupConfidence = Math.round(
-      sourceParcels.reduce((sum, item) => sum + (item.confidenceScore ?? 70), 0) / sourceParcels.length,
-    );
+    const groupedConfidence = computeGroupedConfidence(sourceParcels);
     const siteName = buildGroupName(sourceParcels, dto.siteName);
 
     const transactionResult = await this.prisma.$transaction(async (transaction) => {
+      const initialGroupProvenance = buildGroupDerivedProvenance({
+        sourceParcels,
+        mergedGeom,
+        combinedAreaSqm,
+        selectionSignature,
+        unresolvedAreaMemberIds,
+        unresolvedGeometryMemberIds,
+        confidenceScore: groupedConfidence.score,
+        confidenceBand: groupedConfidence.band,
+        confidenceInputs: groupedConfidence.inputs,
+        migrationMetadata: null,
+      });
+
       const parcelGroup = await transaction.parcelGroup.create({
         data: {
           organizationId: this.requestContext.organizationId,
@@ -543,10 +772,10 @@ export class ParcelsService {
           sourceType: SourceType.SYSTEM_DERIVED,
           sourceReference: selectionSignature,
           sourceProviderName: "Merged source parcel set",
-          confidenceScore: groupConfidence,
+          confidenceScore: groupedConfidence.score,
           geom: toPrismaJson(mergedGeom),
           centroid: toPrismaJson(calculateMultiPolygonCentroid(mergedGeom)),
-          provenanceJson: toPrismaJson(buildGroupDerivedProvenance(sourceParcels, mergedGeom, combinedAreaSqm)),
+          provenanceJson: toPrismaJson(initialGroupProvenance),
         },
       });
 
@@ -584,7 +813,7 @@ export class ParcelsService {
             sourceReference: sourceParcel.sourceReference,
             sourceProviderName: sourceParcel.providerName,
             sourceProviderParcelId: sourceParcel.providerParcelId,
-            confidenceScore: sourceParcel.confidenceScore,
+            confidenceScore: normalizeConfidenceScore(sourceParcel.confidenceScore),
             geom: toPrismaJson(sourceParcel.geom),
             centroid: toPrismaJson(sourceParcel.centroid),
             provenanceJson: toPrismaJson(buildSourceParcelProvenance(sourceParcel)),
@@ -605,16 +834,19 @@ export class ParcelsService {
           stateCode: sourceParcels[0]?.stateCode ?? null,
           countryCode: sourceParcels[0]?.countryCode ?? "DE",
           municipalityName: sourceParcels[0]?.municipalityName ?? null,
-          districtName: sourceParcels.map((item) => item.districtName).filter((item): item is string => Boolean(item)).join(", ") || null,
+          districtName: sourceParcels
+            .map((item) => item.districtName)
+            .filter((item): item is string => Boolean(item))
+            .join(", ") || null,
           landAreaSqm: combinedAreaSqm,
           sourceType: SourceType.SYSTEM_DERIVED,
           sourceReference: `parcel-group:${parcelGroup.id}`,
           sourceProviderName: "Merged source parcel set",
           sourceProviderParcelId: null,
-          confidenceScore: groupConfidence,
+          confidenceScore: groupedConfidence.score,
           geom: toPrismaJson(mergedGeom),
           centroid: toPrismaJson(calculateMultiPolygonCentroid(mergedGeom)),
-          provenanceJson: toPrismaJson(buildGroupDerivedProvenance(sourceParcels, mergedGeom, combinedAreaSqm)),
+          provenanceJson: toPrismaJson(initialGroupProvenance),
         },
       });
 
@@ -622,6 +854,76 @@ export class ParcelsService {
         where: { id: parcelGroup.id },
         data: { siteParcelId: siteParcel.id },
       });
+
+      let migrationMetadata: Record<string, unknown> | null = null;
+      if (safeMigrationCandidate) {
+        const planningRecords = await transaction.planningParameter.findMany({
+          where: {
+            organizationId: this.requestContext.organizationId,
+            parcelId: safeMigrationCandidate.id,
+          },
+          select: { id: true },
+        });
+        const scenarios = await transaction.scenario.findMany({
+          where: {
+            organizationId: this.requestContext.organizationId,
+            parcelId: safeMigrationCandidate.id,
+          },
+          select: { id: true },
+        });
+
+        await transaction.planningParameter.updateMany({
+          where: {
+            organizationId: this.requestContext.organizationId,
+            parcelId: safeMigrationCandidate.id,
+          },
+          data: {
+            parcelId: siteParcel.id,
+            parcelGroupId: parcelGroup.id,
+          },
+        });
+
+        await transaction.scenario.updateMany({
+          where: {
+            organizationId: this.requestContext.organizationId,
+            parcelId: safeMigrationCandidate.id,
+          },
+          data: {
+            parcelId: siteParcel.id,
+            parcelGroupId: parcelGroup.id,
+          },
+        });
+
+        migrationMetadata = {
+          migratedParcelId: safeMigrationCandidate.id,
+          migratedPlanningParameterIds: planningRecords.map((item) => item.id),
+          migratedScenarioIds: scenarios.map((item) => item.id),
+          migratedAt: new Date().toISOString(),
+          reason: "SAFE_REGROUP_FROM_STANDALONE_SOURCE_PARCEL",
+        };
+
+        const migratedProvenance = buildGroupDerivedProvenance({
+          sourceParcels,
+          mergedGeom,
+          combinedAreaSqm,
+          selectionSignature,
+          unresolvedAreaMemberIds,
+          unresolvedGeometryMemberIds,
+          confidenceScore: groupedConfidence.score,
+          confidenceBand: groupedConfidence.band,
+          confidenceInputs: groupedConfidence.inputs,
+          migrationMetadata,
+        });
+
+        await transaction.parcelGroup.update({
+          where: { id: parcelGroup.id },
+          data: { provenanceJson: toPrismaJson(migratedProvenance) },
+        });
+        await transaction.parcel.update({
+          where: { id: siteParcel.id },
+          data: { provenanceJson: toPrismaJson(migratedProvenance) },
+        });
+      }
 
       const hydratedSiteParcel = await transaction.parcel.findFirst({
         where: {
@@ -645,6 +947,9 @@ export class ParcelsService {
       }
 
       return {
+        outcome: safeMigrationCandidate
+          ? "CREATED_GROUPED_SITE_WITH_SAFE_MIGRATION" as SourceParcelIntakeOutcome
+          : "CREATED_GROUPED_SITE" as SourceParcelIntakeOutcome,
         primaryParcel: this.mapParcel(hydratedSiteParcel),
         createdParcels: Array.isArray(hydratedSiteParcel.parcelGroup?.parcels)
           ? hydratedSiteParcel.parcelGroup.parcels.map((item: any) => this.mapParcel(item))
@@ -653,6 +958,7 @@ export class ParcelsService {
     });
 
     return {
+      outcome: transactionResult.outcome,
       primaryParcel: transactionResult.primaryParcel,
       createdParcels: transactionResult.createdParcels,
       parcelGroup: transactionResult.primaryParcel.parcelGroup,
@@ -708,7 +1014,7 @@ export class ParcelsService {
         sourceReference: dto.sourceReference,
         sourceProviderName: dto.sourceProviderName,
         sourceProviderParcelId: dto.sourceProviderParcelId,
-        confidenceScore: dto.confidenceScore,
+        confidenceScore: dto.confidenceScore === undefined ? undefined : normalizeConfidenceScore(dto.confidenceScore),
         geom: "geom" in dto ? toPrismaJson(normalizedGeom) : undefined,
         centroid: "geom" in dto ? toPrismaJson(calculateMultiPolygonCentroid(normalizedGeom)) : undefined,
         provenanceJson: provenance === undefined ? undefined : toPrismaJson(provenance),
@@ -747,6 +1053,7 @@ export class ParcelsService {
     const memberParcels = Array.isArray(parcelGroup.parcels)
       ? parcelGroup.parcels.filter((item: any) => !item.isGroupSite)
       : [];
+    const confidenceScore = normalizeConfidenceScore(parcelGroup.confidenceScore);
 
     return {
       id: parcelGroup.id,
@@ -756,12 +1063,14 @@ export class ParcelsService {
       siteParcelId: parcelGroup.siteParcelId ?? null,
       sourceType: parcelGroup.sourceType,
       sourceReference: parcelGroup.sourceReference ?? null,
-      confidenceScore: parcelGroup.confidenceScore ?? null,
+      confidenceScore,
+      confidenceBand: getParcelConfidenceBand(confidenceScore),
     };
   }
 
   private mapParcel(parcel: any): ParcelDto {
     const provenance = toApiJson(parcel.provenanceJson as never) as ParcelDto["provenance"] | null;
+    const confidenceScore = normalizeConfidenceScore(parcel.confidenceScore);
     const derivedProvenance = provenance ?? {
       providerName: parcel.sourceProviderName ?? null,
       providerParcelId: parcel.sourceProviderParcelId ?? null,
@@ -778,17 +1087,21 @@ export class ParcelsService {
     const constituentParcels = Array.isArray(parcel.parcelGroup?.parcels)
       ? parcel.parcelGroup.parcels
           .filter((item: any) => !item.isGroupSite)
-          .map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            cadastralId: item.cadastralId,
-            municipalityName: item.municipalityName,
-            landAreaSqm: toApiDecimal(item.landAreaSqm as never),
-            confidenceScore: item.confidenceScore,
-            sourceProviderName: item.sourceProviderName ?? null,
-            sourceProviderParcelId: item.sourceProviderParcelId ?? null,
-            sourceReference: item.sourceReference ?? null,
-          }))
+          .map((item: any) => {
+            const memberConfidenceScore = normalizeConfidenceScore(item.confidenceScore);
+            return {
+              id: item.id,
+              name: item.name,
+              cadastralId: item.cadastralId,
+              municipalityName: item.municipalityName,
+              landAreaSqm: toApiDecimal(item.landAreaSqm as never),
+              confidenceScore: memberConfidenceScore,
+              confidenceBand: getParcelConfidenceBand(memberConfidenceScore),
+              sourceProviderName: item.sourceProviderName ?? null,
+              sourceProviderParcelId: item.sourceProviderParcelId ?? null,
+              sourceReference: item.sourceReference ?? null,
+            };
+          })
       : [];
 
     return {
@@ -810,7 +1123,8 @@ export class ParcelsService {
       sourceReference: parcel.sourceReference,
       sourceProviderName: parcel.sourceProviderName ?? null,
       sourceProviderParcelId: parcel.sourceProviderParcelId ?? null,
-      confidenceScore: parcel.confidenceScore,
+      confidenceScore,
+      confidenceBand: getParcelConfidenceBand(confidenceScore),
       geom: toApiJson(parcel.geom as never),
       centroid: toApiJson(parcel.centroid as never),
       provenance: derivedProvenance,

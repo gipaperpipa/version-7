@@ -1,6 +1,7 @@
 import type {
   CreateSourceParcelIntakeRequestDto,
   ListParcelsResponseDto,
+  ParcelConfidenceBand,
   ParcelGroupMemberDto,
   ParcelGroupSummaryDto,
   ParcelProvenanceDto,
@@ -40,13 +41,21 @@ function deriveLegacyParcelProvenance(parcel: Partial<ParcelDto>): ParcelProvena
 }
 
 function normalizeGroupMember(member: Partial<ParcelGroupMemberDto>): ParcelGroupMemberDto {
+  const confidenceScore = member.confidenceScore ?? null;
   return {
     id: member.id ?? "",
     name: member.name ?? null,
     cadastralId: member.cadastralId ?? null,
     municipalityName: member.municipalityName ?? null,
     landAreaSqm: member.landAreaSqm ?? null,
-    confidenceScore: member.confidenceScore ?? null,
+    confidenceScore,
+    confidenceBand: (member.confidenceBand ?? (confidenceScore != null
+      ? confidenceScore >= 80
+        ? "HIGH"
+        : confidenceScore >= 60
+          ? "MEDIUM"
+          : "LOW"
+      : "UNSCORED")) as ParcelConfidenceBand,
     sourceProviderName: member.sourceProviderName ?? null,
     sourceProviderParcelId: member.sourceProviderParcelId ?? null,
     sourceReference: member.sourceReference ?? null,
@@ -74,6 +83,13 @@ function normalizeParcel(parcel: Partial<ParcelDto>): ParcelDto {
     sourceProviderName: parcel.sourceProviderName ?? null,
     sourceProviderParcelId: parcel.sourceProviderParcelId ?? null,
     confidenceScore: parcel.confidenceScore ?? null,
+    confidenceBand: (parcel.confidenceBand ?? (parcel.confidenceScore != null
+      ? parcel.confidenceScore >= 80
+        ? "HIGH"
+        : parcel.confidenceScore >= 60
+          ? "MEDIUM"
+          : "LOW"
+      : "UNSCORED")) as ParcelConfidenceBand,
     geom: parcel.geom ?? null,
     centroid: parcel.centroid ?? null,
     provenance: parcel.provenance ?? deriveLegacyParcelProvenance(parcel),
@@ -87,6 +103,14 @@ function normalizeParcel(parcel: Partial<ParcelDto>): ParcelDto {
           sourceType: ((parcel.parcelGroup as Partial<ParcelGroupSummaryDto>).sourceType ?? parcel.sourceType ?? "SYSTEM_DERIVED") as SourceType,
           sourceReference: (parcel.parcelGroup as Partial<ParcelGroupSummaryDto>).sourceReference ?? null,
           confidenceScore: (parcel.parcelGroup as Partial<ParcelGroupSummaryDto>).confidenceScore ?? null,
+          confidenceBand: ((parcel.parcelGroup as Partial<ParcelGroupSummaryDto>).confidenceBand
+            ?? ((parcel.parcelGroup as Partial<ParcelGroupSummaryDto>).confidenceScore != null
+              ? (parcel.parcelGroup as Partial<ParcelGroupSummaryDto>).confidenceScore! >= 80
+                ? "HIGH"
+                : (parcel.parcelGroup as Partial<ParcelGroupSummaryDto>).confidenceScore! >= 60
+                  ? "MEDIUM"
+                  : "LOW"
+              : "UNSCORED")) as ParcelConfidenceBand,
         }
       : null,
     constituentParcels: Array.isArray(parcel.constituentParcels)
@@ -100,6 +124,7 @@ function normalizeParcel(parcel: Partial<ParcelDto>): ParcelDto {
 function normalizeSourceParcelResult(
   item: Partial<SearchSourceParcelsResponseDto["items"][number]>,
 ): SearchSourceParcelsResponseDto["items"][number] {
+  const confidenceScore = item.confidenceScore ?? null;
   return {
     id: item.id ?? "",
     providerName: item.providerName ?? "Source",
@@ -114,19 +139,48 @@ function normalizeSourceParcelResult(
     municipalityName: item.municipalityName ?? null,
     districtName: item.districtName ?? null,
     landAreaSqm: item.landAreaSqm ?? null,
-    confidenceScore: item.confidenceScore ?? null,
+    confidenceScore,
+    confidenceBand: (item.confidenceBand ?? (confidenceScore != null
+      ? confidenceScore >= 80
+        ? "HIGH"
+        : confidenceScore >= 60
+          ? "MEDIUM"
+          : "LOW"
+      : "UNSCORED")) as ParcelConfidenceBand,
     geom: item.geom ?? null,
     centroid: item.centroid ?? null,
     sourceReference: item.sourceReference ?? "",
     hasGeometry: Boolean(item.hasGeometry),
     hasLandArea: Boolean(item.hasLandArea),
     workspaceState: item.workspaceState ?? "NEW",
+    regroupingEligible: item.regroupingEligible ?? true,
+    lockReason: item.lockReason ?? "NONE",
     existingParcelId: item.existingParcelId ?? null,
-    existingSiteParcelId: item.existingSiteParcelId ?? null,
-    existingSiteName: item.existingSiteName ?? null,
-    existingPlanningCount: item.existingPlanningCount ?? 0,
-    existingScenarioCount: item.existingScenarioCount ?? 0,
-    canAssembleIntoSite: item.canAssembleIntoSite ?? (item.workspaceState ?? "NEW") !== "GROUPED_SITE_MEMBER",
+    existingSite: item.existingSite
+      ? {
+          id: item.existingSite.id ?? "",
+          name: item.existingSite.name ?? "Grouped site",
+          siteParcelId: item.existingSite.siteParcelId ?? null,
+        }
+      : null,
+    downstreamWork: item.downstreamWork
+      ? {
+          planningValueCount: item.downstreamWork.planningValueCount ?? 0,
+          scenarioCount: item.downstreamWork.scenarioCount ?? 0,
+          scenarios: Array.isArray(item.downstreamWork.scenarios)
+            ? item.downstreamWork.scenarios.map((scenario) => ({
+                id: scenario.id ?? "",
+                name: scenario.name ?? "Scenario",
+                status: scenario.status ?? "DRAFT",
+                latestRunAt: scenario.latestRunAt ?? null,
+              }))
+            : [],
+        }
+      : {
+          planningValueCount: 0,
+          scenarioCount: 0,
+          scenarios: [],
+        },
     rawMetadata: item.rawMetadata ?? null,
   };
 }
@@ -171,5 +225,22 @@ export function intakeSourceParcels(
   return apiFetch<SourceParcelIntakeResponseDto>(orgSlug, "/api/v1/parcels/source/intake", {
     method: "POST",
     body: JSON.stringify(payload),
-  });
+  }).then((response) => ({
+    outcome: response.outcome,
+    primaryParcel: normalizeParcel(response.primaryParcel),
+    createdParcels: Array.isArray(response.createdParcels) ? response.createdParcels.map((parcel) => normalizeParcel(parcel)) : [],
+    parcelGroup: response.parcelGroup
+      ? {
+          id: response.parcelGroup.id ?? "",
+          name: response.parcelGroup.name ?? "Grouped site",
+          memberCount: response.parcelGroup.memberCount ?? 0,
+          combinedLandAreaSqm: response.parcelGroup.combinedLandAreaSqm ?? null,
+          siteParcelId: response.parcelGroup.siteParcelId ?? null,
+          sourceType: (response.parcelGroup.sourceType ?? "SYSTEM_DERIVED") as SourceType,
+          sourceReference: response.parcelGroup.sourceReference ?? null,
+          confidenceScore: response.parcelGroup.confidenceScore ?? null,
+          confidenceBand: (response.parcelGroup.confidenceBand ?? "UNSCORED") as ParcelConfidenceBand,
+        }
+      : null,
+  }));
 }

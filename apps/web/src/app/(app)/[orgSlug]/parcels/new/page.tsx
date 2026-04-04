@@ -28,8 +28,10 @@ function getWorkspaceStateBadge(
   workspaceState: Awaited<ReturnType<typeof searchSourceParcels>>["items"][number]["workspaceState"],
 ) {
   switch (workspaceState) {
-    case "STANDALONE_PARCEL":
-      return <StatusBadge tone="accent">Already in workspace</StatusBadge>;
+    case "EXISTING_STANDALONE_REUSABLE":
+      return <StatusBadge tone="accent">Reusable parcel</StatusBadge>;
+    case "EXISTING_STANDALONE_LOCKED":
+      return <StatusBadge tone="warning">Locked parcel</StatusBadge>;
     case "GROUPED_SITE_MEMBER":
       return <StatusBadge tone="warning">Grouped site member</StatusBadge>;
     default:
@@ -40,16 +42,17 @@ function getWorkspaceStateBadge(
 function getWorkspaceStateDetail(
   item: Awaited<ReturnType<typeof searchSourceParcels>>["items"][number],
 ) {
+  const scenarioPreview = item.downstreamWork.scenarios.length
+    ? ` Latest scenarios: ${item.downstreamWork.scenarios.map((scenario) => scenario.name).join(", ")}.`
+    : "";
   switch (item.workspaceState) {
-    case "STANDALONE_PARCEL":
-      if (item.canAssembleIntoSite) {
-        return "Already in the workspace and still eligible for grouped-site assembly because no downstream work has started.";
-      }
-
-      return `Already in the workspace with ${item.existingPlanningCount} planning value(s) and ${item.existingScenarioCount} scenario(s). Keep using it as a standalone site or regroup before downstream work starts.`;
+    case "EXISTING_STANDALONE_REUSABLE":
+      return "Already in the workspace with no downstream work yet, so the existing parcel identity can be reused inside a grouped site without duplication.";
+    case "EXISTING_STANDALONE_LOCKED":
+      return `Already in the workspace with ${item.downstreamWork.planningValueCount} planning value(s) and ${item.downstreamWork.scenarioCount} scenario(s). If this is the only locked parcel in the selected set, downstream continuity will be re-anchored to the grouped site instead of cloned.${scenarioPreview}`;
     case "GROUPED_SITE_MEMBER":
-      return item.existingSiteName
-        ? `Already folded into ${item.existingSiteName}. Reuse that grouped site.`
+      return item.existingSite?.name
+        ? `Already folded into ${item.existingSite.name}. Group membership is stable in this pass, so reuse that grouped site instead of creating a second site identity.`
         : "Already folded into an existing grouped site.";
     default:
       return "Ready to ingest into the workspace.";
@@ -59,8 +62,12 @@ function getWorkspaceStateDetail(
 function getWorkspaceStateActionLabel(
   item: Awaited<ReturnType<typeof searchSourceParcels>>["items"][number],
 ) {
-  if (item.workspaceState === "STANDALONE_PARCEL") {
-    return item.canAssembleIntoSite ? "Reuse / group" : "Reuse parcel";
+  if (item.workspaceState === "EXISTING_STANDALONE_REUSABLE") {
+    return "Reuse / group";
+  }
+
+  if (item.workspaceState === "EXISTING_STANDALONE_LOCKED") {
+    return "Reuse / migrate";
   }
 
   return "Select";
@@ -71,7 +78,7 @@ export default async function NewParcelPage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string }>;
-  searchParams?: Promise<{ q?: string; municipality?: string; error?: string; message?: string }>;
+  searchParams?: Promise<{ q?: string; municipality?: string; error?: string; errorCode?: string; message?: string }>;
 }) {
   const { orgSlug } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -194,7 +201,8 @@ export default async function NewParcelPage({
     const action = ingestSourceParcelsAction.bind(null, orgSlug);
     const sourceReadyCount = sourceResults.items.filter((item) => item.hasGeometry && item.hasLandArea).length;
     const newCandidateCount = sourceResults.items.filter((item) => item.workspaceState === "NEW").length;
-    const existingStandaloneCount = sourceResults.items.filter((item) => item.workspaceState === "STANDALONE_PARCEL").length;
+    const reusableStandaloneCount = sourceResults.items.filter((item) => item.workspaceState === "EXISTING_STANDALONE_REUSABLE").length;
+    const lockedStandaloneCount = sourceResults.items.filter((item) => item.workspaceState === "EXISTING_STANDALONE_LOCKED").length;
     const groupedMemberCount = sourceResults.items.filter((item) => item.workspaceState === "GROUPED_SITE_MEMBER").length;
 
     return (
@@ -208,8 +216,9 @@ export default async function NewParcelPage({
               <span className="meta-chip">{sourceResults.total} source candidates shown</span>
               <span className="meta-chip">{sourceReadyCount} geometry-ready</span>
               <span className="meta-chip">{newCandidateCount} new to intake</span>
-              <span className="meta-chip">{groupedMemberCount} already grouped</span>
-              <span className="meta-chip">{existingParcels.total} parcels already in workspace</span>
+                <span className="meta-chip">{lockedStandaloneCount} locked</span>
+                <span className="meta-chip">{groupedMemberCount} already grouped</span>
+                <span className="meta-chip">{existingParcels.total} parcels already in workspace</span>
             </div>
           )}
           actions={(
@@ -233,7 +242,13 @@ export default async function NewParcelPage({
 
         {resolvedSearchParams?.error === "source-intake-failed" ? (
           <Alert tone="danger">
-            <AlertTitle>Source intake failed</AlertTitle>
+            <AlertTitle>
+              {resolvedSearchParams.errorCode === "GROUP_MEMBER_ALREADY_ASSIGNED"
+                ? "Selected parcels already belong to another site"
+                : resolvedSearchParams.errorCode === "DOWNSTREAM_RECONCILIATION_REQUIRED"
+                  ? "Selected parcels already have conflicting downstream work"
+                  : "Source intake failed"}
+            </AlertTitle>
             <AlertDescription>{resolvedSearchParams.message ?? "The API rejected the source parcel intake request."}</AlertDescription>
           </Alert>
         ) : null}
@@ -263,9 +278,14 @@ export default async function NewParcelPage({
                 <div className="ops-summary-item__detail">Select multiple parcels to build a grouped site foundation.</div>
               </div>
               <div className="ops-summary-item">
-                <div className="ops-summary-item__label">Workspace collisions</div>
-                <div className="ops-summary-item__value">{existingStandaloneCount + groupedMemberCount}</div>
-                <div className="ops-summary-item__detail">Already-ingested parcels are surfaced before a second site identity is created.</div>
+                <div className="ops-summary-item__label">Reusable standalones</div>
+                <div className="ops-summary-item__value">{reusableStandaloneCount}</div>
+                <div className="ops-summary-item__detail">Already in workspace and safe to reuse without duplication.</div>
+              </div>
+              <div className="ops-summary-item">
+                <div className="ops-summary-item__label">Locked / grouped</div>
+                <div className="ops-summary-item__value">{lockedStandaloneCount + groupedMemberCount}</div>
+                <div className="ops-summary-item__detail">Existing site identity or downstream work will be reused, migrated, or blocked explicitly.</div>
               </div>
             </div>
           </SectionCard>
@@ -409,8 +429,10 @@ export default async function NewParcelPage({
                             <div className="ops-scan__label">Workspace</div>
                             <div className="action-row">
                               {getWorkspaceStateBadge(item.workspaceState)}
-                              {item.workspaceState === "STANDALONE_PARCEL" && item.canAssembleIntoSite ? (
+                              {item.workspaceState === "EXISTING_STANDALONE_REUSABLE" ? (
                                 <StatusBadge tone="accent">Group-ready</StatusBadge>
+                              ) : item.workspaceState === "EXISTING_STANDALONE_LOCKED" ? (
+                                <StatusBadge tone="warning">Safe migrate</StatusBadge>
                               ) : null}
                             </div>
                             <div className="ops-scan__detail">{getWorkspaceStateDetail(item)}</div>
@@ -419,10 +441,10 @@ export default async function NewParcelPage({
 
                         <div className="ops-table__actions ops-table__actions--dense">
                           {item.workspaceState === "GROUPED_SITE_MEMBER" ? (
-                            item.existingSiteParcelId ? (
+                            item.existingSite?.siteParcelId ? (
                               <Link
                                 className={buttonClasses({ variant: "secondary", size: "sm" })}
-                                href={`/${orgSlug}/parcels/${item.existingSiteParcelId}`}
+                                href={`/${orgSlug}/parcels/${item.existingSite.siteParcelId}`}
                               >
                                 Open site
                               </Link>

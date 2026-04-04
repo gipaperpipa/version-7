@@ -28,6 +28,7 @@ export function ProvenanceConfidence({
   const sourceLabel = getSourceLabel(sourceType);
   const band = getConfidenceBand(confidenceScore);
   const trustModeLabel = getTrustModeLabel(provenance?.trustMode);
+  const confidenceLabel = confidenceScore != null ? `Confidence ${band} ${confidenceScore}` : `Confidence ${band}`;
   const referenceItems = [providerParcelId ?? provenance?.providerParcelId ?? null, sourceReference].filter(
     (item): item is string => Boolean(item),
   );
@@ -35,7 +36,7 @@ export function ProvenanceConfidence({
   return (
     <div className={cx("provenance", variant === "inline" && "provenance--inline")}>
       <div className="provenance__line">
-        <Badge variant={getConfidenceTone(band)}>Confidence {band}</Badge>
+        <Badge variant={getConfidenceTone(band)}>{confidenceLabel}</Badge>
         {trustModeLabel ? <span className="meta-chip">{trustModeLabel}</span> : null}
         {providerName ?? provenance?.providerName ? <span className="meta-chip">{providerName ?? provenance?.providerName}</span> : null}
         {!trustModeLabel && sourceLabel ? <span className="meta-chip">{sourceLabel}</span> : null}

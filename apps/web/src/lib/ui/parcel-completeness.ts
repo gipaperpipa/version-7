@@ -77,6 +77,14 @@ function getSourceStatus(parcel: ParcelDto): ParcelCompletenessItem {
   }
 
   if (trustMode === "SOURCE_INCOMPLETE") {
+    if (parcel.isGroupSite) {
+      return {
+        label: "Grouped site incomplete",
+        detail: "This grouped site was assembled from source-backed parcels, but one or more member parcels still have incomplete geometry or area context.",
+        tone: "warning",
+      };
+    }
+
     return {
       label: "Source incomplete",
       detail: hasGeometry || hasLandArea
@@ -87,10 +95,15 @@ function getSourceStatus(parcel: ParcelDto): ParcelCompletenessItem {
   }
 
   if (trustMode === "GROUP_DERIVED" || parcel.isGroupSite) {
+    const unresolvedMembers = Array.isArray(parcel.provenance?.rawMetadata?.unresolvedAreaMemberIds)
+      ? parcel.provenance?.rawMetadata?.unresolvedAreaMemberIds.length
+      : 0;
     return {
       label: "Grouped site",
       detail: parcel.constituentParcels.length
-        ? `Combined site derived from ${parcel.constituentParcels.length} sourced parcel${parcel.constituentParcels.length === 1 ? "" : "s"}.`
+        ? unresolvedMembers
+          ? `Combined site derived from ${parcel.constituentParcels.length} sourced parcel${parcel.constituentParcels.length === 1 ? "" : "s"}, with ${unresolvedMembers} member${unresolvedMembers === 1 ? "" : "s"} still incomplete.`
+          : `Combined site derived from ${parcel.constituentParcels.length} sourced parcel${parcel.constituentParcels.length === 1 ? "" : "s"}.`
         : "Combined site identity is derived from sourced parcel members.",
       tone: hasGeometry && hasLandArea ? "accent" : "warning",
     };

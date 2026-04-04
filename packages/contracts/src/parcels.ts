@@ -7,12 +7,36 @@ import type {
   PointDto,
   PolygonalGeometryDto,
 } from "./common";
-import type { SourceType } from "./enums";
+import type { ScenarioStatus, SourceType } from "./enums";
+
+export type ParcelConfidenceBand = "HIGH" | "MEDIUM" | "LOW" | "UNSCORED";
+export type ParcelTrustMode = "SOURCE_PRIMARY" | "SOURCE_INCOMPLETE" | "GROUP_DERIVED" | "MANUAL_FALLBACK";
+export type SourceParcelWorkspaceState =
+  | "NEW"
+  | "EXISTING_STANDALONE_REUSABLE"
+  | "EXISTING_STANDALONE_LOCKED"
+  | "GROUPED_SITE_MEMBER";
+export type SourceParcelWorkspaceLockReason =
+  | "NONE"
+  | "DOWNSTREAM_WORK_PRESENT"
+  | "GROUP_SITE_MEMBERSHIP_STABLE";
+export type SourceParcelIntakeOutcome =
+  | "CREATED_STANDALONE_SOURCE_PARCEL"
+  | "REUSED_STANDALONE_SOURCE_PARCEL"
+  | "CREATED_GROUPED_SITE"
+  | "REUSED_GROUPED_SITE"
+  | "CREATED_GROUPED_SITE_WITH_SAFE_MIGRATION";
+export type SourceParcelIntakeConflictCode =
+  | "EMPTY_SOURCE_SELECTION"
+  | "SOURCE_RECORD_UNAVAILABLE"
+  | "GROUP_MEMBER_ALREADY_ASSIGNED"
+  | "DOWNSTREAM_RECONCILIATION_REQUIRED"
+  | "SOURCE_CONTEXT_INCOMPLETE_FOR_GROUP";
 
 export interface ParcelProvenanceDto {
   providerName: string | null;
   providerParcelId: string | null;
-  trustMode: "SOURCE_PRIMARY" | "SOURCE_INCOMPLETE" | "GROUP_DERIVED" | "MANUAL_FALLBACK";
+  trustMode: ParcelTrustMode;
   geometryDerived: boolean;
   areaDerived: boolean;
   rawMetadata: Record<string, unknown> | null;
@@ -25,6 +49,7 @@ export interface ParcelGroupMemberDto {
   municipalityName: string | null;
   landAreaSqm: DecimalString | null;
   confidenceScore: number | null;
+  confidenceBand: ParcelConfidenceBand;
   sourceProviderName: string | null;
   sourceProviderParcelId: string | null;
   sourceReference: string | null;
@@ -39,6 +64,7 @@ export interface ParcelGroupSummaryDto {
   sourceType: SourceType;
   sourceReference: string | null;
   confidenceScore: number | null;
+  confidenceBand: ParcelConfidenceBand;
 }
 
 export interface ParcelDto {
@@ -61,6 +87,7 @@ export interface ParcelDto {
   sourceProviderName: string | null;
   sourceProviderParcelId: string | null;
   confidenceScore: number | null;
+  confidenceBand: ParcelConfidenceBand;
   geom: MultiPolygonDto | null;
   centroid: PointDto | null;
   provenance: ParcelProvenanceDto | null;
@@ -102,6 +129,25 @@ export interface UpdateParcelRequestDto extends Omit<Partial<CreateParcelRequest
 
 export type ListParcelsResponseDto = PagedResponseDto<ParcelDto>;
 
+export interface SourceParcelExistingSiteSummaryDto {
+  id: Id;
+  name: string;
+  siteParcelId: Id | null;
+}
+
+export interface SourceParcelScenarioSummaryDto {
+  id: Id;
+  name: string;
+  status: ScenarioStatus;
+  latestRunAt: IsoDateTime | null;
+}
+
+export interface SourceParcelDownstreamWorkSummaryDto {
+  planningValueCount: number;
+  scenarioCount: number;
+  scenarios: SourceParcelScenarioSummaryDto[];
+}
+
 export interface SourceParcelSearchResultDto {
   id: Id;
   providerName: string;
@@ -117,18 +163,18 @@ export interface SourceParcelSearchResultDto {
   districtName: string | null;
   landAreaSqm: DecimalString | null;
   confidenceScore: number | null;
+  confidenceBand: ParcelConfidenceBand;
   geom: MultiPolygonDto | null;
   centroid: PointDto | null;
   sourceReference: string;
   hasGeometry: boolean;
   hasLandArea: boolean;
-  workspaceState: "NEW" | "STANDALONE_PARCEL" | "GROUPED_SITE_MEMBER";
+  workspaceState: SourceParcelWorkspaceState;
+  regroupingEligible: boolean;
+  lockReason: SourceParcelWorkspaceLockReason;
   existingParcelId: Id | null;
-  existingSiteParcelId: Id | null;
-  existingSiteName: string | null;
-  existingPlanningCount: number;
-  existingScenarioCount: number;
-  canAssembleIntoSite: boolean;
+  existingSite: SourceParcelExistingSiteSummaryDto | null;
+  downstreamWork: SourceParcelDownstreamWorkSummaryDto;
   rawMetadata: Record<string, unknown> | null;
 }
 
@@ -139,7 +185,15 @@ export interface CreateSourceParcelIntakeRequestDto {
   siteName?: string | null;
 }
 
+export interface SourceParcelIntakeConflictDto {
+  code: SourceParcelIntakeConflictCode;
+  message: string;
+  parcelIds?: Id[];
+  existingSite?: SourceParcelExistingSiteSummaryDto | null;
+}
+
 export interface SourceParcelIntakeResponseDto {
+  outcome: SourceParcelIntakeOutcome;
   primaryParcel: ParcelDto;
   createdParcels: ParcelDto[];
   parcelGroup: ParcelGroupSummaryDto | null;

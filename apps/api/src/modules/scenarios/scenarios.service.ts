@@ -62,12 +62,13 @@ export class ScenariosService {
   }
 
   async create(dto: CreateScenarioRequestDto): Promise<ScenarioDto> {
+    const parcelAnchor = await this.resolveScenarioParcelAnchor(dto.parcelId ?? null, dto.parcelGroupId ?? null);
     const created = await this.prisma.scenario.create({
       data: {
         organizationId: this.requestContext.organizationId,
         createdById: this.requestContext.userId,
-        parcelId: dto.parcelId ?? null,
-        parcelGroupId: dto.parcelGroupId ?? null,
+        parcelId: parcelAnchor.parcelId,
+        parcelGroupId: parcelAnchor.parcelGroupId,
         name: dto.name,
         description: dto.description ?? null,
         strategyType: dto.strategyType,
@@ -109,12 +110,16 @@ export class ScenariosService {
 
   async update(scenarioId: string, dto: UpdateScenarioRequestDto): Promise<ScenarioDto> {
     const existing = await this.assertScenarioAccess(scenarioId);
+    const parcelAnchor = await this.resolveScenarioParcelAnchor(
+      dto.parcelId === undefined ? undefined : dto.parcelId,
+      dto.parcelGroupId === undefined ? undefined : dto.parcelGroupId,
+    );
 
     await this.prisma.scenario.update({
       where: { id: scenarioId },
       data: {
-        parcelId: dto.parcelId === undefined ? undefined : dto.parcelId,
-        parcelGroupId: dto.parcelGroupId === undefined ? undefined : dto.parcelGroupId,
+        parcelId: parcelAnchor.parcelId,
+        parcelGroupId: parcelAnchor.parcelGroupId,
         name: dto.name,
         description: dto.description === undefined ? undefined : dto.description,
         strategyType: dto.strategyType,
@@ -331,6 +336,55 @@ export class ScenariosService {
     }
 
     return scenario;
+  }
+
+  private async resolveScenarioParcelAnchor(parcelId: string | null | undefined, parcelGroupId: string | null | undefined) {
+    if (parcelId === undefined) {
+      return {
+        parcelId: undefined,
+        parcelGroupId: undefined,
+      };
+    }
+
+    if (!parcelId) {
+      return {
+        parcelId: null,
+        parcelGroupId: parcelGroupId ?? null,
+      };
+    }
+
+    const parcel = await this.prisma.parcel.findFirst({
+      where: {
+        id: parcelId,
+        organizationId: this.requestContext.organizationId,
+      },
+      select: {
+        id: true,
+        parcelGroupId: true,
+        isGroupSite: true,
+        parcelGroup: {
+          select: {
+            siteParcelId: true,
+          },
+        },
+      },
+    });
+
+    if (!parcel) {
+      throw new NotFoundException("Parcel not found");
+    }
+
+    if (parcel.parcelGroupId && !parcel.isGroupSite) {
+      return {
+        parcelId: parcel.parcelGroup?.siteParcelId ?? parcel.id,
+        parcelGroupId: parcel.parcelGroupId,
+      };
+    }
+
+    return {
+      parcelId: parcel.id,
+      parcelGroupId: parcel.parcelGroupId ?? parcelGroupId ?? null,
+    };
   }
 
   private mapScenario(item: ScenarioWithFunding): ScenarioDto {

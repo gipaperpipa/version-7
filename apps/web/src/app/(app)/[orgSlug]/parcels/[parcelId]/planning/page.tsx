@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
 import { buttonClasses } from "@/components/ui/button";
 import { NextStepPanel } from "@/components/ui/next-step-panel";
@@ -24,15 +25,17 @@ export default async function ParcelPlanningPage({
       getPlanningParameters(orgSlug, parcelId),
     ]);
 
-    const action = savePlanningParametersAction.bind(null, orgSlug, parcelId);
     const filledCount = planningParameters.items.filter((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null).length;
     const readinessCount = planningParameters.items.filter((item) => {
       const definition = sprint1PlanningFieldDefinitions.find((candidate) => candidate.keySlug === item.keySlug);
       return Boolean(definition?.affectsReadiness && (item.valueNumber !== null || item.valueBoolean !== null || item.geom));
     }).length;
     const derivedCount = planningParameters.items.filter((item) => item.keySlug === "BUILDABLE_WINDOW").length;
-    const continueHref = `/${orgSlug}/scenarios/new?parcelId=${parcelId}`;
     const memberCount = parcel.parcelGroup?.memberCount ?? parcel.constituentParcels.length;
+    const siteAnchorId = parcel.parcelGroup?.siteParcelId ?? (parcel.isGroupSite ? parcel.id : parcelId);
+    const isGroupedMember = Boolean(parcel.parcelGroupId && !parcel.isGroupSite && parcel.parcelGroup?.siteParcelId);
+    const action = savePlanningParametersAction.bind(null, orgSlug, siteAnchorId);
+    const continueHref = `/${orgSlug}/scenarios/new?parcelId=${siteAnchorId}`;
     const siteBasisLabel = parcel.isGroupSite
       ? `${memberCount} parcel grouped site`
       : parcel.provenance?.providerName ?? "Manual fallback";
@@ -63,6 +66,16 @@ export default async function ParcelPlanningPage({
             </>
           )}
         />
+
+        {isGroupedMember ? (
+          <Alert tone="warning">
+            <AlertTitle>Grouped-site anchor in effect</AlertTitle>
+            <AlertDescription>
+              This constituent parcel is inspectable for provenance, but planning values now save against the grouped site
+              {parcel.parcelGroup?.name ? ` ${parcel.parcelGroup.name}` : ""}.
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         <SectionCard
           className="summary-band summary-band--workspace"

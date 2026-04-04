@@ -25,6 +25,13 @@ function getExistingSourceType(formData: FormData) {
   return Object.values(SourceType).includes(value as SourceType) ? (value as SourceType) : null;
 }
 
+function extractApiErrorCode(error: unknown) {
+  if (!isApiResponseError(error)) return null;
+  if (typeof error.body !== "object" || error.body === null) return null;
+  const code = (error.body as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
 function buildParcelPayload(
   formData: FormData,
   mode: "create" | "update",
@@ -100,6 +107,8 @@ export async function ingestSourceParcelsAction(orgSlug: string, formData: FormD
       const search = new URLSearchParams();
       search.set("error", "source-intake-failed");
       search.set("message", error.message);
+      const errorCode = extractApiErrorCode(error);
+      if (errorCode) search.set("errorCode", errorCode);
       redirect(`/${orgSlug}/parcels/new?${search.toString()}`);
     }
 

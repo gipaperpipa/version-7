@@ -5,7 +5,7 @@ export type ConfidenceBand = "High" | "Medium" | "Low" | "Unscored";
 
 export function getConfidenceBand(score: number | null | undefined): ConfidenceBand {
   if (score == null) return "Unscored";
-  if (score >= 85) return "High";
+  if (score >= 80) return "High";
   if (score >= 60) return "Medium";
   if (score >= 1) return "Low";
   return "Unscored";

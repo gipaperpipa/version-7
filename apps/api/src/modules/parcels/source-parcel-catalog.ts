@@ -1,5 +1,8 @@
 import type { SourceParcelSearchResultDto } from "../../generated-contracts/parcels";
-import { calculateMultiPolygonAreaSqm, calculateMultiPolygonCentroid } from "../../common/geo/geometry-metrics";
+import {
+  buildNormalizedSourceSearchResult,
+  type NormalizedSourceParcelRecord,
+} from "./source-parcel-model";
 
 function rectangle(
   west: number,
@@ -19,35 +22,14 @@ function rectangle(
   };
 }
 
-function buildSourceParcel(record: Omit<SourceParcelSearchResultDto, "centroid" | "hasGeometry" | "hasLandArea" | "rawMetadata" | "sourceReference" | "landAreaSqm" | "workspaceState" | "existingParcelId" | "existingSiteParcelId" | "existingSiteName" | "existingPlanningCount" | "existingScenarioCount" | "canAssembleIntoSite"> & {
-  landAreaSqm?: string | null;
-  metadata?: Record<string, unknown> | null;
-}): SourceParcelSearchResultDto {
-  const derivedArea = record.landAreaSqm ?? (() => {
-    const area = calculateMultiPolygonAreaSqm(record.geom);
-    return area != null ? String(area) : null;
-  })();
-
-  return {
-    ...record,
-    landAreaSqm: derivedArea,
-    centroid: calculateMultiPolygonCentroid(record.geom),
-    sourceReference: `${record.providerName}:${record.providerParcelId}`,
-    hasGeometry: Boolean(record.geom),
-    hasLandArea: Boolean(derivedArea),
-    workspaceState: "NEW",
-    existingParcelId: null,
-    existingSiteParcelId: null,
-    existingSiteName: null,
-    existingPlanningCount: 0,
-    existingScenarioCount: 0,
-    canAssembleIntoSite: true,
-    rawMetadata: record.metadata ?? null,
-  };
+interface SourceParcelProvider {
+  key: string;
+  search(query?: string | null, municipality?: string | null, limit?: number): NormalizedSourceParcelRecord[];
+  getByIds(sourceParcelIds: string[]): NormalizedSourceParcelRecord[];
 }
 
-const SOURCE_PARCELS: SourceParcelSearchResultDto[] = [
-  buildSourceParcel({
+const SOURCE_PARCELS: NormalizedSourceParcelRecord[] = [
+  buildNormalizedSourceSearchResult({
     id: "cadastre-frankfurt-bockenheim-001",
     providerName: "Demo Cadastre Index",
     providerParcelId: "FFM-16-204-7",
@@ -62,13 +44,13 @@ const SOURCE_PARCELS: SourceParcelSearchResultDto[] = [
     districtName: "Bockenheim",
     confidenceScore: 92,
     geom: rectangle(8.6396, 50.11876, 8.64062, 50.11936),
-    metadata: {
+    rawMetadata: {
       sourceSystem: "demo-cadastre",
       zoningHint: "urban mixed-use block",
       intakeMode: "source-search",
     },
   }),
-  buildSourceParcel({
+  buildNormalizedSourceSearchResult({
     id: "cadastre-frankfurt-gallus-002",
     providerName: "Demo Cadastre Index",
     providerParcelId: "FFM-17-119-14",
@@ -83,13 +65,13 @@ const SOURCE_PARCELS: SourceParcelSearchResultDto[] = [
     districtName: "Gallus",
     confidenceScore: 89,
     geom: rectangle(8.65024, 50.10585, 8.65115, 50.10632),
-    metadata: {
+    rawMetadata: {
       sourceSystem: "demo-cadastre",
       zoningHint: "corridor parcel",
       intakeMode: "source-search",
     },
   }),
-  buildSourceParcel({
+  buildNormalizedSourceSearchResult({
     id: "cadastre-frankfurt-ostend-003",
     providerName: "Demo Cadastre Index",
     providerParcelId: "FFM-22-881-3",
@@ -104,13 +86,13 @@ const SOURCE_PARCELS: SourceParcelSearchResultDto[] = [
     districtName: "Ostend",
     confidenceScore: 88,
     geom: rectangle(8.70818, 50.11341, 8.70911, 50.11395),
-    metadata: {
+    rawMetadata: {
       sourceSystem: "demo-cadastre",
       zoningHint: "corner parcel",
       intakeMode: "source-search",
     },
   }),
-  buildSourceParcel({
+  buildNormalizedSourceSearchResult({
     id: "cadastre-berlin-neukoelln-004",
     providerName: "Demo Cadastre Index",
     providerParcelId: "BER-08-442-12",
@@ -125,13 +107,13 @@ const SOURCE_PARCELS: SourceParcelSearchResultDto[] = [
     districtName: "Neukölln",
     confidenceScore: 90,
     geom: rectangle(13.4338, 52.47622, 13.4347, 52.47674),
-    metadata: {
+    rawMetadata: {
       sourceSystem: "demo-cadastre",
       zoningHint: "inner courtyard site",
       intakeMode: "source-search",
     },
   }),
-  buildSourceParcel({
+  buildNormalizedSourceSearchResult({
     id: "cadastre-berlin-moabit-005",
     providerName: "Demo Cadastre Index",
     providerParcelId: "BER-02-113-41",
@@ -146,13 +128,13 @@ const SOURCE_PARCELS: SourceParcelSearchResultDto[] = [
     districtName: "Moabit",
     confidenceScore: 87,
     geom: rectangle(13.34625, 52.52355, 13.34727, 52.52405),
-    metadata: {
+    rawMetadata: {
       sourceSystem: "demo-cadastre",
       zoningHint: "waterfront block edge",
       intakeMode: "source-search",
     },
   }),
-  buildSourceParcel({
+  buildNormalizedSourceSearchResult({
     id: "cadastre-hamburg-altona-006",
     providerName: "Demo Cadastre Index",
     providerParcelId: "HAM-03-781-22",
@@ -167,13 +149,13 @@ const SOURCE_PARCELS: SourceParcelSearchResultDto[] = [
     districtName: "Altona",
     confidenceScore: 84,
     geom: rectangle(9.93428, 53.55248, 9.93525, 53.55296),
-    metadata: {
+    rawMetadata: {
       sourceSystem: "demo-cadastre",
       zoningHint: "station-area parcel",
       intakeMode: "source-search",
     },
   }),
-  buildSourceParcel({
+  buildNormalizedSourceSearchResult({
     id: "cadastre-cologne-ehrenfeld-007",
     providerName: "Demo Cadastre Index",
     providerParcelId: "CGN-07-210-9",
@@ -189,7 +171,7 @@ const SOURCE_PARCELS: SourceParcelSearchResultDto[] = [
     confidenceScore: 82,
     geom: null,
     landAreaSqm: "5180",
-    metadata: {
+    rawMetadata: {
       sourceSystem: "demo-cadastre",
       intakeMode: "source-search",
       geometryStatus: "pending-digitization",
@@ -201,34 +183,46 @@ function includesToken(value: string | null | undefined, token: string) {
   return typeof value === "string" && value.toLowerCase().includes(token);
 }
 
+const demoCadastreProvider: SourceParcelProvider = {
+  key: "demo-cadastre",
+  search(query?: string | null, municipality?: string | null, limit = 12) {
+    const normalizedQuery = query?.trim().toLowerCase() ?? "";
+    const normalizedMunicipality = municipality?.trim().toLowerCase() ?? "";
+
+    return SOURCE_PARCELS.filter((parcel) => {
+      const municipalityMatch = normalizedMunicipality
+        ? includesToken(parcel.municipalityName, normalizedMunicipality) || includesToken(parcel.city, normalizedMunicipality)
+        : true;
+
+      if (!municipalityMatch) {
+        return false;
+      }
+
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      return [
+        parcel.displayName,
+        parcel.providerParcelId,
+        parcel.cadastralId,
+        parcel.addressLine1,
+        parcel.city,
+        parcel.municipalityName,
+        parcel.districtName,
+      ].some((candidate) => includesToken(candidate, normalizedQuery));
+    }).slice(0, Math.max(1, Math.min(limit, 50)));
+  },
+  getByIds(sourceParcelIds: string[]) {
+    const wanted = new Set(sourceParcelIds);
+    return SOURCE_PARCELS.filter((parcel) => wanted.has(parcel.id));
+  },
+};
+
+const PROVIDERS: SourceParcelProvider[] = [demoCadastreProvider];
+
 export function searchSourceParcels(query?: string | null, municipality?: string | null, limit = 12) {
-  const normalizedQuery = query?.trim().toLowerCase() ?? "";
-  const normalizedMunicipality = municipality?.trim().toLowerCase() ?? "";
-
-  const items = SOURCE_PARCELS.filter((parcel) => {
-    const municipalityMatch = normalizedMunicipality
-      ? includesToken(parcel.municipalityName, normalizedMunicipality) || includesToken(parcel.city, normalizedMunicipality)
-      : true;
-
-    if (!municipalityMatch) {
-      return false;
-    }
-
-    if (!normalizedQuery) {
-      return true;
-    }
-
-    return [
-      parcel.displayName,
-      parcel.providerParcelId,
-      parcel.cadastralId,
-      parcel.addressLine1,
-      parcel.city,
-      parcel.municipalityName,
-      parcel.districtName,
-    ].some((candidate) => includesToken(candidate, normalizedQuery));
-  }).slice(0, Math.max(1, Math.min(limit, 50)));
-
+  const items = PROVIDERS.flatMap((provider) => provider.search(query, municipality, limit)).slice(0, Math.max(1, Math.min(limit, 50)));
   return {
     items,
     total: items.length,
@@ -238,6 +232,5 @@ export function searchSourceParcels(query?: string | null, municipality?: string
 }
 
 export function getSourceParcelsByIds(sourceParcelIds: string[]) {
-  const wanted = new Set(sourceParcelIds);
-  return SOURCE_PARCELS.filter((parcel) => wanted.has(parcel.id));
+  return PROVIDERS.flatMap((provider) => provider.getByIds(sourceParcelIds));
 }

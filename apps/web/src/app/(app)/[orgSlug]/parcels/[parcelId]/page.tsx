@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ScenarioDto } from "@repo/contracts";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ParcelEditorForm } from "@/components/parcels/parcel-editor-form";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
 import { buttonClasses } from "@/components/ui/button";
@@ -53,6 +54,10 @@ export default async function ParcelDetailPage({
     const memberCount = parcel.parcelGroup?.memberCount ?? parcel.constituentParcels.length;
     const trustModeLabel = getTrustModeLabel(parcel.provenance?.trustMode);
     const action = updateParcelAction.bind(null, orgSlug, parcelId);
+    const siteAnchorId = parcel.parcelGroup?.siteParcelId ?? (parcel.isGroupSite ? parcel.id : null);
+    const isGroupedMember = Boolean(parcel.parcelGroupId && !parcel.isGroupSite && siteAnchorId);
+    const planningHref = isGroupedMember ? `/${orgSlug}/parcels/${siteAnchorId}/planning` : `/${orgSlug}/parcels/${parcelId}/planning`;
+    const scenarioHref = isGroupedMember ? `/${orgSlug}/scenarios/new?parcelId=${siteAnchorId}` : `/${orgSlug}/scenarios/new?parcelId=${parcelId}`;
     const overrideTitle = parcel.provenance?.trustMode === "MANUAL_FALLBACK"
       ? "Manual parcel edit"
       : "Fallback override";
@@ -77,15 +82,25 @@ export default async function ParcelDetailPage({
           )}
           actions={(
             <>
-              <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels/${parcelId}/planning`}>
+              <Link className={buttonClasses({ variant: "secondary" })} href={planningHref}>
                 Planning inputs
               </Link>
-              <Link className={buttonClasses()} href={`/${orgSlug}/scenarios/new?parcelId=${parcelId}`}>
+              <Link className={buttonClasses()} href={scenarioHref}>
                 New scenario
               </Link>
             </>
           )}
         />
+
+        {isGroupedMember ? (
+          <Alert tone="warning">
+            <AlertTitle>Grouped-site member parcel</AlertTitle>
+            <AlertDescription>
+              This parcel remains inspectable for provenance, but new planning and scenario work now anchors to the grouped site
+              {parcel.parcelGroup?.name ? ` ${parcel.parcelGroup.name}` : ""}.
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         <SectionCard
           className="summary-band summary-band--workspace"
@@ -122,9 +137,9 @@ export default async function ParcelDetailPage({
         <div className="detail-grid detail-grid--decision">
           <ParcelCompletenessSummary
             summary={summary}
-            primaryActionHref={`/${orgSlug}/parcels/${parcelId}/planning`}
+            primaryActionHref={planningHref}
             primaryActionLabel="Review planning"
-            secondaryActionHref={`/${orgSlug}/scenarios/new?parcelId=${parcelId}`}
+            secondaryActionHref={scenarioHref}
             secondaryActionLabel="Create scenario"
           />
 
@@ -136,12 +151,12 @@ export default async function ParcelDetailPage({
             size="compact"
             actions={(
               <>
-                <Link className={buttonClasses()} href={`/${orgSlug}/parcels/${parcelId}/planning`}>
-                  Open planning
-                </Link>
-                <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios/new?parcelId=${parcelId}`}>
-                  Create scenario
-                </Link>
+                  <Link className={buttonClasses()} href={planningHref}>
+                    Open planning
+                  </Link>
+                  <Link className={buttonClasses({ variant: "secondary" })} href={scenarioHref}>
+                    Create scenario
+                  </Link>
               </>
             )}
           />

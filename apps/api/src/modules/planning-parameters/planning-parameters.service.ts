@@ -21,7 +21,7 @@ export class PlanningParametersService {
 
     const items = await this.prisma.planningParameter.findMany({
       where: {
-        parcelId,
+        parcelId: parcel.anchorParcelId,
         organizationId: this.requestContext.organizationId,
         ...(parcel.parcelGroupId
           ? {
@@ -50,7 +50,7 @@ export class PlanningParametersService {
     const created = await this.prisma.planningParameter.create({
       data: {
         organizationId: this.requestContext.organizationId,
-        parcelId,
+        parcelId: parcel.anchorParcelId,
         parcelGroupId: parcel.parcelGroupId,
         planningDocumentId: dto.planningDocumentId ?? null,
         parameterKey: key.parameterKey,
@@ -79,7 +79,7 @@ export class PlanningParametersService {
     const existing = await this.prisma.planningParameter.findFirst({
       where: {
         id: planningParameterId,
-        parcelId,
+        parcelId: parcel.anchorParcelId,
         organizationId: this.requestContext.organizationId,
         ...(parcel.parcelGroupId
           ? {
@@ -140,6 +140,12 @@ export class PlanningParametersService {
       select: {
         id: true,
         parcelGroupId: true,
+        isGroupSite: true,
+        parcelGroup: {
+          select: {
+            siteParcelId: true,
+          },
+        },
       },
     });
 
@@ -147,7 +153,12 @@ export class PlanningParametersService {
       throw new NotFoundException("Parcel not found");
     }
 
-    return parcel;
+    return {
+      ...parcel,
+      anchorParcelId: parcel.parcelGroupId && !parcel.isGroupSite
+        ? parcel.parcelGroup?.siteParcelId ?? parcel.id
+        : parcel.id,
+    };
   }
 
   private resolveKey(dto: UpsertPlanningParameterRequestDto) {
