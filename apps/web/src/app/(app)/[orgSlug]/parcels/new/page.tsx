@@ -7,7 +7,7 @@ import { NextStepPanel } from "@/components/ui/next-step-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { isApiUnavailableError } from "@/lib/api/errors";
+import { isApiResponseError, isApiUnavailableError } from "@/lib/api/errors";
 import { getParcels, searchSourceParcels } from "@/lib/api/parcels";
 import { getConfidenceBand } from "@/lib/ui/provenance";
 import { ingestSourceParcelsAction } from "../actions";
@@ -37,14 +37,118 @@ export default async function NewParcelPage({
   const municipality = resolvedSearchParams?.municipality ?? "";
 
   try {
-    const [existingParcels, sourceResults] = await Promise.all([
-      getParcels(orgSlug),
-      searchSourceParcels(orgSlug, {
+    const existingParcels = await getParcels(orgSlug);
+    let sourceResults;
+
+    try {
+      sourceResults = await searchSourceParcels(orgSlug, {
         q: query,
         municipality,
         limit: 10,
-      }),
-    ]);
+      });
+    } catch (error) {
+      if (isApiUnavailableError(error) || isApiResponseError(error)) {
+        const message = isApiResponseError(error) && error.status === 404
+          ? "The current API deployment does not expose source parcel search yet. Redeploy the API or use manual fallback for now."
+          : error.message;
+
+        return (
+          <div className="workspace-page content-stack">
+            <PageHeader
+              eyebrow="Primary parcel intake"
+              title="Source parcel intake unavailable"
+              description="Source-backed intake is the intended parcel identity model, but the current API deployment cannot serve source search yet."
+              meta={(
+                <div className="action-row">
+                  <span className="meta-chip">{existingParcels.total} parcels already in workspace</span>
+                  <span className="meta-chip">Manual fallback still available</span>
+                </div>
+              )}
+              actions={(
+                <>
+                  <Link className={buttonClasses()} href={`/${orgSlug}/parcels/new/manual`}>
+                    Manual fallback
+                  </Link>
+                  <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels`}>
+                    Back to parcels
+                  </Link>
+                </>
+              )}
+            />
+
+            <Alert tone="warning">
+              <AlertTitle>Source search is not available on this deployment</AlertTitle>
+              <AlertDescription>{message}</AlertDescription>
+            </Alert>
+
+            <SectionCard
+              className="summary-band summary-band--workspace"
+              eyebrow="Expected primary flow"
+              title="Source-selected parcel identity"
+              description="Parcel geometry and area should come from source-backed intake. Manual parcel entry remains a controlled fallback."
+              tone="accent"
+              size="compact"
+            >
+              <div className="ops-summary-grid ops-summary-grid--planning">
+                <div className="ops-summary-item">
+                  <div className="ops-summary-item__label">Primary path</div>
+                  <div className="ops-summary-item__value">Source intake</div>
+                  <div className="ops-summary-item__detail">Search parcel records, ingest geometry, derive area.</div>
+                </div>
+                <div className="ops-summary-item">
+                  <div className="ops-summary-item__label">Current status</div>
+                  <div className="ops-summary-item__value">Temporarily blocked</div>
+                  <div className="ops-summary-item__detail">Web is ahead of the current source-search API deployment.</div>
+                </div>
+                <div className="ops-summary-item">
+                  <div className="ops-summary-item__label">Fallback</div>
+                  <div className="ops-summary-item__value">Manual</div>
+                  <div className="ops-summary-item__detail">Use only until the source-search endpoint is live.</div>
+                </div>
+              </div>
+            </SectionCard>
+
+            <div className="detail-grid">
+              <SectionCard
+                className="index-surface index-surface--workspace"
+                eyebrow="Recovery"
+                title="How to unblock source intake"
+                description="Use manual fallback if needed, then redeploy the API with the source parcel routes and migration applied."
+                size="compact"
+              >
+                <div className="helper-list">
+                  <div>Deploy the API version that includes `GET /api/v1/parcels/source/search` and `POST /api/v1/parcels/source/intake`.</div>
+                  <div>Apply the parcel-group/source provenance Prisma migration on the API database.</div>
+                  <div>Reload this page once the API deployment is live.</div>
+                </div>
+              </SectionCard>
+
+              <div className="sidebar-stack">
+                <NextStepPanel
+                  className="rail-panel rail-panel--action"
+                  title="Use fallback only if you need to keep moving"
+                  description="Manual parcel creation still preserves the thin flow into planning and scenarios, but it should remain secondary to source-selected parcel identity."
+                  size="compact"
+                  actions={(
+                    <>
+                      <Link className={buttonClasses()} href={`/${orgSlug}/parcels/new/manual`}>
+                        Open manual fallback
+                      </Link>
+                      <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels`}>
+                        Return to parcel board
+                      </Link>
+                    </>
+                  )}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      throw error;
+    }
+
     const action = ingestSourceParcelsAction.bind(null, orgSlug);
     const sourceReadyCount = sourceResults.items.filter((item) => item.hasGeometry && item.hasLandArea).length;
 
