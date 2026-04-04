@@ -102,6 +102,14 @@ export async function apiFetch<T>(orgSlug: string, path: string, init?: RequestI
   }
 
   if (!response.ok) {
+    if (response.status >= 500) {
+      throw new ApiUnavailableError(
+        extractApiErrorMessage(response.status, parsedBody),
+        requestUrl,
+        { cause: parsedBody },
+      );
+    }
+
     throw new ApiResponseError(
       extractApiErrorMessage(response.status, parsedBody),
       response.status,
