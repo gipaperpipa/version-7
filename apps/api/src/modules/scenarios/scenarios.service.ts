@@ -228,6 +228,7 @@ export class ScenariosService {
 
     const entries = scenarios.map((scenario) => {
       const latestRun = latestRunByScenario.get(scenario.id) ?? null;
+      const latestExplanation = latestRun?.financialResult?.explanation ?? null;
       const readiness = readinessByScenario.get(scenario.id)!;
       const objectiveValue = this.getObjectiveValue(latestRun, rankingTarget);
       const blockerCount = readiness.issues.filter((issue) => issue.severity === "BLOCKING").length;
@@ -249,7 +250,7 @@ export class ScenariosService {
         warningCount,
         blockerCount,
         missingDataCount: latestRun?.missingDataFlags.length ?? 0,
-        topDrivers: latestRun?.financialResult?.explanation?.dominantDrivers.slice(0, 3) ?? [],
+        topDrivers: latestExplanation?.dominantDrivers?.slice(0, 3) ?? [],
         assumptionSummary: this.getAssumptionSummary(scenario),
         recommendation: this.getComparisonRecommendation(readiness, latestRun),
       };
@@ -433,7 +434,7 @@ export class ScenariosService {
       return `Tighten ${latestRun.missingDataFlags.slice(0, 2).join(", ")} before relying on the ranking.`;
     }
 
-    return latestRun.financialResult?.explanation?.nextActions[0]
+    return latestRun.financialResult?.explanation?.nextActions?.[0]
       ?? "Use the leader ranking directionally, then test the weakest assumptions.";
   }
 }

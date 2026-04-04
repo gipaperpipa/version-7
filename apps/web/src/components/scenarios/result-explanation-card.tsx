@@ -2,9 +2,12 @@ import type { ScenarioResultExplanationDto } from "@repo/contracts";
 import { DiagnosticGroup } from "@/components/ui/diagnostic-group";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { normalizeScenarioResultExplanation } from "@/lib/scenarios/result-normalizers";
 
 export function ResultExplanationCard({ explanation }: { explanation: ScenarioResultExplanationDto | null }) {
-  if (!explanation) return null;
+  const normalizedExplanation = normalizeScenarioResultExplanation(explanation);
+
+  if (!normalizedExplanation) return null;
 
   return (
     <SectionCard
@@ -13,28 +16,28 @@ export function ResultExplanationCard({ explanation }: { explanation: ScenarioRe
       title="Readout"
       tone="accent"
       size="compact"
-      actions={<StatusBadge tone="surface">{explanation.heuristicVersion}</StatusBadge>}
+      actions={<StatusBadge tone="surface">{normalizedExplanation.heuristicVersion}</StatusBadge>}
     >
       <div className="content-stack">
         <div className="signal-row signal-row--contained">
           <div className="signal-row__badges">
             <StatusBadge tone="surface">Summary</StatusBadge>
           </div>
-          <div className="signal-row__text">{explanation.summary}</div>
+          <div className="signal-row__text">{normalizedExplanation.summary}</div>
         </div>
 
         <div className="signal-row signal-row--contained">
           <div className="signal-row__badges">
             <StatusBadge tone="accent">Objective</StatusBadge>
           </div>
-          <div className="signal-row__text">{explanation.objectiveNarrative}</div>
+          <div className="signal-row__text">{normalizedExplanation.objectiveNarrative}</div>
         </div>
 
         <div className="dual-grid">
           <DiagnosticGroup title="Drivers" emptyLabel="No dominant drivers were returned.">
-            {explanation.dominantDrivers.length ? (
+            {normalizedExplanation.dominantDrivers.length ? (
               <div className="signal-list">
-                {explanation.dominantDrivers.map((item) => (
+                {normalizedExplanation.dominantDrivers.map((item) => (
                   <div key={item} className="signal-row">
                     <div className="signal-row__badges">
                       <StatusBadge tone="accent">Driver</StatusBadge>
@@ -47,9 +50,9 @@ export function ResultExplanationCard({ explanation }: { explanation: ScenarioRe
           </DiagnosticGroup>
 
           <DiagnosticGroup title="Weakest links" emptyLabel="No weakest links were recorded.">
-            {explanation.weakestLinks.length ? (
+            {normalizedExplanation.weakestLinks.length ? (
               <div className="signal-list">
-                {explanation.weakestLinks.map((item) => (
+                {normalizedExplanation.weakestLinks.map((item) => (
                   <div key={item} className="signal-row">
                     <div className="signal-row__badges">
                       <StatusBadge tone="warning">Risk</StatusBadge>
@@ -64,9 +67,9 @@ export function ResultExplanationCard({ explanation }: { explanation: ScenarioRe
 
         <div className="diagnostic-grid">
           <DiagnosticGroup title="Fallbacks" emptyLabel="No fallback assumptions were recorded.">
-            {explanation.fallbackAssumptions.length ? (
+            {normalizedExplanation.fallbackAssumptions.length ? (
               <div className="signal-list">
-                {explanation.fallbackAssumptions.map((item) => (
+                {normalizedExplanation.fallbackAssumptions.map((item) => (
                   <div key={item} className="signal-row">
                     <div className="signal-row__badges">
                       <StatusBadge tone="warning">Fallback</StatusBadge>
@@ -79,9 +82,9 @@ export function ResultExplanationCard({ explanation }: { explanation: ScenarioRe
           </DiagnosticGroup>
 
           <DiagnosticGroup title="Tradeoffs" emptyLabel="No tradeoff notes were returned.">
-            {explanation.tradeoffs.length ? (
+            {normalizedExplanation.tradeoffs.length ? (
               <div className="signal-list">
-                {explanation.tradeoffs.map((item) => (
+                {normalizedExplanation.tradeoffs.map((item) => (
                   <div key={item} className="signal-row">
                     <div className="signal-row__badges">
                       <StatusBadge tone="surface">Tradeoff</StatusBadge>
@@ -96,9 +99,9 @@ export function ResultExplanationCard({ explanation }: { explanation: ScenarioRe
 
         <div className="diagnostic-grid">
           <DiagnosticGroup title="Capital logic" emptyLabel="No capital stack narrative was returned.">
-            {explanation.capitalStackNarrative.length ? (
+            {normalizedExplanation.capitalStackNarrative.length ? (
               <div className="signal-list">
-                {explanation.capitalStackNarrative.map((item) => (
+                {normalizedExplanation.capitalStackNarrative.map((item) => (
                   <div key={item} className="signal-row">
                     <div className="signal-row__badges">
                       <StatusBadge tone="surface">Capital</StatusBadge>
@@ -111,9 +114,9 @@ export function ResultExplanationCard({ explanation }: { explanation: ScenarioRe
           </DiagnosticGroup>
 
           <DiagnosticGroup title="Next moves" emptyLabel="No next-step recommendations were returned.">
-            {explanation.nextActions.length ? (
+            {normalizedExplanation.nextActions.length ? (
               <div className="signal-list">
-                {explanation.nextActions.map((item) => (
+                {normalizedExplanation.nextActions.map((item) => (
                   <div key={item} className="signal-row">
                     <div className="signal-row__badges">
                       <StatusBadge tone="accent">Next</StatusBadge>

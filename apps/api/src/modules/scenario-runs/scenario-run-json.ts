@@ -56,23 +56,37 @@ export function decodeReadinessIssues(value: unknown): ScenarioReadinessIssueDto
 
 export function decodeExplanation(value: unknown): ScenarioResultExplanationDto | null {
   if (!isRecord(value)) return null;
-  if (
-    typeof value.heuristicVersion !== "string" ||
-    typeof value.summary !== "string" ||
-    typeof value.objectiveNarrative !== "string"
-  ) {
-    return null;
-  }
+
+  const dominantDrivers = decodeStringArray(value.dominantDrivers);
+  const fallbackAssumptions = decodeStringArray(value.fallbackAssumptions);
+  const capitalStackNarrative = decodeStringArray(value.capitalStackNarrative);
+  const weakestLinks = decodeStringArray(value.weakestLinks);
+  const tradeoffs = decodeStringArray(value.tradeoffs);
+  const nextActions = decodeStringArray(value.nextActions);
+  const heuristicVersion =
+    typeof value.heuristicVersion === "string" && value.heuristicVersion.trim()
+      ? value.heuristicVersion.trim()
+      : "heuristic-run";
+  const summary =
+    typeof value.summary === "string" && value.summary.trim()
+      ? value.summary.trim()
+      : dominantDrivers[0]
+        ?? fallbackAssumptions[0]
+        ?? "This run returned a partial explanation payload.";
+  const objectiveNarrative =
+    typeof value.objectiveNarrative === "string" && value.objectiveNarrative.trim()
+      ? value.objectiveNarrative.trim()
+      : "No explicit objective narrative was returned for this run.";
 
   return {
-    heuristicVersion: value.heuristicVersion,
-    summary: value.summary,
-    objectiveNarrative: value.objectiveNarrative,
-    dominantDrivers: decodeStringArray(value.dominantDrivers),
-    fallbackAssumptions: decodeStringArray(value.fallbackAssumptions),
-    capitalStackNarrative: decodeStringArray(value.capitalStackNarrative),
-    weakestLinks: decodeStringArray(value.weakestLinks),
-    tradeoffs: decodeStringArray(value.tradeoffs),
-    nextActions: decodeStringArray(value.nextActions),
+    heuristicVersion,
+    summary,
+    objectiveNarrative,
+    dominantDrivers,
+    fallbackAssumptions,
+    capitalStackNarrative,
+    weakestLinks,
+    tradeoffs,
+    nextActions,
   };
 }

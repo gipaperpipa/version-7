@@ -90,20 +90,18 @@ export async function apiFetch<T>(orgSlug: string, path: string, init?: RequestI
     throw new ApiUnavailableError(`Could not reach API at ${requestUrl}.`, requestUrl, { cause: error });
   }
 
-  if (!response.ok) {
-    const rawText = await response.text();
-    let parsedBody: unknown = rawText;
+  const rawText = await response.text();
+  let parsedBody: unknown = null;
 
-    if (rawText) {
-      try {
-        parsedBody = JSON.parse(rawText) as unknown;
-      } catch {
-        parsedBody = rawText;
-      }
-    } else {
-      parsedBody = null;
+  if (rawText) {
+    try {
+      parsedBody = JSON.parse(rawText) as unknown;
+    } catch {
+      parsedBody = rawText;
     }
+  }
 
+  if (!response.ok) {
     throw new ApiResponseError(
       extractApiErrorMessage(response.status, parsedBody),
       response.status,
@@ -112,5 +110,23 @@ export async function apiFetch<T>(orgSlug: string, path: string, init?: RequestI
     );
   }
 
-  return response.json() as Promise<T>;
+  if (!rawText) {
+    throw new ApiResponseError(
+      "The API returned an empty success response where JSON was expected.",
+      response.status,
+      requestUrl,
+      null,
+    );
+  }
+
+  if (typeof parsedBody === "string") {
+    throw new ApiResponseError(
+      "The API returned a non-JSON success response where JSON was expected.",
+      response.status,
+      requestUrl,
+      parsedBody,
+    );
+  }
+
+  return parsedBody as T;
 }

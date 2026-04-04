@@ -8,6 +8,7 @@ import type {
   ScenarioRunDto,
 } from "@repo/contracts";
 import { apiFetch } from "./client";
+import { normalizeScenarioComparisonResponse, normalizeScenarioRunDto } from "@/lib/scenarios/result-normalizers";
 
 export function getScenarios(orgSlug: string) {
   return apiFetch<ListScenariosResponseDto>(orgSlug, "/api/v1/scenarios");
@@ -22,7 +23,8 @@ export function getScenarioComparison(
   scenarioIds.forEach((scenarioId) => search.append("scenarioId", scenarioId));
   if (rankingTarget) search.set("rankingTarget", rankingTarget);
 
-  return apiFetch<ScenarioComparisonResponseDto>(orgSlug, `/api/v1/scenarios/compare?${search.toString()}`);
+  return apiFetch<ScenarioComparisonResponseDto>(orgSlug, `/api/v1/scenarios/compare?${search.toString()}`)
+    .then(normalizeScenarioComparisonResponse);
 }
 
 export function getScenario(orgSlug: string, scenarioId: string) {
@@ -34,7 +36,7 @@ export function getScenarioReadiness(orgSlug: string, scenarioId: string) {
 }
 
 export function getScenarioRun(orgSlug: string, runId: string) {
-  return apiFetch<ScenarioRunDto>(orgSlug, `/api/v1/scenario-runs/${runId}`);
+  return apiFetch<ScenarioRunDto>(orgSlug, `/api/v1/scenario-runs/${runId}`).then(normalizeScenarioRunDto);
 }
 
 export function getFundingPrograms(orgSlug: string) {
