@@ -2,8 +2,11 @@ import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, Version } 
 import { ApiBearerAuth, ApiHeader, ApiTags } from "@nestjs/swagger";
 import type {
   CreateParcelRequestDto,
+  CreateSourceParcelIntakeRequestDto,
   ListParcelsResponseDto,
   ParcelDto,
+  SearchSourceParcelsResponseDto,
+  SourceParcelIntakeResponseDto,
   UpdateParcelRequestDto,
 } from "../../generated-contracts/parcels";
 import { JwtAuthGuard } from "../../common/auth/jwt-auth.guard";
@@ -26,6 +29,22 @@ export class ParcelsController {
   @Version("1")
   list(@Query("page") page = "1", @Query("pageSize") pageSize = "20"): Promise<ListParcelsResponseDto> {
     return this.parcelsService.list({ page: Number(page), pageSize: Number(pageSize) });
+  }
+
+  @Get("source/search")
+  @Version("1")
+  searchSource(
+    @Query("q") query?: string,
+    @Query("municipality") municipality?: string,
+    @Query("limit") limit = "12",
+  ): Promise<SearchSourceParcelsResponseDto> {
+    return this.parcelsService.searchSource(query, municipality, Number(limit));
+  }
+
+  @Post("source/intake")
+  @Version("1")
+  intakeSource(@Body() dto: CreateSourceParcelIntakeRequestDto): Promise<SourceParcelIntakeResponseDto> {
+    return this.parcelsService.intakeFromSource(dto);
   }
 
   @Post()

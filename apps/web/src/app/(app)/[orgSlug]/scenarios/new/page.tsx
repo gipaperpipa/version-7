@@ -26,16 +26,31 @@ export default async function NewScenarioPage({
     const selectedParcel = resolvedSearchParams?.parcelId
       ? parcels.items.find((parcel) => parcel.id === resolvedSearchParams.parcelId) ?? null
       : null;
+    const sourceBackedCount = parcels.items.filter((parcel) => {
+      return parcel.provenance?.trustMode === "SOURCE_PRIMARY" || parcel.provenance?.trustMode === "SOURCE_INCOMPLETE";
+    }).length;
+    const groupedSiteCount = parcels.items.filter((parcel) => parcel.isGroupSite || parcel.provenance?.trustMode === "GROUP_DERIVED").length;
+    const manualFallbackCount = parcels.items.filter((parcel) => parcel.provenance?.trustMode === "MANUAL_FALLBACK").length;
+    const selectedParcelMessage = selectedParcel
+      ? selectedParcel.isGroupSite
+        ? `${selectedParcel.name ?? selectedParcel.cadastralId ?? "This grouped site"} already aggregates ${selectedParcel.parcelGroup?.memberCount ?? selectedParcel.constituentParcels.length} sourced parcels and is ready to carry into case setup.`
+        : selectedParcel.provenance?.trustMode === "MANUAL_FALLBACK"
+          ? `${selectedParcel.name ?? selectedParcel.cadastralId ?? "This parcel"} remains usable for scenario work, but source-backed parcel identity should stay the default path when available.`
+          : `${selectedParcel.name ?? selectedParcel.cadastralId ?? "This parcel"} will carry straight into funding, readiness, and run.`
+      : "Choose the parcel or grouped site you want to test, save the case, then continue in the builder.";
+
     return (
       <div className="workspace-page content-stack">
         <PageHeader
           eyebrow="Scenario studio"
           title="Create a scenario"
-          description="Open a parcel-linked case, then continue in the builder."
+          description="Open a parcel-linked case from a sourced parcel or grouped site, then continue in the builder."
           meta={(
             <div className="action-row">
               <span className="meta-chip">{parcels.total} parcel option{parcels.total === 1 ? "" : "s"}</span>
-              {selectedParcel ? <span className="meta-chip">{selectedParcel.name ?? selectedParcel.cadastralId ?? "Selected parcel"}</span> : <span className="meta-chip">Select parcel first</span>}
+              <span className="meta-chip">{sourceBackedCount} source-backed</span>
+              <span className="meta-chip">{groupedSiteCount} grouped sites</span>
+              <span className="meta-chip">{manualFallbackCount} fallback manual</span>
             </div>
           )}
           actions={(
@@ -62,15 +77,15 @@ export default async function NewScenarioPage({
         {!parcels.items.length ? (
           <EmptyState
             eyebrow="Parcel dependency"
-            title="A scenario needs a parcel first"
-            description="Create a parcel first so the case stays site-linked. Source selection remains the intended model; manual entry is fallback."
+            title="A scenario needs source-backed parcel intake first"
+            description="Search and ingest a source-backed parcel or grouped site first so geometry, area, and provenance stay attached to the case. Manual parcel creation remains fallback."
             actions={(
               <>
                 <Link className={buttonClasses()} href={`/${orgSlug}/parcels/new`}>
-                  Create parcel
+                  Source intake
                 </Link>
-                <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels`}>
-                  Review parcels
+                <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels/new/manual`}>
+                  Manual fallback
                 </Link>
               </>
             )}
@@ -78,38 +93,34 @@ export default async function NewScenarioPage({
         ) : null}
 
         {parcels.items.length ? (
-          <>
-            <div className="detail-grid detail-grid--setup setup-grid">
-              <ScenarioEditorForm
-                action={action}
-                parcels={parcels.items}
-                initialParcelId={resolvedSearchParams?.parcelId ?? null}
-                submitLabel="Create scenario"
-                mode="create"
-              />
+          <div className="detail-grid detail-grid--setup setup-grid">
+            <ScenarioEditorForm
+              action={action}
+              parcels={parcels.items}
+              initialParcelId={resolvedSearchParams?.parcelId ?? null}
+              submitLabel="Create scenario"
+              mode="create"
+            />
 
-              <div className="sidebar-stack">
-                <NextStepPanel
-                  className="rail-panel rail-panel--action"
-                  title={selectedParcel ? "Start from the selected parcel" : "Create a parcel-linked case"}
-                  description={selectedParcel
-                    ? `${selectedParcel.name ?? selectedParcel.cadastralId ?? "This parcel"} will carry straight into funding, readiness, and run.`
-                    : "Choose the parcel you want to test, save the case, then continue in the builder."}
-                  size="compact"
-                  actions={(
-                    <>
-                      <Link className={buttonClasses()} href={`/${orgSlug}/parcels`}>
-                        Review parcels
-                      </Link>
-                      <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios`}>
-                        Scenario list
-                      </Link>
-                    </>
-                  )}
-                />
-              </div>
+            <div className="sidebar-stack">
+              <NextStepPanel
+                className="rail-panel rail-panel--action"
+                title={selectedParcel ? "Start from the selected site" : "Create a parcel-linked case"}
+                description={selectedParcelMessage}
+                size="compact"
+                actions={(
+                  <>
+                    <Link className={buttonClasses()} href={`/${orgSlug}/parcels`}>
+                      Review parcels
+                    </Link>
+                    <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios`}>
+                      Scenario list
+                    </Link>
+                  </>
+                )}
+              />
             </div>
-          </>
+          </div>
         ) : null}
       </div>
     );

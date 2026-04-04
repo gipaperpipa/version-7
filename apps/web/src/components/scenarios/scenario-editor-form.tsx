@@ -74,6 +74,20 @@ function countFilledFields(fields: FieldConfig[]) {
   return fields.filter((field) => hasValue(field.defaultValue)).length;
 }
 
+function getParcelSelectionLabel(parcel: ParcelDto) {
+  const base = parcel.name ?? parcel.cadastralId ?? parcel.id;
+  if (parcel.isGroupSite) {
+    const memberCount = parcel.parcelGroup?.memberCount ?? parcel.constituentParcels.length;
+    return `${base} / grouped site / ${memberCount} parcel${memberCount === 1 ? "" : "s"}`;
+  }
+
+  if (parcel.provenance?.trustMode === "MANUAL_FALLBACK") {
+    return `${base} / manual fallback`;
+  }
+
+  return `${base} / source-backed`;
+}
+
 export function ScenarioEditorForm({
   action,
   parcels,
@@ -103,6 +117,13 @@ export function ScenarioEditorForm({
     () => parcels.find((parcel) => parcel.id === selectedParcelId) ?? null,
     [parcels, selectedParcelId],
   );
+  const selectedParcelSignal = selectedParcel
+    ? selectedParcel.isGroupSite
+      ? "Grouped site"
+      : selectedParcel.provenance?.trustMode === "MANUAL_FALLBACK"
+        ? "Manual fallback"
+        : "Source-backed"
+    : "Select parcel";
 
   const caseFields: FieldConfig[] = [
     {
@@ -293,6 +314,7 @@ export function ScenarioEditorForm({
           </div>
           <div className="scenario-focus-strip__signals">
             <span className="meta-chip">{selectedParcel?.name ?? selectedParcel?.cadastralId ?? "Select parcel"}</span>
+            <span className="meta-chip">{selectedParcelSignal}</span>
             <span className="meta-chip">{strategyTypeLabels[strategyType]}</span>
             <span className="meta-chip">{assumptionProfileLabels[assumptionProfileKey]}</span>
             <span className="meta-chip">{summarizeRequiredFields(hint.requiredFields)}</span>
@@ -338,11 +360,12 @@ export function ScenarioEditorForm({
                 <option value="">Select parcel</option>
                 {parcels.map((parcel) => (
                   <option key={parcel.id} value={parcel.id}>
-                    {parcel.name ?? parcel.cadastralId ?? parcel.id}
+                    {getParcelSelectionLabel(parcel)}
                   </option>
                 ))}
               </select>
-              <div className="field-help">Keep the case site-linked.</div>
+              <input type="hidden" name="parcelGroupId" value={selectedParcel?.parcelGroupId ?? initialScenario?.parcelGroupId ?? ""} />
+              <div className="field-help">Keep the case tied to the source-backed parcel or grouped site that will carry into planning and feasibility.</div>
             </div>
 
             <div className="field-stack">

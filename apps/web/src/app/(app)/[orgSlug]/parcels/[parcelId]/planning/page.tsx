@@ -32,19 +32,24 @@ export default async function ParcelPlanningPage({
     }).length;
     const derivedCount = planningParameters.items.filter((item) => item.keySlug === "BUILDABLE_WINDOW").length;
     const continueHref = `/${orgSlug}/scenarios/new?parcelId=${parcelId}`;
+    const memberCount = parcel.parcelGroup?.memberCount ?? parcel.constituentParcels.length;
+    const siteBasisLabel = parcel.isGroupSite
+      ? `${memberCount} parcel grouped site`
+      : parcel.provenance?.providerName ?? "Manual fallback";
 
     return (
       <div className="workspace-page content-stack">
         <PageHeader
           eyebrow="Parcel / Planning"
           title="Planning inputs"
-          description={`Interpret ${parcel.name ?? parcel.cadastralId ?? parcel.id} as a real site.`}
+          description={`Interpret ${parcel.name ?? parcel.cadastralId ?? parcel.id} from its source-derived site basis.`}
           meta={(
             <div className="action-row">
               <span className="meta-chip">{filledCount} saved</span>
               <span className="meta-chip">{readinessCount} readiness fields</span>
               <span className="meta-chip">{derivedCount} derived</span>
               <span className="meta-chip">{parcel.landAreaSqm ?? "n/a"} sqm parcel context</span>
+              <span className="meta-chip">{siteBasisLabel}</span>
             </div>
           )}
           actions={(
@@ -63,7 +68,7 @@ export default async function ParcelPlanningPage({
           className="summary-band summary-band--workspace"
           eyebrow="Planning summary"
           title="Current planning state"
-          description="Read readiness-relevant coverage first."
+          description="Read source-backed parcel basis and readiness-relevant coverage first."
           tone="accent"
           size="compact"
         >
@@ -75,6 +80,11 @@ export default async function ParcelPlanningPage({
                 <div className="ops-summary-item__detail">Current non-empty values.</div>
               </div>
               <div className="ops-summary-item">
+                <div className="ops-summary-item__label">Site basis</div>
+                <div className="ops-summary-item__value">{parcel.isGroupSite ? "Grouped site" : "Parcel"}</div>
+                <div className="ops-summary-item__detail">{siteBasisLabel}</div>
+              </div>
+              <div className="ops-summary-item">
                 <div className="ops-summary-item__label">Readiness inputs</div>
                 <div className="ops-summary-item__value">{readinessCount}</div>
                 <div className="ops-summary-item__detail">Already contributing to checks.</div>
@@ -84,15 +94,11 @@ export default async function ParcelPlanningPage({
                 <div className="ops-summary-item__value">{derivedCount}</div>
                 <div className="ops-summary-item__detail">Source-backed and read-only.</div>
               </div>
-              <div className="ops-summary-item">
-                <div className="ops-summary-item__label">Parcel context</div>
-                <div className="ops-summary-item__value">{parcel.landAreaSqm ?? "n/a"}</div>
-                <div className="ops-summary-item__detail">Land area carried in from parcel.</div>
-              </div>
             </div>
 
             <div className="action-row">
               <span className="meta-chip">Focused Sprint 1 planning coverage</span>
+              <span className="meta-chip">Parcel geometry stays source-derived</span>
               <span className="meta-chip">Buildable Window stays source-derived</span>
             </div>
           </div>
@@ -110,7 +116,7 @@ export default async function ParcelPlanningPage({
             <NextStepPanel
               className="rail-panel rail-panel--action"
               title="Move from site interpretation into scenario design"
-              description="Use planning to make the parcel decision-ready enough for scenario framing, not to recreate a full planning document."
+              description="Use planning to make the source-derived site decision-ready enough for scenario framing, not to recreate a full planning document."
               size="compact"
               actions={(
                 <>
@@ -128,7 +134,7 @@ export default async function ParcelPlanningPage({
               className="rail-panel"
               eyebrow="Form legend"
               title="Field state"
-              description="Keep empty, saved, cleared, and derived values distinct."
+              description="Keep empty, saved, cleared, and source-derived values distinct."
               size="compact"
             >
               <div className="content-stack">
@@ -138,7 +144,7 @@ export default async function ParcelPlanningPage({
                   <span className="meta-chip">Cleared</span>
                   <span className="meta-chip">Derived / Read-only</span>
                 </div>
-                <div className="field-help">Readiness-relevant fields are marked inline. Buildable Window stays source-backed and read-only.</div>
+                <div className="field-help">Readiness-relevant fields are marked inline. Parcel geometry and Buildable Window stay source-derived and read-only.</div>
               </div>
             </SectionCard>
           </div>

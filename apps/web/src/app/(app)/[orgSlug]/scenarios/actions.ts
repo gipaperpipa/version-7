@@ -82,6 +82,7 @@ function safeParseOptionalJsonField(formData: FormData, key: string) {
 function buildScenarioPayload(formData: FormData, strategyMixJson: Record<string, unknown> | null): CreateScenarioRequestDto {
   return {
     parcelId: optionalString(formData, "parcelId"),
+    parcelGroupId: optionalString(formData, "parcelGroupId"),
     name: String(formData.get("name") ?? ""),
     description: optionalString(formData, "description"),
     strategyType: String(formData.get("strategyType")) as StrategyType,

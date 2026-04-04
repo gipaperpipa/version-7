@@ -37,6 +37,18 @@ export interface ParcelCompletenessSummary {
   nextBestAction: ParcelNextBestAction;
 }
 
+function getParcelTrustMode(parcel: ParcelDto) {
+  return parcel.provenance?.trustMode ?? null;
+}
+
+function hasDerivedGeometry(parcel: ParcelDto) {
+  return parcel.provenance?.geometryDerived ?? Boolean(parcel.geom);
+}
+
+function hasDerivedArea(parcel: ParcelDto) {
+  return parcel.provenance?.areaDerived ?? Boolean(parcel.landAreaSqm);
+}
+
 function hasStoredPlanningValue(item: PlanningParameterDto) {
   return item.valueNumber !== null || item.valueBoolean !== null || item.valueJson !== null || item.geom !== null;
 }
@@ -52,7 +64,47 @@ function getPlanningValue(items: PlanningParameterDto[], keySlug: string) {
 function getSourceStatus(parcel: ParcelDto): ParcelCompletenessItem {
   const sourceLabel = getSourceLabel(parcel.sourceType);
   const confidenceBand = getConfidenceBand(parcel.confidenceScore);
-  const hasLandArea = Boolean(parcel.landAreaSqm);
+  const trustMode = getParcelTrustMode(parcel);
+  const hasLandArea = hasDerivedArea(parcel);
+  const hasGeometry = hasDerivedGeometry(parcel);
+
+  if (trustMode === "SOURCE_PRIMARY") {
+    return {
+      label: "Source primary",
+      detail: "Parcel identity, geometry, and area are coming from source-backed intake and can carry directly into planning work.",
+      tone: "success",
+    };
+  }
+
+  if (trustMode === "SOURCE_INCOMPLETE") {
+    return {
+      label: "Source incomplete",
+      detail: hasGeometry || hasLandArea
+        ? "This parcel came from source intake, but one part of the core site identity still needs confirmation."
+        : "This parcel came from source intake, but geometry and area are still incomplete.",
+      tone: "warning",
+    };
+  }
+
+  if (trustMode === "GROUP_DERIVED" || parcel.isGroupSite) {
+    return {
+      label: "Grouped site",
+      detail: parcel.constituentParcels.length
+        ? `Combined site derived from ${parcel.constituentParcels.length} sourced parcel${parcel.constituentParcels.length === 1 ? "" : "s"}.`
+        : "Combined site identity is derived from sourced parcel members.",
+      tone: hasGeometry && hasLandArea ? "accent" : "warning",
+    };
+  }
+
+  if (trustMode === "MANUAL_FALLBACK") {
+    return {
+      label: confidenceBand === "Low" ? "Low-trust manual fallback" : "Manual fallback",
+      detail: hasLandArea
+        ? "Manual parcel context is usable, but source-backed parcel identity remains the intended working model."
+        : "Manual fallback intake is still incomplete and should be replaced with source-backed context when available.",
+      tone: confidenceBand === "Low" ? "warning" : "surface",
+    };
+  }
 
   if (sourceLabel === "Source" && confidenceBand === "High" && hasLandArea) {
     return {
@@ -101,7 +153,7 @@ function getSourceStatus(parcel: ParcelDto): ParcelCompletenessItem {
 
 function getPlanningCompleteness(parcel: ParcelDto, planningItems: PlanningParameterDto[]): ParcelCompletenessItem {
   const hasAnyPlanning = planningItems.some(hasStoredPlanningValue);
-  const hasLandArea = Boolean(parcel.landAreaSqm);
+  const hasLandArea = hasDerivedArea(parcel);
   const hasFootprintInput =
     isPlanningValuePresent(getPlanningValue(planningItems, CORE_PLANNING_KEY_SLUGS.BUILDABLE_WINDOW)) ||
     isPlanningValuePresent(getPlanningValue(planningItems, CORE_PLANNING_KEY_SLUGS.GRZ));
@@ -201,15 +253,21 @@ function getNextBestAction(
   linkedScenarios: ScenarioDto[],
   primaryReadiness?: ScenarioReadinessDto | null,
 ): ParcelNextBestAction {
-  const hasLandArea = Boolean(parcel.landAreaSqm);
+  const trustMode = getParcelTrustMode(parcel);
+  const hasLandArea = hasDerivedArea(parcel);
+  const hasGeometry = hasDerivedGeometry(parcel);
   const planningCompleteness = getPlanningCompleteness(parcel, planningItems);
   const primaryScenario = linkedScenarios.length ? selectPrimaryLinkedScenario(linkedScenarios) : null;
 
-  if (!hasLandArea) {
+  if (!hasLandArea || (!hasGeometry && trustMode !== "MANUAL_FALLBACK")) {
     return {
       kind: "complete_parcel_context",
-      label: "Complete parcel context",
-      detail: "Add the missing parcel basics so the site can support planning interpretation.",
+      label: trustMode === "SOURCE_INCOMPLETE" || trustMode === "GROUP_DERIVED"
+        ? "Resolve source parcel gaps"
+        : "Complete parcel context",
+      detail: trustMode === "SOURCE_INCOMPLETE" || trustMode === "GROUP_DERIVED"
+        ? "Confirm the missing sourced geometry or area before relying on this site in downstream planning and scenario work."
+        : "Add the missing parcel basics so the site can support planning interpretation.",
       tone: "warning",
     };
   }

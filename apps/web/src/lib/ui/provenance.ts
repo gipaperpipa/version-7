@@ -1,3 +1,4 @@
+import type { ParcelProvenanceDto } from "@repo/contracts";
 import { SourceType } from "@repo/contracts";
 
 export type ConfidenceBand = "High" | "Medium" | "Low" | "Unscored";
@@ -22,6 +23,21 @@ export function getSourceLabel(sourceType: SourceType | null | undefined) {
     case SourceType.PLANNING_DOCUMENT:
     case SourceType.THIRD_PARTY_API:
       return "Source";
+    default:
+      return null;
+  }
+}
+
+export function getTrustModeLabel(trustMode: ParcelProvenanceDto["trustMode"] | null | undefined) {
+  switch (trustMode) {
+    case "SOURCE_PRIMARY":
+      return "Source primary";
+    case "SOURCE_INCOMPLETE":
+      return "Source incomplete";
+    case "GROUP_DERIVED":
+      return "Grouped site";
+    case "MANUAL_FALLBACK":
+      return "Manual fallback";
     default:
       return null;
   }

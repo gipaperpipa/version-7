@@ -12,7 +12,6 @@ import { getParcels } from "@/lib/api/parcels";
 import { getPlanningParameters } from "@/lib/api/planning";
 import { getScenarios } from "@/lib/api/scenarios";
 import { buildParcelCompletenessSummary } from "@/lib/ui/parcel-completeness";
-import { getSourceLabel } from "@/lib/ui/provenance";
 
 function ParcelRow({
   orgSlug,
@@ -31,6 +30,20 @@ function ParcelRow({
     linkedScenarios,
   });
   const planningValueCount = planningItems.filter((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null).length;
+  const trustMode = parcel.provenance?.trustMode ?? null;
+  const memberCount = parcel.parcelGroup?.memberCount ?? parcel.constituentParcels.length;
+  const sourceBadge = parcel.isGroupSite ? "Grouped site" : trustMode === "MANUAL_FALLBACK" ? "Manual fallback" : "Source parcel";
+  const areaLabel = `${parcel.landAreaSqm ?? "n/a"} sqm`;
+  const parcelReference = parcel.sourceProviderParcelId ?? parcel.cadastralId ?? "No parcel reference";
+  const parcelSubline = parcel.isGroupSite
+    ? `${memberCount} parcel member${memberCount === 1 ? "" : "s"}`
+    : parcel.addressLine1 ?? parcelReference;
+  const sourceDetail = parcel.provenance?.providerName
+    ? `${parcel.provenance.providerName}${parcel.provenance.providerParcelId ? ` / ${parcel.provenance.providerParcelId}` : ""}`
+    : summary.sourceStatus.detail;
+  const areaDetail = parcel.isGroupSite
+    ? `${memberCount} parcel member${memberCount === 1 ? "" : "s"}`
+    : [parcel.city, parcel.municipalityName].filter(Boolean).join(" / ") || "Location not yet set";
 
   return (
     <div className="ops-table__row ops-table__row--parcels">
@@ -38,19 +51,23 @@ function ParcelRow({
         <div className="list-row__body">
           <div className="list-row__title">
             <span className="list-row__title-text">{parcel.name ?? parcel.cadastralId ?? "Untitled parcel"}</span>
-            <StatusBadge tone={summary.sourceStatus.tone}>{summary.sourceStatus.label}</StatusBadge>
+            <StatusBadge tone={summary.sourceStatus.tone}>{sourceBadge}</StatusBadge>
             {linkedScenarios.length ? <StatusBadge tone="accent">{linkedScenarios.length} scenario(s)</StatusBadge> : null}
           </div>
           <div className="inline-meta">
+            <span className="meta-chip">{parcelReference}</span>
             <span className="meta-chip">{parcel.city ?? "Unknown city"}</span>
             <span className="meta-chip">{parcel.municipalityName ?? "Municipality not set"}</span>
-            <span className="meta-chip">{parcel.landAreaSqm ?? "n/a"} sqm</span>
+            <span className="meta-chip">{areaLabel}</span>
           </div>
-          <div className="list-row__meta list-row__meta--clamped">{parcel.addressLine1 ?? parcel.cadastralId ?? "No address saved yet"}</div>
+          <div className="list-row__meta list-row__meta--clamped">{parcelSubline}</div>
           <ProvenanceConfidence
             sourceType={parcel.sourceType}
             confidenceScore={parcel.confidenceScore}
             sourceReference={parcel.sourceReference}
+            provenance={parcel.provenance}
+            providerName={parcel.sourceProviderName}
+            providerParcelId={parcel.sourceProviderParcelId}
             variant="inline"
           />
         </div>
@@ -59,8 +76,8 @@ function ParcelRow({
       <div className="ops-table__cell">
         <div className="ops-cell-stack">
           <div className="ops-scan__label">Area</div>
-          <div className="ops-scan__value">{parcel.landAreaSqm ?? "n/a"} sqm</div>
-          <div className="ops-scan__detail">{parcel.city ?? "Unknown city"} / {parcel.municipalityName ?? "Municipality not set"}</div>
+          <div className="ops-scan__value">{areaLabel}</div>
+          <div className="ops-scan__detail">{areaDetail}</div>
         </div>
       </div>
 
@@ -70,7 +87,7 @@ function ParcelRow({
           <div className="action-row">
             <StatusBadge tone={summary.sourceStatus.tone}>{summary.sourceStatus.label}</StatusBadge>
           </div>
-          <div className="ops-scan__detail">{summary.sourceStatus.detail}</div>
+          <div className="ops-scan__detail">{sourceDetail}</div>
         </div>
       </div>
 
@@ -80,7 +97,7 @@ function ParcelRow({
           <div className="action-row">
             <StatusBadge tone={summary.planningCompleteness.tone}>{summary.planningCompleteness.label}</StatusBadge>
           </div>
-          <div className="ops-scan__detail">{planningValueCount} saved · {summary.planningCompleteness.detail}</div>
+          <div className="ops-scan__detail">{planningValueCount} saved / {summary.planningCompleteness.detail}</div>
         </div>
       </div>
 
@@ -100,7 +117,7 @@ function ParcelRow({
         </div>
         <div className="action-row action-row--compact">
           <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${parcel.id}`}>
-            Parcel
+            Site
           </Link>
           <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/parcels/${parcel.id}/planning`}>
             Planning
@@ -140,28 +157,39 @@ export default async function ParcelsPage({
       scenariosByParcel.set(scenario.parcelId, existing);
     }
 
-    const manualCount = parcels.items.filter((parcel) => getSourceLabel(parcel.sourceType) === "Manual").length;
-    const sourceBackedCount = parcels.items.filter((parcel) => getSourceLabel(parcel.sourceType) === "Source").length;
-    const planningStartedCount = parcels.items.filter((parcel) => (planningByParcel.get(parcel.id) ?? []).some((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null)).length;
+    const manualCount = parcels.items.filter((parcel) => parcel.provenance?.trustMode === "MANUAL_FALLBACK").length;
+    const sourceBackedCount = parcels.items.filter((parcel) => {
+      return parcel.provenance?.trustMode === "SOURCE_PRIMARY" || parcel.provenance?.trustMode === "SOURCE_INCOMPLETE";
+    }).length;
+    const groupedSiteCount = parcels.items.filter((parcel) => parcel.isGroupSite || parcel.provenance?.trustMode === "GROUP_DERIVED").length;
+    const planningStartedCount = parcels.items.filter((parcel) => {
+      return (planningByParcel.get(parcel.id) ?? []).some((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null);
+    }).length;
 
     return (
       <div className="workspace-page content-stack">
         <PageHeader
           eyebrow="Workspace / Parcels"
-          title="Acquisition board"
-          description="Compare trust, planning coverage, continuity, and next move."
+          title="Source parcel board"
+          description="Source-selected parcels and grouped sites now anchor planning and scenario work."
           meta={(
             <div className="action-row">
-              <span className="meta-chip">{parcels.total} parcels</span>
+              <span className="meta-chip">{parcels.total} top-level sites</span>
               <span className="meta-chip">{sourceBackedCount} source-backed</span>
+              <span className="meta-chip">{groupedSiteCount} grouped sites</span>
               <span className="meta-chip">{planningStartedCount} planning started</span>
               <span className="meta-chip">{manualCount} fallback manual</span>
             </div>
           )}
           actions={(
-            <Link className={buttonClasses({ size: "lg" })} href={`/${orgSlug}/parcels/new`}>
-              Add fallback parcel
-            </Link>
+            <>
+              <Link className={buttonClasses({ size: "lg" })} href={`/${orgSlug}/parcels/new`}>
+                Source intake
+              </Link>
+              <Link className={buttonClasses({ variant: "secondary", size: "lg" })} href={`/${orgSlug}/parcels/new/manual`}>
+                Manual fallback
+              </Link>
+            </>
           )}
         />
 
@@ -169,30 +197,30 @@ export default async function ParcelsPage({
           className="summary-band summary-band--ledger"
           eyebrow="Operating summary"
           title="Portfolio scan"
-          description="Trust, planning momentum, fallback exposure."
+          description="Source coverage, grouped sites, planning momentum, fallback exposure."
           tone="accent"
           size="compact"
         >
           <div className="ops-summary-grid ops-summary-grid--planning">
             <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Parcels</div>
+              <div className="ops-summary-item__label">Top-level sites</div>
               <div className="ops-summary-item__value">{parcels.total}</div>
-              <div className="ops-summary-item__detail">Current site pipeline.</div>
+              <div className="ops-summary-item__detail">Standalone parcels and grouped sites in play.</div>
             </div>
             <div className="ops-summary-item">
               <div className="ops-summary-item__label">Source-backed</div>
               <div className="ops-summary-item__value">{sourceBackedCount}</div>
-              <div className="ops-summary-item__detail">Aligned to source-led intake.</div>
+              <div className="ops-summary-item__detail">Directly aligned to source-led parcel intake.</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Grouped sites</div>
+              <div className="ops-summary-item__value">{groupedSiteCount}</div>
+              <div className="ops-summary-item__detail">Multi-parcel site foundations already assembled.</div>
             </div>
             <div className="ops-summary-item">
               <div className="ops-summary-item__label">Planning started</div>
               <div className="ops-summary-item__value">{planningStartedCount}</div>
               <div className="ops-summary-item__detail">Buildability work underway.</div>
-            </div>
-            <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Manual fallback</div>
-              <div className="ops-summary-item__value">{manualCount}</div>
-              <div className="ops-summary-item__detail">Usable now, but secondary.</div>
             </div>
           </div>
         </SectionCard>
@@ -201,12 +229,12 @@ export default async function ParcelsPage({
           className="index-surface index-surface--ledger"
           eyebrow="Acquisition workspace"
           title="Acquisition grid"
-          description="Scan identity, trust, continuity, and next move in one sweep."
+          description="Scan sourced identity, grouped-site continuity, planning coverage, and next move in one sweep."
         >
           {parcels.items.length ? (
             <div className="ops-table">
               <div className="ops-table__header ops-table__header--parcels">
-                <div>Parcel</div>
+                <div>Site</div>
                 <div>Area</div>
                 <div>Source</div>
                 <div>Planning</div>
@@ -225,16 +253,16 @@ export default async function ParcelsPage({
             </div>
           ) : (
             <EmptyState
-              eyebrow="No sites yet"
-              title="Start with a parcel"
-              description="Create a parcel to unlock the Sprint 1 flow. Long-term, parcels should come from source selection rather than manual entry."
+              eyebrow="No parcels yet"
+              title="Start with source parcel intake"
+              description="Search and ingest real parcels first so geometry, area, and provenance stay source-derived. Manual parcel creation remains fallback."
               actions={(
                 <>
                   <Link className={buttonClasses()} href={`/${orgSlug}/parcels/new`}>
-                    Create fallback parcel
+                    Source intake
                   </Link>
-                  <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios`}>
-                    Open scenario studio
+                  <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels/new/manual`}>
+                    Manual fallback
                   </Link>
                 </>
               )}

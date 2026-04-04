@@ -125,6 +125,7 @@ model Organization {
   name        String
   memberships OrganizationMembership[]
   parcels     Parcel[]
+  parcelGroups ParcelGroup[]
   planningParameters PlanningParameter[]
   scenarios   Scenario[]
   runs        ScenarioRun[]
@@ -144,6 +145,8 @@ model OrganizationMembership {
 model Parcel {
   id               String              @id @default(uuid())
   organizationId   String
+  parcelGroupId    String?
+  isGroupSite      Boolean             @default(false)
   name             String?
   cadastralId      String?
   addressLine1     String?
@@ -156,14 +159,41 @@ model Parcel {
   landAreaSqm      Decimal?
   sourceType       SourceType
   sourceReference  String?
+  sourceProviderName String?
+  sourceProviderParcelId String?
   confidenceScore  Int?
   geom             Json?
   centroid         Json?
+  provenanceJson   Json?
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   organization     Organization        @relation(fields: [organizationId], references: [id])
+  parcelGroup      ParcelGroup?        @relation("ParcelGroupMembers", fields: [parcelGroupId], references: [id])
+  siteParcelForGroup ParcelGroup?      @relation("ParcelGroupSiteParcel")
   planningParameters PlanningParameter[]
   scenarios        Scenario[]
+}
+
+model ParcelGroup {
+  id                String       @id @default(uuid())
+  organizationId    String
+  name              String
+  landAreaSqm       Decimal?
+  sourceType        SourceType
+  sourceReference   String?
+  sourceProviderName String?
+  confidenceScore   Int?
+  geom              Json?
+  centroid          Json?
+  provenanceJson    Json?
+  siteParcelId      String?      @unique
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  siteParcel        Parcel?      @relation("ParcelGroupSiteParcel", fields: [siteParcelId], references: [id])
+  parcels           Parcel[]     @relation("ParcelGroupMembers")
+  planningParameters PlanningParameter[]
+  scenarios         Scenario[]
 }
 
 model PlanningParameter {
@@ -191,6 +221,7 @@ model PlanningParameter {
   updatedAt         DateTime             @updatedAt
   organization      Organization         @relation(fields: [organizationId], references: [id])
   parcel            Parcel?              @relation(fields: [parcelId], references: [id])
+  parcelGroup       ParcelGroup?         @relation(fields: [parcelGroupId], references: [id])
 }
 
 model FundingProgram {
@@ -261,6 +292,7 @@ model Scenario {
   organization              Organization             @relation(fields: [organizationId], references: [id])
   createdBy                 User                     @relation(fields: [createdById], references: [id])
   parcel                    Parcel?                  @relation(fields: [parcelId], references: [id])
+  parcelGroup               ParcelGroup?             @relation(fields: [parcelGroupId], references: [id])
   fundingVariants           ScenarioFundingVariant[]
   runs                      ScenarioRun[]
 }

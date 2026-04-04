@@ -38,6 +38,16 @@ export function ParcelEditorForm({
 }) {
   return (
     <form action={action} className="form-stack">
+      {initialParcel ? (
+        <>
+          <input type="hidden" name="existingSourceType" value={initialParcel.sourceType} />
+          <input type="hidden" name="existingSourceReference" value={initialParcel.sourceReference ?? ""} />
+          <input type="hidden" name="existingSourceProviderName" value={initialParcel.sourceProviderName ?? initialParcel.provenance?.providerName ?? ""} />
+          <input type="hidden" name="existingSourceProviderParcelId" value={initialParcel.sourceProviderParcelId ?? initialParcel.provenance?.providerParcelId ?? ""} />
+          <input type="hidden" name="existingConfidenceScore" value={initialParcel.confidenceScore != null ? String(initialParcel.confidenceScore) : ""} />
+        </>
+      ) : null}
+
       <SectionCard
         eyebrow="Fallback parcel intake"
         title="Site identity"
