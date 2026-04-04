@@ -1,5 +1,6 @@
 import type {
   ListFundingProgramsResponseDto,
+  ListScenarioAssumptionTemplatesResponseDto,
   OptimizationTarget,
   ScenarioComparisonResponseDto,
   ListScenariosResponseDto,
@@ -29,6 +30,10 @@ export function getScenarioComparison(
 
 export function getScenario(orgSlug: string, scenarioId: string) {
   return apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}`);
+}
+
+export function getScenarioAssumptionTemplates(orgSlug: string) {
+  return apiFetch<ListScenarioAssumptionTemplatesResponseDto>(orgSlug, "/api/v1/scenarios/assumption-templates");
 }
 
 export function getScenarioReadiness(orgSlug: string, scenarioId: string) {

@@ -7,6 +7,7 @@ import {
   AssumptionProfileKey,
   FinancingSourceType,
   OptimizationTarget,
+  ScenarioStatus,
   StrategyType,
   type CreateScenarioRequestDto,
   type ScenarioAssumptionSetDto,
@@ -30,11 +31,31 @@ function optionalInteger(formData: FormData, key: string) {
   return Number.isInteger(parsed) ? parsed : null;
 }
 
+function humanizeToken(value: string) {
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function generateScenarioName(formData: FormData) {
+  const selectedParcelLabel = optionalString(formData, "selectedParcelLabel");
+  const siteLabel = selectedParcelLabel?.split(" / ")[0] ?? "Selected site";
+  const strategyLabel = humanizeToken(String(formData.get("strategyType") ?? StrategyType.FREE_MARKET_RENTAL));
+  const templateLabel = optionalString(formData, "assumptionTemplateName")
+    ?? humanizeToken(String(formData.get("assumptionProfileKey") ?? AssumptionProfileKey.BASELINE));
+
+  return `${siteLabel} / ${strategyLabel} / ${templateLabel}`;
+}
+
 function buildAssumptionSet(formData: FormData): ScenarioAssumptionSetDto | null {
   const profileValue = String(formData.get("assumptionProfileKey") ?? AssumptionProfileKey.BASELINE);
   const profileKey = Object.values(AssumptionProfileKey).includes(profileValue as typeof AssumptionProfileKey[keyof typeof AssumptionProfileKey])
     ? (profileValue as ScenarioAssumptionSetDto["profileKey"])
     : AssumptionProfileKey.BASELINE;
+  const templateKey = optionalString(formData, "assumptionTemplateKey");
+  const templateName = optionalString(formData, "assumptionTemplateName");
   const overrides: ScenarioAssumptionSetDto["overrides"] = {
     planningBufferPct: optionalString(formData, "assumptionPlanningBufferPct"),
     efficiencyFactorPct: optionalString(formData, "assumptionEfficiencyFactorPct"),
@@ -53,12 +74,14 @@ function buildAssumptionSet(formData: FormData): ScenarioAssumptionSetDto | null
   const hasOverride = Object.values(overrides).some((value) => value !== null);
   const notes = optionalString(formData, "assumptionNotes");
 
-  if (profileKey === AssumptionProfileKey.BASELINE && !hasOverride && !notes) {
+  if (profileKey === AssumptionProfileKey.BASELINE && !templateKey && !hasOverride && !notes) {
     return null;
   }
 
   return {
     profileKey,
+    templateKey,
+    templateName,
     notes,
     overrides,
   };
@@ -80,10 +103,11 @@ function safeParseOptionalJsonField(formData: FormData, key: string) {
 }
 
 function buildScenarioPayload(formData: FormData, strategyMixJson: Record<string, unknown> | null): CreateScenarioRequestDto {
+  const generatedName = generateScenarioName(formData);
   return {
     parcelId: optionalString(formData, "parcelId"),
     parcelGroupId: optionalString(formData, "parcelGroupId"),
-    name: String(formData.get("name") ?? ""),
+    name: optionalString(formData, "name") ?? generatedName,
     description: optionalString(formData, "description"),
     strategyType: String(formData.get("strategyType")) as StrategyType,
     acquisitionType: String(formData.get("acquisitionType")) as AcquisitionType,
@@ -104,14 +128,16 @@ function buildScenarioPayload(formData: FormData, strategyMixJson: Record<string
 }
 
 function buildErrorRedirect(pathname: string, code: string, message?: string, extraParams?: Record<string, string | null | undefined>) {
-  const search = new URLSearchParams({ error: code });
+  const [basePath, existingQuery] = pathname.split("?", 2);
+  const search = new URLSearchParams(existingQuery ?? "");
+  search.set("error", code);
   if (message) search.set("message", message.slice(0, 220));
 
   for (const [key, value] of Object.entries(extraParams ?? {})) {
     if (value) search.set(key, value);
   }
 
-  return `${pathname}?${search.toString()}`;
+  return `${basePath}?${search.toString()}`;
 }
 
 export async function createScenarioAction(orgSlug: string, formData: FormData) {
@@ -227,6 +253,30 @@ export async function triggerFeasibilityRunAction(orgSlug: string, scenarioId: s
   } catch (error) {
     if (isApiResponseError(error) || isApiUnavailableError(error)) {
       redirect(buildErrorRedirect(`/${orgSlug}/scenarios/${scenarioId}/builder`, "run-request-failed", error.message));
+    }
+
+    throw error;
+  }
+}
+
+export async function setScenarioStatusAction(
+  orgSlug: string,
+  scenarioId: string,
+  nextStatus: ScenarioStatus,
+  returnTo: string,
+) {
+  try {
+    await apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: nextStatus }),
+    });
+
+    revalidatePath(`/${orgSlug}/scenarios`);
+    revalidatePath(`/${orgSlug}/scenarios/${scenarioId}/builder`);
+    redirect(returnTo);
+  } catch (error) {
+    if (isApiResponseError(error) || isApiUnavailableError(error)) {
+      redirect(buildErrorRedirect(returnTo, "status-request-failed", error.message));
     }
 
     throw error;

@@ -1,4 +1,5 @@
 import {
+  ScenarioReadinessIssueCategory,
   ScenarioReadinessIssueSeverity,
 } from "../../generated-contracts/enums";
 import type { RunWarningDto } from "../../generated-contracts/common";
@@ -50,6 +51,12 @@ export function decodeReadinessIssues(value: unknown): ScenarioReadinessIssueDto
       message: item.message,
       field: typeof item.field === "string" ? item.field : undefined,
       severity: item.severity,
+      category:
+        typeof item.category === "string"
+          ? (item.category as ScenarioReadinessIssueDto["category"])
+          : ScenarioReadinessIssueCategory.QUALITY_WARNING,
+      blocksRun: item.blocksRun === true,
+      blocksConfidence: item.blocksConfidence === true,
     }];
   });
 }

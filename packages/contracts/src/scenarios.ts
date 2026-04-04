@@ -2,6 +2,7 @@ import type { DecimalString, Id, IsoDateTime, PagedResponseDto } from "./common"
 import type {
   AcquisitionType,
   AssumptionProfileKey,
+  AssumptionTemplateScope,
   FinancingSourceType,
   OptimizationTarget,
   ScenarioStatus,
@@ -43,12 +44,23 @@ export interface ScenarioAssumptionOverridesDto {
 
 export interface ScenarioAssumptionSetDto {
   profileKey: AssumptionProfileKey;
+  templateKey: string | null;
+  templateName: string | null;
   notes: string | null;
   overrides: ScenarioAssumptionOverridesDto;
 }
 
 export interface ScenarioAssumptionEffectiveDto extends ScenarioAssumptionOverridesDto {
   profileKey: AssumptionProfileKey;
+}
+
+export interface ScenarioAssumptionTemplateDto {
+  key: string;
+  name: string;
+  description: string;
+  scope: AssumptionTemplateScope;
+  profileKey: AssumptionProfileKey;
+  defaults: ScenarioAssumptionEffectiveDto;
 }
 
 export interface ScenarioDto {
@@ -159,3 +171,6 @@ export interface ScenarioComparisonResponseDto {
 }
 
 export type ListScenariosResponseDto = PagedResponseDto<ScenarioDto>;
+export interface ListScenarioAssumptionTemplatesResponseDto {
+  items: ScenarioAssumptionTemplateDto[];
+}

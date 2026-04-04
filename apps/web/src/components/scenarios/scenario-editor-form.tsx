@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AcquisitionType,
-  AssumptionProfileKey,
   OptimizationTarget,
   StrategyType,
   type ParcelDto,
+  type ScenarioAssumptionTemplateDto,
   type ScenarioDto,
 } from "@repo/contracts";
 import { ActionRow } from "@/components/ui/action-row";
@@ -17,13 +17,7 @@ import { Label } from "@/components/ui/label";
 import { SectionCard } from "@/components/ui/section-card";
 import { Textarea } from "@/components/ui/textarea";
 import { cx } from "@/lib/ui/cx";
-import {
-  acquisitionTypeLabels,
-  assumptionProfileLabels,
-  optimizationTargetLabels,
-  strategyFieldHints,
-  strategyTypeLabels,
-} from "@/lib/ui/enum-labels";
+import { acquisitionTypeLabels, assumptionProfileLabels, optimizationTargetLabels, strategyFieldHints, strategyTypeLabels } from "@/lib/ui/enum-labels";
 
 type FormMode = "create" | "builder";
 
@@ -94,9 +88,36 @@ function getParcelSelectionRank(parcel: ParcelDto) {
   return 2;
 }
 
+function getDefaultTemplate(
+  templates: ScenarioAssumptionTemplateDto[],
+  initialScenario?: ScenarioDto,
+) {
+  const assumptionSet = initialScenario?.assumptionSet ?? null;
+  if (assumptionSet?.templateKey) {
+    return templates.find((template) => template.key === assumptionSet.templateKey) ?? null;
+  }
+
+  if (assumptionSet?.profileKey) {
+    return templates.find((template) => template.profileKey === assumptionSet.profileKey) ?? null;
+  }
+
+  return templates[0] ?? null;
+}
+
+function getSuggestedScenarioName(
+  parcel: ParcelDto | null,
+  strategyType: StrategyType,
+  templateName: string,
+) {
+  const siteLabel = parcel?.name ?? parcel?.cadastralId ?? "Selected site";
+  const strategyLabel = strategyTypeLabels[strategyType];
+  return `${siteLabel} / ${strategyLabel} / ${templateName}`;
+}
+
 export function ScenarioEditorForm({
   action,
   parcels,
+  templates,
   initialScenario,
   initialParcelId,
   submitLabel,
@@ -104,6 +125,7 @@ export function ScenarioEditorForm({
 }: {
   action: (formData: FormData) => void | Promise<void>;
   parcels: ParcelDto[];
+  templates: ScenarioAssumptionTemplateDto[];
   initialScenario?: ScenarioDto;
   initialParcelId?: string | null;
   submitLabel: string;
@@ -112,17 +134,16 @@ export function ScenarioEditorForm({
   const initialStrategy = initialScenario?.strategyType ?? StrategyType.FREE_MARKET_RENTAL;
   const initialSelectedParcelId = initialScenario?.parcelId ?? initialParcelId ?? "";
   const initialAssumptionSet = initialScenario?.assumptionSet ?? null;
+  const defaultTemplate = getDefaultTemplate(templates, initialScenario);
   const [strategyType, setStrategyType] = useState<StrategyType>(initialStrategy);
   const [selectedParcelId, setSelectedParcelId] = useState(initialSelectedParcelId);
-  const [assumptionProfileKey, setAssumptionProfileKey] = useState<AssumptionProfileKey>(
-    initialAssumptionSet?.profileKey ?? AssumptionProfileKey.BASELINE,
-  );
   const hint = strategyFieldHints[strategyType];
   const isRequiredNow = (label: string) => hint.requiredFields.includes(label);
   const selectedParcel = useMemo(
     () => parcels.find((parcel) => parcel.id === selectedParcelId) ?? null,
     [parcels, selectedParcelId],
   );
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState(defaultTemplate?.key ?? "");
   const sortedParcels = useMemo(
     () => [...parcels].sort((left, right) => {
       const rankDiff = getParcelSelectionRank(left) - getParcelSelectionRank(right);
@@ -134,6 +155,23 @@ export function ScenarioEditorForm({
     }),
     [parcels],
   );
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.key === selectedTemplateKey) ?? defaultTemplate,
+    [defaultTemplate, selectedTemplateKey, templates],
+  );
+  const selectedTemplateName = selectedTemplate?.name ?? (initialAssumptionSet?.templateName ?? "Baseline Standard");
+  const assumptionProfileKey = selectedTemplate?.profileKey ?? initialAssumptionSet?.profileKey ?? "BASELINE";
+  const [nameEdited, setNameEdited] = useState(Boolean(initialScenario?.name));
+  const suggestedScenarioName = useMemo(
+    () => getSuggestedScenarioName(selectedParcel, strategyType, selectedTemplateName),
+    [selectedParcel, strategyType, selectedTemplateName],
+  );
+  const [nameValue, setNameValue] = useState(initialScenario?.name ?? suggestedScenarioName);
+  useEffect(() => {
+    if (!nameEdited) {
+      setNameValue(suggestedScenarioName);
+    }
+  }, [nameEdited, suggestedScenarioName]);
   const selectedParcelSignal = selectedParcel
     ? selectedParcel.isGroupSite
       ? "Grouped site"
@@ -141,16 +179,6 @@ export function ScenarioEditorForm({
         ? "Manual fallback"
         : "Source-backed"
     : "Select parcel";
-
-  const caseFields: FieldConfig[] = [
-    {
-      id: "name",
-      label: "Scenario name",
-      defaultValue: initialScenario?.name ?? "",
-      requiredNow: true,
-      required: true,
-    },
-  ];
 
   const revenueFields: FieldConfig[] = [
     {
@@ -333,7 +361,7 @@ export function ScenarioEditorForm({
             <span className="meta-chip">{selectedParcel?.name ?? selectedParcel?.cadastralId ?? "Select parcel"}</span>
             <span className="meta-chip">{selectedParcelSignal}</span>
             <span className="meta-chip">{strategyTypeLabels[strategyType]}</span>
-            <span className="meta-chip">{assumptionProfileLabels[assumptionProfileKey]}</span>
+            <span className="meta-chip">{selectedTemplateName}</span>
             <span className="meta-chip">{summarizeRequiredFields(hint.requiredFields)}</span>
           </div>
           <div className="chip-row">
@@ -360,7 +388,23 @@ export function ScenarioEditorForm({
       >
         <div className="content-stack">
           <div className="field-grid field-grid--quad">
-            {caseFields.map((field) => renderTextField(field))}
+            <div className="field-stack">
+              <div className="field-row">
+                <Label htmlFor="name">Scenario name</Label>
+                <FieldTag requiredNow />
+              </div>
+              <Input
+                id="name"
+                name="name"
+                value={nameValue}
+                onChange={(event) => {
+                  setNameValue(event.target.value);
+                  setNameEdited(Boolean(event.target.value.trim()));
+                }}
+                required
+              />
+              <div className="field-help">Defaults to parcel, strategy, and template so scenario sets stay readable as the board grows.</div>
+            </div>
 
             <div className="field-stack">
               <div className="field-row">
@@ -382,6 +426,7 @@ export function ScenarioEditorForm({
                 ))}
               </select>
               <input type="hidden" name="parcelGroupId" value={selectedParcel?.parcelGroupId ?? initialScenario?.parcelGroupId ?? ""} />
+              <input type="hidden" name="selectedParcelLabel" value={selectedParcel?.name ?? selectedParcel?.cadastralId ?? ""} />
               <div className="field-help">Grouped sites and source-backed parcels are listed first so the case stays tied to sourced site identity before feasibility work begins.</div>
             </div>
 
@@ -486,7 +531,8 @@ export function ScenarioEditorForm({
         size="compact"
         actions={(
           <div className="action-row action-row--compact">
-            <Badge variant="accent">{assumptionProfileLabels[assumptionProfileKey]}</Badge>
+            <Badge variant="accent">{selectedTemplateName}</Badge>
+            <Badge variant="surface">{assumptionProfileLabels[assumptionProfileKey]}</Badge>
             <Badge variant="surface">{assumptionOverrideCount} override{assumptionOverrideCount === 1 ? "" : "s"}</Badge>
           </div>
         )}
@@ -495,21 +541,27 @@ export function ScenarioEditorForm({
           <div className="field-grid field-grid--tri">
             <div className="field-stack">
               <div className="field-row">
-                <Label htmlFor="assumptionProfileKey">Profile</Label>
+                <Label htmlFor="assumptionTemplateKey">Template</Label>
                 <FieldTag requiredNow={mode === "builder"} />
               </div>
               <select
-                id="assumptionProfileKey"
-                name="assumptionProfileKey"
-                defaultValue={initialAssumptionSet?.profileKey ?? AssumptionProfileKey.BASELINE}
-                onChange={(event) => setAssumptionProfileKey(event.target.value as AssumptionProfileKey)}
+                id="assumptionTemplateKey"
+                name="assumptionTemplateKey"
+                value={selectedTemplateKey}
+                onChange={(event) => setSelectedTemplateKey(event.target.value)}
                 className="ui-select"
               >
-                {Object.values(AssumptionProfileKey).map((value) => (
-                  <option key={value} value={value}>{assumptionProfileLabels[value]}</option>
+                {templates.map((template) => (
+                  <option key={template.key} value={template.key}>{template.name}</option>
                 ))}
               </select>
-              <div className="field-help">Choose the default realism posture, then override only what is case-specific.</div>
+              <input type="hidden" name="assumptionProfileKey" value={assumptionProfileKey} />
+              <input type="hidden" name="assumptionTemplateName" value={selectedTemplateName} />
+              <div className="field-help">
+                {selectedTemplate
+                  ? `${selectedTemplate.description} Uses the ${assumptionProfileLabels[selectedTemplate.profileKey].toLowerCase()} posture as the reusable base.`
+                  : "Choose the reusable base posture, then override only what is case-specific."}
+              </div>
             </div>
 
             <div className="field-stack field-stack--span-full">
@@ -526,6 +578,15 @@ export function ScenarioEditorForm({
               />
             </div>
           </div>
+
+          {selectedTemplate ? (
+            <div className="chip-row">
+              <Badge variant="surface">Planning buffer {selectedTemplate.defaults.planningBufferPct}</Badge>
+              <Badge variant="surface">Efficiency {selectedTemplate.defaults.efficiencyFactorPct}</Badge>
+              <Badge variant="surface">Vacancy {selectedTemplate.defaults.vacancyPct}</Badge>
+              <Badge variant="surface">Contingency {selectedTemplate.defaults.contingencyPct}</Badge>
+            </div>
+          ) : null}
 
           <div className="editor-extension-grid">
             <details className="editor-extension-panel" open={mode === "builder" || assumptionFieldsOperating.some((field) => hasValue(field.defaultValue))}>

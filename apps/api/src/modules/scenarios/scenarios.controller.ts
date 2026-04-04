@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards, Versi
 import { ApiBearerAuth, ApiHeader, ApiTags } from "@nestjs/swagger";
 import type {
   CreateScenarioRequestDto,
+  ListScenarioAssumptionTemplatesResponseDto,
   ListScenariosResponseDto,
   ScenarioComparisonResponseDto,
   ScenarioDto,
@@ -33,6 +34,12 @@ export class ScenariosController {
   @Version("1")
   list(@Query("page") page = "1", @Query("pageSize") pageSize = "20"): Promise<ListScenariosResponseDto> {
     return this.scenariosService.list({ page: Number(page), pageSize: Number(pageSize) });
+  }
+
+  @Get("assumption-templates")
+  @Version("1")
+  listAssumptionTemplates(): ListScenarioAssumptionTemplatesResponseDto {
+    return this.scenariosService.listAssumptionTemplates();
   }
 
   @Get("compare")

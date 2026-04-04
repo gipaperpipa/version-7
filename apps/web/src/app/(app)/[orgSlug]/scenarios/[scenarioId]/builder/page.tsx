@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getParcels } from "@/lib/api/parcels";
 import { getPlanningParameters } from "@/lib/api/planning";
 import { isApiUnavailableError } from "@/lib/api/errors";
-import { getFundingPrograms, getScenario, getScenarioReadiness } from "@/lib/api/scenarios";
+import { getFundingPrograms, getScenario, getScenarioAssumptionTemplates, getScenarioReadiness } from "@/lib/api/scenarios";
 import {
   assumptionProfileLabels,
   humanizeTokenLabel,
@@ -34,11 +34,12 @@ export default async function ScenarioBuilderPage({
 
   try {
     const scenario = await getScenario(orgSlug, scenarioId);
-    const [readiness, fundingPrograms, parcels, planningParameters] = await Promise.all([
+    const [readiness, fundingPrograms, parcels, planningParameters, assumptionTemplates] = await Promise.all([
       getScenarioReadiness(orgSlug, scenarioId),
       getFundingPrograms(orgSlug),
       getParcels(orgSlug),
       scenario.parcelId ? getPlanningParameters(orgSlug, scenario.parcelId) : Promise.resolve({ items: [], total: 0, page: 1, pageSize: 0 }),
+      getScenarioAssumptionTemplates(orgSlug),
     ]);
 
     const updateAction = updateScenarioAction.bind(null, orgSlug, scenarioId);
@@ -50,11 +51,29 @@ export default async function ScenarioBuilderPage({
       .map((item) => humanizeTokenLabel(item.financingSourceType));
     const linkedParcel = scenario.parcelId ? parcels.items.find((parcel) => parcel.id === scenario.parcelId) ?? null : null;
     const planningValueCount = planningParameters.items.filter((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null).length;
-    const blockerCount = readiness.issues.filter((issue) => issue.severity === "BLOCKING").length;
+    const blockerCount = readiness.summary.executionBlockers;
+    const confidenceBlockerCount = readiness.summary.confidenceBlockers;
     const warningCount = readiness.issues.filter((issue) => issue.severity === "WARNING").length;
     const readinessVerdict = getReadinessVerdict(readiness);
     const validatedLabel = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(readiness.validatedAt));
     const assumptionOverrideCount = Object.values(scenario.assumptionSet?.overrides ?? {}).filter((value) => value !== null).length;
+    const readinessGroups = [
+      {
+        title: "Execution blockers",
+        emptyLabel: "No execution blockers. The scenario can run.",
+        items: readiness.issues.filter((issue) => issue.blocksRun),
+      },
+      {
+        title: "Confidence blockers",
+        emptyLabel: "No confidence blockers. Current inputs support a stronger directional read.",
+        items: readiness.issues.filter((issue) => issue.blocksConfidence && !issue.blocksRun),
+      },
+      {
+        title: "Quality warnings",
+        emptyLabel: "No additional quality warnings.",
+        items: readiness.issues.filter((issue) => !issue.blocksRun && !issue.blocksConfidence),
+      },
+    ];
 
     return (
       <div className="workspace-page content-stack">
@@ -67,7 +86,7 @@ export default async function ScenarioBuilderPage({
               {linkedParcel ? <span className="meta-chip">{linkedParcel.name ?? linkedParcel.cadastralId ?? "Linked parcel"}</span> : <StatusBadge tone="warning">Parcel missing</StatusBadge>}
               <span className="meta-chip">{strategyTypeLabels[scenario.strategyType]}</span>
               <span className="meta-chip">
-                {assumptionProfileLabels[scenario.assumptionSet?.profileKey ?? "BASELINE"]}
+                {scenario.assumptionSet?.templateName ?? assumptionProfileLabels[scenario.assumptionSet?.profileKey ?? "BASELINE"]}
                 {assumptionOverrideCount ? ` + ${assumptionOverrideCount} override${assumptionOverrideCount === 1 ? "" : "s"}` : ""}
               </span>
               <span className="meta-chip">{selectedFundingCount ? `${selectedFundingCount} funding lane(s)` : "No funding lanes"}</span>
@@ -152,7 +171,7 @@ export default async function ScenarioBuilderPage({
               <div className="ops-summary-item">
                 <div className="ops-summary-item__label">Assumptions</div>
                 <div className="ops-summary-item__value">
-                  {assumptionProfileLabels[scenario.assumptionSet?.profileKey ?? "BASELINE"]}
+                  {scenario.assumptionSet?.templateName ?? assumptionProfileLabels[scenario.assumptionSet?.profileKey ?? "BASELINE"]}
                 </div>
                 <div className="ops-summary-item__detail">
                   {assumptionOverrideCount ? `${assumptionOverrideCount} case-specific override(s)` : "Profile defaults only"}
@@ -161,7 +180,13 @@ export default async function ScenarioBuilderPage({
               <div className="ops-summary-item">
                 <div className="ops-summary-item__label">Readiness</div>
                 <div className="ops-summary-item__value">{humanizeTokenLabel(readiness.status)}</div>
-                <div className="ops-summary-item__detail">{blockerCount ? `${blockerCount} blocker(s)` : `${warningCount} warning(s)`} | Checked {validatedLabel}</div>
+                <div className="ops-summary-item__detail">
+                  {blockerCount
+                    ? `${blockerCount} execution blocker(s)`
+                    : confidenceBlockerCount
+                      ? `${confidenceBlockerCount} confidence blocker(s)`
+                      : `${warningCount} warning(s)`} | Checked {validatedLabel}
+                </div>
               </div>
             </div>
 
@@ -169,7 +194,10 @@ export default async function ScenarioBuilderPage({
               <div className="builder-cockpit__signals">
                 <StatusBadge tone={getReadinessTone(readiness.status)}>{humanizeTokenLabel(readiness.status)}</StatusBadge>
                 <StatusBadge tone={blockerCount ? "danger" : "success"}>
-                  {blockerCount} blocker{blockerCount === 1 ? "" : "s"}
+                  {blockerCount} execution blocker{blockerCount === 1 ? "" : "s"}
+                </StatusBadge>
+                <StatusBadge tone={confidenceBlockerCount ? "warning" : "success"}>
+                  {confidenceBlockerCount} confidence blocker{confidenceBlockerCount === 1 ? "" : "s"}
                 </StatusBadge>
                 <StatusBadge tone={warningCount ? "warning" : "success"}>
                   {warningCount} warning{warningCount === 1 ? "" : "s"}
@@ -194,6 +222,7 @@ export default async function ScenarioBuilderPage({
           <ScenarioEditorForm
             action={updateAction}
             parcels={parcels.items}
+            templates={assumptionTemplates.items}
             initialScenario={scenario}
             submitLabel="Save scenario"
             mode="builder"
@@ -216,38 +245,48 @@ export default async function ScenarioBuilderPage({
               <div className="content-stack">
                 <div className="action-row">
                   <StatusBadge tone={blockerCount ? "danger" : "success"}>
-                    {blockerCount} blocker{blockerCount === 1 ? "" : "s"}
+                    {blockerCount} execution blocker{blockerCount === 1 ? "" : "s"}
+                  </StatusBadge>
+                  <StatusBadge tone={confidenceBlockerCount ? "warning" : "success"}>
+                    {confidenceBlockerCount} confidence blocker{confidenceBlockerCount === 1 ? "" : "s"}
                   </StatusBadge>
                   <StatusBadge tone={warningCount ? "warning" : "success"}>
                     {warningCount} warning{warningCount === 1 ? "" : "s"}
                   </StatusBadge>
                 </div>
-                <DiagnosticGroup title="Readiness scan" emptyLabel="No readiness issues. The scenario is ready to run.">
-                  {readiness.issues.length ? (
-                    <div className="signal-list">
-                      {readiness.issues.map((issue) => (
-                        <div key={`${issue.code}-${issue.field ?? "global"}`} className="signal-row">
-                          <div className="signal-row__badges">
-                            <StatusBadge tone={getIssueTone(issue.severity)}>{issue.severity}</StatusBadge>
-                            <StatusBadge tone="surface">{humanizeTokenLabel(issue.code)}</StatusBadge>
-                            {issue.field ? <StatusBadge tone="info">{issue.field}</StatusBadge> : null}
-                          </div>
-                          <div className="signal-row__text">{issue.message}</div>
+                <div className="content-stack">
+                  {readinessGroups.map((group) => (
+                    <DiagnosticGroup key={group.title} title={group.title} emptyLabel={group.emptyLabel}>
+                      {group.items.length ? (
+                        <div className="signal-list">
+                          {group.items.map((issue) => (
+                            <div key={`${group.title}-${issue.code}-${issue.field ?? "global"}`} className="signal-row">
+                              <div className="signal-row__badges">
+                                <StatusBadge tone={getIssueTone(issue.severity)}>{issue.severity}</StatusBadge>
+                                <StatusBadge tone="surface">{humanizeTokenLabel(issue.category)}</StatusBadge>
+                                <StatusBadge tone="surface">{humanizeTokenLabel(issue.code)}</StatusBadge>
+                                {issue.field ? <StatusBadge tone="info">{issue.field}</StatusBadge> : null}
+                              </div>
+                              <div className="signal-row__text">{issue.message}</div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </DiagnosticGroup>
+                      ) : null}
+                    </DiagnosticGroup>
+                  ))}
+                </div>
               </div>
             </SectionCard>
 
             <NextStepPanel
               className="rail-panel rail-panel--action"
-              title={readiness.canRun ? "Ready to run" : "Resolve blockers first"}
+              title={readiness.canRun ? "Runnable state reached" : "Resolve execution blockers"}
               description={readiness.canRun
-                ? "Directional enough to run. Review funding and planning once, then launch."
-                : "Clear the listed blockers before treating the case as run-ready."}
-              tone={readiness.canRun ? "accent" : "muted"}
+                ? confidenceBlockerCount
+                  ? "The engine can run, but confidence-critical gaps still deserve review before treating the case as decision-ready."
+                  : "Directional enough to run. Review funding and planning once, then launch."
+                : "Clear the execution blockers before treating the case as run-ready."}
+              tone={readiness.canRun && confidenceBlockerCount === 0 ? "accent" : "muted"}
               size="compact"
               actions={(
                 <>

@@ -12,18 +12,18 @@ function hasPlanningCriticalMissingData(run: ScenarioRunDto) {
 }
 
 export function getReadinessVerdict(readiness: ScenarioReadinessDto): DecisionVerdict {
-  if (readiness.status === "BLOCKED") {
+  if (readiness.summary.executionBlockers > 0 || readiness.status === "BLOCKED") {
     return {
-      title: "Blocked by missing data",
-      summary: "Key parcel, planning, or scenario inputs still block a reliable run.",
+      title: "Blocked from execution",
+      summary: "Execution blockers still prevent a directional run. Resolve the planning, parcel, or scenario-critical gaps first.",
       tone: "danger",
     };
   }
 
-  if (readiness.status === "READY_WITH_WARNINGS") {
+  if (readiness.summary.confidenceBlockers > 0 || readiness.status === "READY_WITH_WARNINGS") {
     return {
-      title: "Not ready for decision",
-      summary: "The scenario can run, but the current signal still needs review before it supports a strong decision.",
+      title: "Runnable with confidence gaps",
+      summary: "The engine can run, but confidence-critical gaps still weaken the decision signal and should be reviewed before relying on the output.",
       tone: "warning",
     };
   }

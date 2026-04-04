@@ -51,6 +51,13 @@ export const AssumptionProfileKey = {
 } as const;
 export type AssumptionProfileKey = (typeof AssumptionProfileKey)[keyof typeof AssumptionProfileKey];
 
+export const AssumptionTemplateScope = {
+  SYSTEM: "SYSTEM",
+  WORKSPACE: "WORKSPACE",
+} as const;
+export type AssumptionTemplateScope =
+  (typeof AssumptionTemplateScope)[keyof typeof AssumptionTemplateScope];
+
 export const ScenarioStatus = {
   DRAFT: "DRAFT",
   READY: "READY",
@@ -85,17 +92,31 @@ export const ScenarioReadinessIssueSeverity = {
 export type ScenarioReadinessIssueSeverity =
   (typeof ScenarioReadinessIssueSeverity)[keyof typeof ScenarioReadinessIssueSeverity];
 
+export const ScenarioReadinessIssueCategory = {
+  EXECUTION_BLOCKER: "EXECUTION_BLOCKER",
+  CONFIDENCE_BLOCKER: "CONFIDENCE_BLOCKER",
+  PLANNING_CRITICAL: "PLANNING_CRITICAL",
+  FUNDING_CRITICAL: "FUNDING_CRITICAL",
+  OPTIONAL_INPUT: "OPTIONAL_INPUT",
+  QUALITY_WARNING: "QUALITY_WARNING",
+} as const;
+export type ScenarioReadinessIssueCategory =
+  (typeof ScenarioReadinessIssueCategory)[keyof typeof ScenarioReadinessIssueCategory];
+
 export const ScenarioReadinessIssueCode = {
   MISSING_PARCEL: "MISSING_PARCEL",
   PARCEL_GROUP_RUN_UNSUPPORTED_V0: "PARCEL_GROUP_RUN_UNSUPPORTED_V0",
   MISSING_LAND_AREA: "MISSING_LAND_AREA",
   MISSING_BUILDABILITY_INPUT: "MISSING_BUILDABILITY_INPUT",
   MISSING_COST_INPUT: "MISSING_COST_INPUT",
+  MISSING_ACTIVE_FUNDING_STACK: "MISSING_ACTIVE_FUNDING_STACK",
   MISSING_MARKET_RENT: "MISSING_MARKET_RENT",
   MISSING_SUBSIDIZED_RENT: "MISSING_SUBSIDIZED_RENT",
   MISSING_SUBSIDIZED_SHARE: "MISSING_SUBSIDIZED_SHARE",
   MISSING_STATE_SUBSIDY_STACK: "MISSING_STATE_SUBSIDY_STACK",
   MISSING_SALES_PRICE: "MISSING_SALES_PRICE",
+  SOURCE_PARCEL_INCOMPLETE: "SOURCE_PARCEL_INCOMPLETE",
+  MANUAL_PARCEL_FALLBACK: "MANUAL_PARCEL_FALLBACK",
   TEMPORARY_MIXED_STRATEGY: "TEMPORARY_MIXED_STRATEGY",
   MISSING_MIX_CONFIGURATION: "MISSING_MIX_CONFIGURATION",
 } as const;

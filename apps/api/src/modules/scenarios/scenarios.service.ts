@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Scope, UnprocessableEntityException } from "@nestjs/common";
 import type {
   CreateScenarioRequestDto,
+  ListScenarioAssumptionTemplatesResponseDto,
   ListScenariosResponseDto,
   ScenarioComparisonResponseDto,
   ScenarioDto,
@@ -14,6 +15,7 @@ import { RequestContextService } from "../../common/request-context/request-cont
 import { mapScenarioRunDto } from "../scenario-runs/scenario-run.mapper";
 import { scenarioRunWithResultArgs } from "../scenario-runs/scenario-run.types";
 import { ScenarioValidationService } from "./scenario-validation.service";
+import { getScenarioAssumptionTemplates } from "./scenario-assumption-templates";
 import {
   extractScenarioAssumptionSet,
   withScenarioAssumptionSet,
@@ -50,6 +52,12 @@ export class ScenariosService {
       total,
       page,
       pageSize,
+    };
+  }
+
+  listAssumptionTemplates(): ListScenarioAssumptionTemplatesResponseDto {
+    return {
+      items: getScenarioAssumptionTemplates(),
     };
   }
 
@@ -414,9 +422,10 @@ export class ScenariosService {
     const assumptionSet = scenario.assumptionSet;
     if (!assumptionSet) return "Baseline assumptions";
     const overrideCount = Object.values(assumptionSet.overrides).filter((value) => value !== null).length;
+    const templateLabel = assumptionSet.templateName ?? assumptionSet.templateKey ?? `${assumptionSet.profileKey} template`;
     return overrideCount
-      ? `${assumptionSet.profileKey} profile + ${overrideCount} override${overrideCount === 1 ? "" : "s"}`
-      : `${assumptionSet.profileKey} profile`;
+      ? `${templateLabel} + ${overrideCount} override${overrideCount === 1 ? "" : "s"}`
+      : templateLabel;
   }
 
   private getComparisonRecommendation(readiness: ScenarioReadinessDto, latestRun: ScenarioRunDto | null) {

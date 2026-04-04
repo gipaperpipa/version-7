@@ -215,20 +215,20 @@ export default async function ScenarioComparePage({
                       {entry.deltaToLeader != null ? `${entry.deltaToLeader} from leader` : "No comparison yet"}
                     </div>
                   </div>
-                  <div className="comparison-stat">
-                    <div className="comparison-stat__label">Assumptions</div>
-                    <div className="comparison-stat__value">
-                      {assumptionProfileLabels[entry.scenario.assumptionSet?.profileKey ?? "BASELINE"]}
+                    <div className="comparison-stat">
+                      <div className="comparison-stat__label">Assumptions</div>
+                      <div className="comparison-stat__value">
+                        {entry.scenario.assumptionSet?.templateName ?? assumptionProfileLabels[entry.scenario.assumptionSet?.profileKey ?? "BASELINE"]}
+                      </div>
+                      <div className="comparison-stat__detail">{entry.assumptionSummary}</div>
                     </div>
-                    <div className="comparison-stat__detail">{entry.assumptionSummary}</div>
-                  </div>
-                  <div className="comparison-stat">
-                    <div className="comparison-stat__label">Signals</div>
-                    <div className="comparison-stat__value">
-                      {entry.blockerCount}B / {entry.warningCount}W / {entry.missingDataCount}M
+                    <div className="comparison-stat">
+                      <div className="comparison-stat__label">Signals</div>
+                      <div className="comparison-stat__value">
+                        {entry.readiness.summary.executionBlockers}E / {entry.readiness.summary.confidenceBlockers}C / {entry.warningCount}W / {entry.missingDataCount}M
+                      </div>
+                      <div className="comparison-stat__detail">Execution / confidence / warnings / missing data</div>
                     </div>
-                    <div className="comparison-stat__detail">Blockers / warnings / missing data</div>
-                  </div>
                 </div>
 
                 <div className="action-row">

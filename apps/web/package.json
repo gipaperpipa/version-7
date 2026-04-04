@@ -6,7 +6,7 @@
     "dev": "pnpm --filter @repo/contracts build && node scripts/sync-contracts-source.cjs && next dev -p 3001",
     "build": "pnpm --filter @repo/contracts build && node scripts/sync-contracts-source.cjs && next build",
     "start": "next start -p 3001",
-    "typecheck": "pnpm --filter @repo/contracts build && node scripts/sync-contracts-source.cjs && tsc -p tsconfig.json --noEmit"
+    "typecheck": "pnpm --filter @repo/contracts build && node scripts/sync-contracts-source.cjs && tsc -p tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
     "@repo/contracts": "workspace:*",

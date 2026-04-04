@@ -5,7 +5,8 @@ import { VerdictPanel } from "@/components/ui/verdict-panel";
 
 export function ScenarioReadinessBanner({ readiness }: { readiness: ScenarioReadinessDto }) {
   const verdict = getReadinessVerdict(readiness);
-  const blockerCount = readiness.issues.filter((issue) => issue.severity === "BLOCKING").length;
+  const blockerCount = readiness.summary.executionBlockers;
+  const confidenceBlockerCount = readiness.summary.confidenceBlockers;
   const warningCount = readiness.issues.filter((issue) => issue.severity === "WARNING").length;
   const validatedLabel = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(readiness.validatedAt));
 
@@ -19,7 +20,10 @@ export function ScenarioReadinessBanner({ readiness }: { readiness: ScenarioRead
       context={(
         <div className="action-row">
           <StatusBadge tone={blockerCount ? "danger" : "success"}>
-            {blockerCount} blocker{blockerCount === 1 ? "" : "s"}
+            {blockerCount} execution blocker{blockerCount === 1 ? "" : "s"}
+          </StatusBadge>
+          <StatusBadge tone={confidenceBlockerCount ? "warning" : "success"}>
+            {confidenceBlockerCount} confidence blocker{confidenceBlockerCount === 1 ? "" : "s"}
           </StatusBadge>
           <StatusBadge tone={warningCount ? "warning" : "success"}>
             {warningCount} warning{warningCount === 1 ? "" : "s"}

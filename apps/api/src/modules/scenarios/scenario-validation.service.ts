@@ -4,6 +4,7 @@ import {
   CORE_PLANNING_KEY_SLUGS,
 } from "../../generated-contracts/planning-keys";
 import {
+  ScenarioReadinessIssueCategory,
   ScenarioReadinessIssueCode,
   ScenarioReadinessIssueSeverity,
   ScenarioReadinessStatus,
@@ -12,6 +13,10 @@ import {
 import type { ScenarioReadinessIssueDto } from "../../generated-contracts/readiness";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { scenarioForValidationArgs, type ScenarioForValidation } from "./scenario.types";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 @Injectable()
 export class ScenarioValidationService {
@@ -49,13 +54,18 @@ export class ScenarioValidationService {
     const enabledStateSubsidy = scenario.fundingVariants.some(
       (item) => item.financingSourceType === FinancingSourceType.STATE_SUBSIDY && item.isEnabled,
     );
+    const enabledFundingCount = scenario.fundingVariants.filter((item) => item.isEnabled).length;
+    const parcelProvenance = isRecord(scenario.parcel?.provenanceJson) ? scenario.parcel?.provenanceJson : null;
+    const parcelTrustMode = typeof parcelProvenance?.trustMode === "string" ? parcelProvenance.trustMode : null;
+    const geometryDerived = Boolean(parcelProvenance?.geometryDerived);
+    const areaDerived = Boolean(parcelProvenance?.areaDerived);
 
     if (!scenario.parcelId) {
-      issues.push(this.block(ScenarioReadinessIssueCode.MISSING_PARCEL, "parcelId", "A parcel is required for Sprint 1 feasibility runs."));
+      issues.push(this.blockExecution(ScenarioReadinessIssueCode.MISSING_PARCEL, "parcelId", "A parcel is required for Sprint 1 feasibility runs."));
     }
 
     if (scenario.parcelGroupId && !scenario.parcelId) {
-      issues.push(this.block(
+      issues.push(this.blockExecution(
         ScenarioReadinessIssueCode.PARCEL_GROUP_RUN_UNSUPPORTED_V0,
         "parcelGroupId",
         "Parcel-group-only runs are not supported by the v0 engine.",
@@ -63,7 +73,24 @@ export class ScenarioValidationService {
     }
 
     if (!scenario.parcel?.landAreaSqm) {
-      issues.push(this.block(ScenarioReadinessIssueCode.MISSING_LAND_AREA, "parcel.landAreaSqm", "Parcel land area is required."));
+      issues.push(this.blockPlanning(ScenarioReadinessIssueCode.MISSING_LAND_AREA, "parcel.landAreaSqm", "Parcel land area is required."));
+    }
+
+    if (scenario.parcel && (parcelTrustMode === "SOURCE_INCOMPLETE" || !geometryDerived || !areaDerived)) {
+      issues.push(this.warnConfidence(
+        ScenarioReadinessIssueCode.SOURCE_PARCEL_INCOMPLETE,
+        "parcel",
+        "Parcel source intake is incomplete. The run can proceed, but planning confidence is reduced until geometry and area are fully source-derived.",
+        ScenarioReadinessIssueCategory.PLANNING_CRITICAL,
+      ));
+    }
+
+    if (scenario.parcel && parcelTrustMode === "MANUAL_FALLBACK") {
+      issues.push(this.warnConfidence(
+        ScenarioReadinessIssueCode.MANUAL_PARCEL_FALLBACK,
+        "parcel",
+        "This case is anchored to a manual fallback parcel. The run remains directional, but source-backed parcel identity should replace it when available.",
+      ));
     }
 
     const hasFootprintInput =
@@ -77,7 +104,7 @@ export class ScenarioValidationService {
       hasValue(CORE_PLANNING_KEY_SLUGS.MAX_FLOORS);
 
     if (!hasFootprintInput || !hasVolumeInput) {
-      issues.push(this.block(
+      issues.push(this.blockPlanning(
         ScenarioReadinessIssueCode.MISSING_BUILDABILITY_INPUT,
         "planning",
         "Buildability inputs are incomplete for v0 feasibility.",
@@ -85,42 +112,60 @@ export class ScenarioValidationService {
     }
 
     if (!scenario.hardCostPerBgfSqm || !scenario.landCost) {
-      issues.push(this.block(ScenarioReadinessIssueCode.MISSING_COST_INPUT, "costs", "Land cost and hard cost per BGF sqm are required."));
+      issues.push(this.blockExecution(ScenarioReadinessIssueCode.MISSING_COST_INPUT, "costs", "Land cost and hard cost per BGF sqm are required."));
+    }
+
+    if (enabledFundingCount === 0) {
+      issues.push(this.warnConfidence(
+        ScenarioReadinessIssueCode.MISSING_ACTIVE_FUNDING_STACK,
+        "fundingVariants",
+        "No active funding stack is selected. The run can still proceed, but capital-structure outputs and confidence will be weaker.",
+        ScenarioReadinessIssueCategory.FUNDING_CRITICAL,
+      ));
     }
 
     switch (scenario.strategyType) {
       case StrategyType.FREE_MARKET_RENTAL:
       case StrategyType.STUDENT_HOUSING:
         if (!scenario.targetMarketRentEurSqm) {
-          issues.push(this.block(ScenarioReadinessIssueCode.MISSING_MARKET_RENT, "targetMarketRentEurSqm", "Market rent is required."));
+          issues.push(this.blockExecution(ScenarioReadinessIssueCode.MISSING_MARKET_RENT, "targetMarketRentEurSqm", "Market rent is required."));
         }
         break;
       case StrategyType.SUBSIDIZED_RENTAL:
         if (!scenario.targetSubsidizedRentEurSqm) {
-          issues.push(this.block(ScenarioReadinessIssueCode.MISSING_SUBSIDIZED_RENT, "targetSubsidizedRentEurSqm", "Subsidized rent is required."));
+          issues.push(this.blockExecution(ScenarioReadinessIssueCode.MISSING_SUBSIDIZED_RENT, "targetSubsidizedRentEurSqm", "Subsidized rent is required."));
         }
         if (!scenario.subsidizedSharePct) {
-          issues.push(this.block(ScenarioReadinessIssueCode.MISSING_SUBSIDIZED_SHARE, "subsidizedSharePct", "Subsidized share is required."));
+          issues.push(this.blockExecution(ScenarioReadinessIssueCode.MISSING_SUBSIDIZED_SHARE, "subsidizedSharePct", "Subsidized share is required."));
         }
         if (!enabledStateSubsidy) {
-          issues.push(this.block(ScenarioReadinessIssueCode.MISSING_STATE_SUBSIDY_STACK, "fundingVariants", "At least one enabled state subsidy item is required."));
+          issues.push(this.blockFunding(ScenarioReadinessIssueCode.MISSING_STATE_SUBSIDY_STACK, "fundingVariants", "At least one enabled state subsidy item is required."));
         }
         break;
       case StrategyType.BUILD_TO_SELL:
         if (!scenario.targetSalesPriceEurSqm) {
-          issues.push(this.block(ScenarioReadinessIssueCode.MISSING_SALES_PRICE, "targetSalesPriceEurSqm", "Sales price input is required."));
+          issues.push(this.blockExecution(ScenarioReadinessIssueCode.MISSING_SALES_PRICE, "targetSalesPriceEurSqm", "Sales price input is required."));
         }
         break;
       case StrategyType.MIXED_STRATEGY:
-        issues.push(this.warn(ScenarioReadinessIssueCode.TEMPORARY_MIXED_STRATEGY, "strategyType", "MIXED_STRATEGY is temporary in Sprint 1."));
+        issues.push(this.warnQuality(ScenarioReadinessIssueCode.TEMPORARY_MIXED_STRATEGY, "strategyType", "MIXED_STRATEGY is temporary in Sprint 1."));
         if (!scenario.strategyMixJson) {
-          issues.push(this.block(ScenarioReadinessIssueCode.MISSING_MIX_CONFIGURATION, "strategyMixJson", "Temporary mix configuration is required."));
+          issues.push(this.blockExecution(ScenarioReadinessIssueCode.MISSING_MIX_CONFIGURATION, "strategyMixJson", "Temporary mix configuration is required."));
         }
         break;
     }
 
-    const blockingCount = issues.filter((item) => item.severity === ScenarioReadinessIssueSeverity.BLOCKING).length;
+    const executionBlockerCount = issues.filter((item) => item.blocksRun).length;
+    const confidenceBlockerCount = issues.filter((item) => item.blocksConfidence && !item.blocksRun).length;
     const warningCount = issues.filter((item) => item.severity === ScenarioReadinessIssueSeverity.WARNING).length;
+    const summary = {
+      executionBlockers: executionBlockerCount,
+      confidenceBlockers: confidenceBlockerCount,
+      planningCritical: issues.filter((item) => item.category === ScenarioReadinessIssueCategory.PLANNING_CRITICAL).length,
+      fundingCritical: issues.filter((item) => item.category === ScenarioReadinessIssueCategory.FUNDING_CRITICAL).length,
+      optionalInputs: issues.filter((item) => item.category === ScenarioReadinessIssueCategory.OPTIONAL_INPUT).length,
+      qualityWarnings: issues.filter((item) => item.category === ScenarioReadinessIssueCategory.QUALITY_WARNING).length,
+    };
     const sourceScores = [
       scenario.parcel?.confidenceScore ?? null,
       ...params.map((item) => item.confidenceScore ?? null),
@@ -129,33 +174,63 @@ export class ScenarioValidationService {
     const sourceAverage = sourceScores.length
       ? sourceScores.reduce((acc, value) => acc + value, 0) / sourceScores.length
       : 70;
-    const inputConfidencePct = Math.max(20, Math.round(sourceAverage - blockingCount * 20 - warningCount * 8));
+    const inputConfidencePct = Math.max(20, Math.round(sourceAverage - executionBlockerCount * 20 - confidenceBlockerCount * 12 - warningCount * 6));
 
     return {
       readiness: {
         scenarioId: scenario.id,
-        status: blockingCount > 0
+        status: executionBlockerCount > 0
           ? ScenarioReadinessStatus.BLOCKED
-          : warningCount > 0
+          : confidenceBlockerCount > 0 || warningCount > 0
             ? ScenarioReadinessStatus.READY_WITH_WARNINGS
             : ScenarioReadinessStatus.READY,
-        canRun: blockingCount === 0,
+        canRun: executionBlockerCount === 0,
         issues,
+        summary,
         validatedAt: new Date().toISOString(),
       },
       inputConfidencePct,
       confidenceReasons: [
         `Derived from source confidence average of ${Math.round(sourceAverage)}%.`,
-        `${blockingCount} blocking issue(s) and ${warningCount} warning(s) reduced readiness confidence.`,
+        `${executionBlockerCount} execution blocker(s), ${confidenceBlockerCount} confidence blocker(s), and ${warningCount} warning(s) reduced readiness confidence.`,
       ],
     };
   }
 
-  private block(code: ScenarioReadinessIssueCode, field: string, message: string): ScenarioReadinessIssueDto {
-    return { code, field, message, severity: ScenarioReadinessIssueSeverity.BLOCKING };
+  private blockExecution(code: ScenarioReadinessIssueCode, field: string, message: string): ScenarioReadinessIssueDto {
+    return this.issue(code, field, message, ScenarioReadinessIssueSeverity.BLOCKING, ScenarioReadinessIssueCategory.EXECUTION_BLOCKER, true, true);
   }
 
-  private warn(code: ScenarioReadinessIssueCode, field: string, message: string): ScenarioReadinessIssueDto {
-    return { code, field, message, severity: ScenarioReadinessIssueSeverity.WARNING };
+  private blockPlanning(code: ScenarioReadinessIssueCode, field: string, message: string): ScenarioReadinessIssueDto {
+    return this.issue(code, field, message, ScenarioReadinessIssueSeverity.BLOCKING, ScenarioReadinessIssueCategory.PLANNING_CRITICAL, true, true);
+  }
+
+  private blockFunding(code: ScenarioReadinessIssueCode, field: string, message: string): ScenarioReadinessIssueDto {
+    return this.issue(code, field, message, ScenarioReadinessIssueSeverity.BLOCKING, ScenarioReadinessIssueCategory.FUNDING_CRITICAL, true, true);
+  }
+
+  private warnConfidence(
+    code: ScenarioReadinessIssueCode,
+    field: string,
+    message: string,
+    category: ScenarioReadinessIssueCategory = ScenarioReadinessIssueCategory.CONFIDENCE_BLOCKER,
+  ): ScenarioReadinessIssueDto {
+    return this.issue(code, field, message, ScenarioReadinessIssueSeverity.WARNING, category, false, true);
+  }
+
+  private warnQuality(code: ScenarioReadinessIssueCode, field: string, message: string): ScenarioReadinessIssueDto {
+    return this.issue(code, field, message, ScenarioReadinessIssueSeverity.WARNING, ScenarioReadinessIssueCategory.QUALITY_WARNING, false, false);
+  }
+
+  private issue(
+    code: ScenarioReadinessIssueCode,
+    field: string,
+    message: string,
+    severity: ScenarioReadinessIssueSeverity,
+    category: ScenarioReadinessIssueCategory,
+    blocksRun: boolean,
+    blocksConfidence: boolean,
+  ): ScenarioReadinessIssueDto {
+    return { code, field, message, severity, category, blocksRun, blocksConfidence };
   }
 }

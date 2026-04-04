@@ -139,6 +139,8 @@ export function decodeScenarioAssumptionSet(value: unknown): ScenarioAssumptionS
 
   return {
     profileKey: record.profileKey,
+    templateKey: typeof record.templateKey === "string" && record.templateKey.trim() ? record.templateKey.trim() : null,
+    templateName: typeof record.templateName === "string" && record.templateName.trim() ? record.templateName.trim() : null,
     notes: typeof record.notes === "string" && record.notes.trim() ? record.notes.trim() : null,
     overrides: normalizeScenarioAssumptionOverrides(record.overrides),
   };
@@ -162,6 +164,8 @@ export function withScenarioAssumptionSet(
   } else {
     next.assumptionSet = {
       profileKey: assumptionSet.profileKey,
+      templateKey: assumptionSet.templateKey ?? null,
+      templateName: assumptionSet.templateName ?? null,
       notes: assumptionSet.notes,
       overrides: normalizeScenarioAssumptionOverrides(assumptionSet.overrides),
     };
@@ -175,6 +179,8 @@ export function getEffectiveScenarioAssumptions(
 ): ScenarioAssumptionEffectiveDto {
   const normalized = assumptionSet ?? {
     profileKey: AssumptionProfileKey.BASELINE,
+    templateKey: null,
+    templateName: null,
     notes: null,
     overrides: emptyScenarioAssumptionOverrides(),
   };
@@ -212,6 +218,8 @@ export function decodeEffectiveScenarioAssumptions(
 
   const merged = getEffectiveScenarioAssumptions({
     profileKey: record.profileKey,
+    templateKey: null,
+    templateName: null,
     notes: null,
     overrides: normalizeScenarioAssumptionOverrides(record),
   });

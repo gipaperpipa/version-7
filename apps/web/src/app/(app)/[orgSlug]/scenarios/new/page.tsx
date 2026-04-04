@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ScenarioEditorForm } from "@/components/scenarios/scenario-editor-form";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { getParcels } from "@/lib/api/parcels";
+import { getScenarioAssumptionTemplates } from "@/lib/api/scenarios";
 import { createScenarioAction } from "../actions";
 
 export default async function NewScenarioPage({
@@ -21,7 +22,10 @@ export default async function NewScenarioPage({
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
   try {
-    const parcels = await getParcels(orgSlug);
+    const [parcels, assumptionTemplates] = await Promise.all([
+      getParcels(orgSlug),
+      getScenarioAssumptionTemplates(orgSlug),
+    ]);
     const action = createScenarioAction.bind(null, orgSlug);
     const selectedParcel = resolvedSearchParams?.parcelId
       ? parcels.items.find((parcel) => parcel.id === resolvedSearchParams.parcelId) ?? null
@@ -97,6 +101,7 @@ export default async function NewScenarioPage({
             <ScenarioEditorForm
               action={action}
               parcels={parcels.items}
+              templates={assumptionTemplates.items}
               initialParcelId={resolvedSearchParams?.parcelId ?? null}
               submitLabel="Create scenario"
               mode="create"
