@@ -126,6 +126,9 @@ export interface SourceParcelSearchResultDto {
   existingParcelId: Id | null;
   existingSiteParcelId: Id | null;
   existingSiteName: string | null;
+  existingPlanningCount: number;
+  existingScenarioCount: number;
+  canAssembleIntoSite: boolean;
   rawMetadata: Record<string, unknown> | null;
 }
 

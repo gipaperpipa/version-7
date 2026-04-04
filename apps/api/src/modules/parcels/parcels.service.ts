@@ -191,6 +191,12 @@ export class ParcelsService {
         sourceProviderParcelId: true,
         parcelGroupId: true,
         isGroupSite: true,
+        _count: {
+          select: {
+            planningParameters: true,
+            scenarios: true,
+          },
+        },
         parcelGroup: {
           select: {
             id: true,
@@ -229,16 +235,24 @@ export class ParcelsService {
             existingParcelId: groupedMember.id,
             existingSiteParcelId: groupedMember.parcelGroup?.siteParcel?.id ?? groupedMember.parcelGroup?.siteParcelId ?? null,
             existingSiteName: groupedMember.parcelGroup?.siteParcel?.name ?? groupedMember.parcelGroup?.name ?? null,
+            existingPlanningCount: groupedMember._count?.planningParameters ?? 0,
+            existingScenarioCount: groupedMember._count?.scenarios ?? 0,
+            canAssembleIntoSite: false,
           };
         }
 
         if (standalone) {
+          const existingPlanningCount = standalone._count?.planningParameters ?? 0;
+          const existingScenarioCount = standalone._count?.scenarios ?? 0;
           return {
             ...item,
             workspaceState: "STANDALONE_PARCEL" as const,
             existingParcelId: standalone.id,
             existingSiteParcelId: null,
             existingSiteName: null,
+            existingPlanningCount,
+            existingScenarioCount,
+            canAssembleIntoSite: existingPlanningCount === 0 && existingScenarioCount === 0,
           };
         }
 
@@ -248,6 +262,9 @@ export class ParcelsService {
           existingParcelId: null,
           existingSiteParcelId: null,
           existingSiteName: null,
+          existingPlanningCount: 0,
+          existingScenarioCount: 0,
+          canAssembleIntoSite: true,
         };
       }),
     };
@@ -463,6 +480,12 @@ export class ParcelsService {
         sourceProviderParcelId: true,
         parcelGroupId: true,
         isGroupSite: true,
+        _count: {
+          select: {
+            planningParameters: true,
+            scenarios: true,
+          },
+        },
         parcelGroup: {
           select: {
             id: true,
@@ -490,11 +513,17 @@ export class ParcelsService {
     }
 
     const existingStandalones = existingSelectedParcels.filter((item) => !item.isGroupSite && !item.parcelGroupId);
-    if (existingStandalones.length) {
+    const lockedStandalones = existingStandalones.filter(
+      (item) => (item._count?.planningParameters ?? 0) > 0 || (item._count?.scenarios ?? 0) > 0,
+    );
+    if (lockedStandalones.length) {
       throw new BadRequestException(
-        "One or more selected source parcels already exist as standalone site records. Multi-parcel site assembly currently requires parcels that have not already been ingested as standalone records.",
+        "One or more selected source parcels already have planning or scenario work attached. Group them before downstream analysis begins, or keep using them as standalone site records.",
       );
     }
+    const standaloneBySourceKey = new Map(
+      existingStandalones.map((item) => [`${item.sourceProviderName ?? ""}::${item.sourceProviderParcelId ?? ""}`, item]),
+    );
 
     const mergedGeom = mergeMultiPolygons(sourceParcels.map((item) => item.geom));
     const combinedAreaSqm = toNullableDecimalString(
@@ -521,9 +550,22 @@ export class ParcelsService {
         },
       });
 
-      const createdMembers = [];
+      for (const existingStandalone of existingStandalones) {
+        await transaction.parcel.update({
+          where: { id: existingStandalone.id },
+          data: {
+            parcelGroupId: parcelGroup.id,
+          },
+        });
+      }
+
       for (const sourceParcel of sourceParcels) {
-        createdMembers.push(await transaction.parcel.create({
+        const existingStandalone = standaloneBySourceKey.get(`${sourceParcel.providerName}::${sourceParcel.providerParcelId}`);
+        if (existingStandalone) {
+          continue;
+        }
+
+        await transaction.parcel.create({
           data: {
             organizationId: this.requestContext.organizationId,
             parcelGroupId: parcelGroup.id,
@@ -547,7 +589,7 @@ export class ParcelsService {
             centroid: toPrismaJson(sourceParcel.centroid),
             provenanceJson: toPrismaJson(buildSourceParcelProvenance(sourceParcel)),
           },
-        }));
+        });
       }
 
       const siteParcel = await transaction.parcel.create({
@@ -604,7 +646,9 @@ export class ParcelsService {
 
       return {
         primaryParcel: this.mapParcel(hydratedSiteParcel),
-        createdParcels: createdMembers.map((item) => this.mapParcel(item)),
+        createdParcels: Array.isArray(hydratedSiteParcel.parcelGroup?.parcels)
+          ? hydratedSiteParcel.parcelGroup.parcels.map((item: any) => this.mapParcel(item))
+          : [],
       };
     });
 

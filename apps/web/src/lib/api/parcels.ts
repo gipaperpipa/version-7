@@ -124,6 +124,9 @@ function normalizeSourceParcelResult(
     existingParcelId: item.existingParcelId ?? null,
     existingSiteParcelId: item.existingSiteParcelId ?? null,
     existingSiteName: item.existingSiteName ?? null,
+    existingPlanningCount: item.existingPlanningCount ?? 0,
+    existingScenarioCount: item.existingScenarioCount ?? 0,
+    canAssembleIntoSite: item.canAssembleIntoSite ?? (item.workspaceState ?? "NEW") !== "GROUPED_SITE_MEMBER",
     rawMetadata: item.rawMetadata ?? null,
   };
 }

@@ -42,7 +42,11 @@ function getWorkspaceStateDetail(
 ) {
   switch (item.workspaceState) {
     case "STANDALONE_PARCEL":
-      return "This source parcel already exists as a standalone site record.";
+      if (item.canAssembleIntoSite) {
+        return "Already in the workspace and still eligible for grouped-site assembly because no downstream work has started.";
+      }
+
+      return `Already in the workspace with ${item.existingPlanningCount} planning value(s) and ${item.existingScenarioCount} scenario(s). Keep using it as a standalone site or regroup before downstream work starts.`;
     case "GROUPED_SITE_MEMBER":
       return item.existingSiteName
         ? `Already folded into ${item.existingSiteName}. Reuse that grouped site.`
@@ -50,6 +54,16 @@ function getWorkspaceStateDetail(
     default:
       return "Ready to ingest into the workspace.";
   }
+}
+
+function getWorkspaceStateActionLabel(
+  item: Awaited<ReturnType<typeof searchSourceParcels>>["items"][number],
+) {
+  if (item.workspaceState === "STANDALONE_PARCEL") {
+    return item.canAssembleIntoSite ? "Reuse / group" : "Reuse parcel";
+  }
+
+  return "Select";
 }
 
 export default async function NewParcelPage({
@@ -395,6 +409,9 @@ export default async function NewParcelPage({
                             <div className="ops-scan__label">Workspace</div>
                             <div className="action-row">
                               {getWorkspaceStateBadge(item.workspaceState)}
+                              {item.workspaceState === "STANDALONE_PARCEL" && item.canAssembleIntoSite ? (
+                                <StatusBadge tone="accent">Group-ready</StatusBadge>
+                              ) : null}
                             </div>
                             <div className="ops-scan__detail">{getWorkspaceStateDetail(item)}</div>
                           </div>
@@ -416,7 +433,7 @@ export default async function NewParcelPage({
                             <label className="field-row">
                               <input type="checkbox" name="sourceParcelId" value={item.id} />
                               <span className="field-help">
-                                {item.workspaceState === "STANDALONE_PARCEL" ? "Reuse parcel" : "Select"}
+                                {getWorkspaceStateActionLabel(item)}
                               </span>
                             </label>
                           )}

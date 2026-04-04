@@ -19,7 +19,7 @@ function rectangle(
   };
 }
 
-function buildSourceParcel(record: Omit<SourceParcelSearchResultDto, "centroid" | "hasGeometry" | "hasLandArea" | "rawMetadata" | "sourceReference" | "landAreaSqm" | "workspaceState" | "existingParcelId" | "existingSiteParcelId" | "existingSiteName"> & {
+function buildSourceParcel(record: Omit<SourceParcelSearchResultDto, "centroid" | "hasGeometry" | "hasLandArea" | "rawMetadata" | "sourceReference" | "landAreaSqm" | "workspaceState" | "existingParcelId" | "existingSiteParcelId" | "existingSiteName" | "existingPlanningCount" | "existingScenarioCount" | "canAssembleIntoSite"> & {
   landAreaSqm?: string | null;
   metadata?: Record<string, unknown> | null;
 }): SourceParcelSearchResultDto {
@@ -39,6 +39,9 @@ function buildSourceParcel(record: Omit<SourceParcelSearchResultDto, "centroid" 
     existingParcelId: null,
     existingSiteParcelId: null,
     existingSiteName: null,
+    existingPlanningCount: 0,
+    existingScenarioCount: 0,
+    canAssembleIntoSite: true,
     rawMetadata: record.metadata ?? null,
   };
 }
