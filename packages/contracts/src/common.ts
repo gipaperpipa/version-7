@@ -1,8 +1,23 @@
-import type { Geometry, MultiPolygon, Point, Polygon } from "geojson";
-
 export type Id = string;
 export type IsoDateTime = string;
 export type DecimalString = string;
+
+export interface Point {
+  type: "Point";
+  coordinates: [number, number];
+}
+
+export interface Polygon {
+  type: "Polygon";
+  coordinates: number[][][];
+}
+
+export interface MultiPolygon {
+  type: "MultiPolygon";
+  coordinates: number[][][][];
+}
+
+export type Geometry = Point | Polygon | MultiPolygon;
 
 export type GeometryDto = Geometry;
 export type PolygonDto = Polygon;
