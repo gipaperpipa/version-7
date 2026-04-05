@@ -9,7 +9,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { isApiResponseError, isApiUnavailableError } from "@/lib/api/errors";
 import { getParcels, searchSourceParcels } from "@/lib/api/parcels";
-import { getConfidenceBand } from "@/lib/ui/provenance";
+import { getConfidenceBand, getSourceAuthorityDetail, getSourceAuthorityLabel } from "@/lib/ui/provenance";
 import { ingestSourceParcelsAction } from "../actions";
 
 function getGeometryStateBadge(hasGeometry: boolean, hasLandArea: boolean) {
@@ -241,12 +241,14 @@ export default async function NewParcelPage({
         ) : null}
 
         {resolvedSearchParams?.error === "source-intake-failed" ? (
-          <Alert tone="danger">
-            <AlertTitle>
-              {resolvedSearchParams.errorCode === "GROUP_MEMBER_ALREADY_ASSIGNED"
-                ? "Selected parcels already belong to another site"
-                : resolvedSearchParams.errorCode === "DOWNSTREAM_RECONCILIATION_REQUIRED"
-                  ? "Selected parcels already have conflicting downstream work"
+            <Alert tone="danger">
+              <AlertTitle>
+                {resolvedSearchParams.errorCode === "SOURCE_PROVIDER_UNAVAILABLE"
+                  ? "Source provider unavailable"
+                  : resolvedSearchParams.errorCode === "GROUP_MEMBER_ALREADY_ASSIGNED"
+                  ? "Selected parcels already belong to another site"
+                  : resolvedSearchParams.errorCode === "DOWNSTREAM_RECONCILIATION_REQUIRED"
+                    ? "Selected parcels already have conflicting downstream work"
                   : "Source intake failed"}
             </AlertTitle>
             <AlertDescription>{resolvedSearchParams.message ?? "The API rejected the source parcel intake request."}</AlertDescription>
@@ -392,13 +394,19 @@ export default async function NewParcelPage({
                           </div>
                         </div>
 
-                        <div className="ops-table__cell">
+                      <div className="ops-table__cell">
                           <div className="ops-cell-stack">
                             <div className="ops-scan__label">Source</div>
                             <div className="action-row">
-                              <StatusBadge tone="accent">Source-backed</StatusBadge>
+                              <StatusBadge tone={item.sourceAuthority === "CADASTRAL_GRADE" ? "success" : item.sourceAuthority === "SEARCH_GRADE" ? "warning" : "surface"}>
+                                {getSourceAuthorityLabel(item.sourceAuthority) ?? "Source-backed"}
+                              </StatusBadge>
                             </div>
-                            <div className="ops-scan__detail">{item.sourceReference}</div>
+                            <div className="ops-scan__detail">
+                              {getSourceAuthorityDetail(item.sourceAuthority) ?? item.sourceReference}
+                              <br />
+                              {item.sourceReference}
+                            </div>
                           </div>
                         </div>
 

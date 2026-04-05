@@ -1,5 +1,6 @@
 import type { ParcelProvenanceDto } from "@repo/contracts";
 import { SourceType } from "@repo/contracts";
+import type { SourceAuthorityLevel } from "@repo/contracts";
 
 export type ConfidenceBand = "High" | "Medium" | "Low" | "Unscored";
 
@@ -38,6 +39,32 @@ export function getTrustModeLabel(trustMode: ParcelProvenanceDto["trustMode"] | 
       return "Grouped site";
     case "MANUAL_FALLBACK":
       return "Manual fallback";
+    default:
+      return null;
+  }
+}
+
+export function getSourceAuthorityLabel(authority: SourceAuthorityLevel | null | undefined) {
+  switch (authority) {
+    case "CADASTRAL_GRADE":
+      return "Cadastral-grade";
+    case "SEARCH_GRADE":
+      return "Search-grade";
+    case "DEMO":
+      return "Demo source";
+    default:
+      return null;
+  }
+}
+
+export function getSourceAuthorityDetail(authority: SourceAuthorityLevel | null | undefined) {
+  switch (authority) {
+    case "CADASTRAL_GRADE":
+      return "Parcel-grade source authority";
+    case "SEARCH_GRADE":
+      return "Location/search-grade source authority";
+    case "DEMO":
+      return "Demo/test source authority";
     default:
       return null;
   }

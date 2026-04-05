@@ -3,6 +3,7 @@ import {
   buildNormalizedSourceSearchResult,
   type NormalizedSourceParcelRecord,
 } from "./source-parcel-model";
+import type { SourceParcelProvider } from "./source-parcel-provider";
 
 function rectangle(
   west: number,
@@ -22,20 +23,17 @@ function rectangle(
   };
 }
 
-interface SourceParcelProvider {
-  key: string;
-  search(query?: string | null, municipality?: string | null, limit?: number): NormalizedSourceParcelRecord[];
-  getByIds(sourceParcelIds: string[]): NormalizedSourceParcelRecord[];
-}
+const DEMO_PROVIDER_KEY = "demo-cadastre";
 
 const SOURCE_PARCELS: NormalizedSourceParcelRecord[] = [
   buildNormalizedSourceSearchResult({
-    id: "cadastre-frankfurt-bockenheim-001",
+    id: `${DEMO_PROVIDER_KEY}:cadastre-frankfurt-bockenheim-001`,
     providerName: "Demo Cadastre Index",
     providerParcelId: "FFM-16-204-7",
+    sourceAuthority: "DEMO",
     displayName: "Bockenheim urban infill site",
     cadastralId: "60326-016-204/7",
-    addressLine1: "Schloßstraße 18",
+    addressLine1: "Schlossstrasse 18",
     city: "Frankfurt am Main",
     postalCode: "60486",
     stateCode: "HE",
@@ -45,18 +43,22 @@ const SOURCE_PARCELS: NormalizedSourceParcelRecord[] = [
     confidenceScore: 92,
     geom: rectangle(8.6396, 50.11876, 8.64062, 50.11936),
     rawMetadata: {
-      sourceSystem: "demo-cadastre",
-      zoningHint: "urban mixed-use block",
-      intakeMode: "source-search",
-    },
-  }),
+        sourceSystem: "demo-cadastre",
+        zoningHint: "urban mixed-use block",
+        intakeMode: "source-search",
+        providerKind: "DEMO",
+        sourceAuthority: "DEMO",
+        geometryAuthority: "DEMO_SYNTHETIC",
+      },
+    }),
   buildNormalizedSourceSearchResult({
-    id: "cadastre-frankfurt-gallus-002",
+    id: `${DEMO_PROVIDER_KEY}:cadastre-frankfurt-gallus-002`,
     providerName: "Demo Cadastre Index",
     providerParcelId: "FFM-17-119-14",
+    sourceAuthority: "DEMO",
     displayName: "Gallus perimeter block parcel",
     cadastralId: "60327-017-119/14",
-    addressLine1: "Mainzer Landstraße 208",
+    addressLine1: "Mainzer Landstrasse 208",
     city: "Frankfurt am Main",
     postalCode: "60327",
     stateCode: "HE",
@@ -66,18 +68,22 @@ const SOURCE_PARCELS: NormalizedSourceParcelRecord[] = [
     confidenceScore: 89,
     geom: rectangle(8.65024, 50.10585, 8.65115, 50.10632),
     rawMetadata: {
-      sourceSystem: "demo-cadastre",
-      zoningHint: "corridor parcel",
-      intakeMode: "source-search",
-    },
-  }),
+        sourceSystem: "demo-cadastre",
+        zoningHint: "corridor parcel",
+        intakeMode: "source-search",
+        providerKind: "DEMO",
+        sourceAuthority: "DEMO",
+        geometryAuthority: "DEMO_SYNTHETIC",
+      },
+    }),
   buildNormalizedSourceSearchResult({
-    id: "cadastre-frankfurt-ostend-003",
+    id: `${DEMO_PROVIDER_KEY}:cadastre-frankfurt-ostend-003`,
     providerName: "Demo Cadastre Index",
     providerParcelId: "FFM-22-881-3",
+    sourceAuthority: "DEMO",
     displayName: "Ostend corner redevelopment parcel",
     cadastralId: "60314-022-881/3",
-    addressLine1: "Hanauer Landstraße 79",
+    addressLine1: "Hanauer Landstrasse 79",
     city: "Frankfurt am Main",
     postalCode: "60314",
     stateCode: "HE",
@@ -87,36 +93,44 @@ const SOURCE_PARCELS: NormalizedSourceParcelRecord[] = [
     confidenceScore: 88,
     geom: rectangle(8.70818, 50.11341, 8.70911, 50.11395),
     rawMetadata: {
-      sourceSystem: "demo-cadastre",
-      zoningHint: "corner parcel",
-      intakeMode: "source-search",
-    },
-  }),
+        sourceSystem: "demo-cadastre",
+        zoningHint: "corner parcel",
+        intakeMode: "source-search",
+        providerKind: "DEMO",
+        sourceAuthority: "DEMO",
+        geometryAuthority: "DEMO_SYNTHETIC",
+      },
+    }),
   buildNormalizedSourceSearchResult({
-    id: "cadastre-berlin-neukoelln-004",
+    id: `${DEMO_PROVIDER_KEY}:cadastre-berlin-neukoelln-004`,
     providerName: "Demo Cadastre Index",
     providerParcelId: "BER-08-442-12",
-    displayName: "Neukölln courtyard assembly parcel",
+    sourceAuthority: "DEMO",
+    displayName: "Neukoelln courtyard assembly parcel",
     cadastralId: "12043-008-442/12",
-    addressLine1: "Karl-Marx-Straße 131",
+    addressLine1: "Karl-Marx-Strasse 131",
     city: "Berlin",
     postalCode: "12043",
     stateCode: "BE",
     countryCode: "DE",
     municipalityName: "Berlin",
-    districtName: "Neukölln",
+    districtName: "Neukoelln",
     confidenceScore: 90,
     geom: rectangle(13.4338, 52.47622, 13.4347, 52.47674),
     rawMetadata: {
-      sourceSystem: "demo-cadastre",
-      zoningHint: "inner courtyard site",
-      intakeMode: "source-search",
-    },
-  }),
+        sourceSystem: "demo-cadastre",
+        zoningHint: "inner courtyard site",
+        intakeMode: "source-search",
+        providerKind: "DEMO",
+        sourceAuthority: "DEMO",
+        geometryAuthority: "DEMO_SYNTHETIC",
+      },
+    }),
   buildNormalizedSourceSearchResult({
-    id: "cadastre-berlin-moabit-005",
+    id: `${DEMO_PROVIDER_KEY}:cadastre-berlin-moabit-005`,
     providerName: "Demo Cadastre Index",
     providerParcelId: "BER-02-113-41",
+    sourceAuthority: "DEMO",
     displayName: "Moabit canal-edge parcel",
     cadastralId: "10557-002-113/41",
     addressLine1: "Alt-Moabit 111",
@@ -129,18 +143,22 @@ const SOURCE_PARCELS: NormalizedSourceParcelRecord[] = [
     confidenceScore: 87,
     geom: rectangle(13.34625, 52.52355, 13.34727, 52.52405),
     rawMetadata: {
-      sourceSystem: "demo-cadastre",
-      zoningHint: "waterfront block edge",
-      intakeMode: "source-search",
-    },
-  }),
+        sourceSystem: "demo-cadastre",
+        zoningHint: "waterfront block edge",
+        intakeMode: "source-search",
+        providerKind: "DEMO",
+        sourceAuthority: "DEMO",
+        geometryAuthority: "DEMO_SYNTHETIC",
+      },
+    }),
   buildNormalizedSourceSearchResult({
-    id: "cadastre-hamburg-altona-006",
+    id: `${DEMO_PROVIDER_KEY}:cadastre-hamburg-altona-006`,
     providerName: "Demo Cadastre Index",
     providerParcelId: "HAM-03-781-22",
+    sourceAuthority: "DEMO",
     displayName: "Altona station hinterland parcel",
     cadastralId: "22767-003-781/22",
-    addressLine1: "Harkortstraße 67",
+    addressLine1: "Harkortstrasse 67",
     city: "Hamburg",
     postalCode: "22765",
     stateCode: "HH",
@@ -150,42 +168,55 @@ const SOURCE_PARCELS: NormalizedSourceParcelRecord[] = [
     confidenceScore: 84,
     geom: rectangle(9.93428, 53.55248, 9.93525, 53.55296),
     rawMetadata: {
-      sourceSystem: "demo-cadastre",
-      zoningHint: "station-area parcel",
-      intakeMode: "source-search",
-    },
-  }),
+        sourceSystem: "demo-cadastre",
+        zoningHint: "station-area parcel",
+        intakeMode: "source-search",
+        providerKind: "DEMO",
+        sourceAuthority: "DEMO",
+        geometryAuthority: "DEMO_SYNTHETIC",
+      },
+    }),
   buildNormalizedSourceSearchResult({
-    id: "cadastre-cologne-ehrenfeld-007",
+    id: `${DEMO_PROVIDER_KEY}:cadastre-cologne-ehrenfeld-007`,
     providerName: "Demo Cadastre Index",
     providerParcelId: "CGN-07-210-9",
+    sourceAuthority: "DEMO",
     displayName: "Ehrenfeld workshop parcel",
     cadastralId: "50825-007-210/9",
-    addressLine1: "Venloer Straße 364",
-    city: "Köln",
+    addressLine1: "Venloer Strasse 364",
+    city: "Koeln",
     postalCode: "50825",
     stateCode: "NW",
     countryCode: "DE",
-    municipalityName: "Köln",
+    municipalityName: "Koeln",
     districtName: "Ehrenfeld",
     confidenceScore: 82,
     geom: null,
     landAreaSqm: "5180",
     rawMetadata: {
-      sourceSystem: "demo-cadastre",
-      intakeMode: "source-search",
-      geometryStatus: "pending-digitization",
-    },
-  }),
+        sourceSystem: "demo-cadastre",
+        intakeMode: "source-search",
+        geometryStatus: "pending-digitization",
+        providerKind: "DEMO",
+        sourceAuthority: "DEMO",
+        geometryAuthority: "DEMO_SYNTHETIC",
+      },
+    }),
 ];
 
 function includesToken(value: string | null | undefined, token: string) {
   return typeof value === "string" && value.toLowerCase().includes(token);
 }
 
-const demoCadastreProvider: SourceParcelProvider = {
-  key: "demo-cadastre",
-  search(query?: string | null, municipality?: string | null, limit = 12) {
+export class SourceParcelDemoProvider implements SourceParcelProvider {
+  readonly key = DEMO_PROVIDER_KEY;
+  readonly kind = "DEMO" as const;
+
+  canHandleSourceParcelId(sourceParcelId: string) {
+    return sourceParcelId.startsWith(`${DEMO_PROVIDER_KEY}:`);
+  }
+
+  async search(query?: string | null, municipality?: string | null, limit = 12) {
     const normalizedQuery = query?.trim().toLowerCase() ?? "";
     const normalizedMunicipality = municipality?.trim().toLowerCase() ?? "";
 
@@ -212,25 +243,10 @@ const demoCadastreProvider: SourceParcelProvider = {
         parcel.districtName,
       ].some((candidate) => includesToken(candidate, normalizedQuery));
     }).slice(0, Math.max(1, Math.min(limit, 50)));
-  },
-  getByIds(sourceParcelIds: string[]) {
+  }
+
+  async getByIds(sourceParcelIds: string[]) {
     const wanted = new Set(sourceParcelIds);
     return SOURCE_PARCELS.filter((parcel) => wanted.has(parcel.id));
-  },
-};
-
-const PROVIDERS: SourceParcelProvider[] = [demoCadastreProvider];
-
-export function searchSourceParcels(query?: string | null, municipality?: string | null, limit = 12) {
-  const items = PROVIDERS.flatMap((provider) => provider.search(query, municipality, limit)).slice(0, Math.max(1, Math.min(limit, 50)));
-  return {
-    items,
-    total: items.length,
-    page: 1,
-    pageSize: items.length || limit,
-  };
-}
-
-export function getSourceParcelsByIds(sourceParcelIds: string[]) {
-  return PROVIDERS.flatMap((provider) => provider.getByIds(sourceParcelIds));
+  }
 }

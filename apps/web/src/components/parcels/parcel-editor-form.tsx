@@ -41,6 +41,7 @@ export function ParcelEditorForm({
       {initialParcel ? (
         <>
           <input type="hidden" name="existingSourceType" value={initialParcel.sourceType} />
+          <input type="hidden" name="existingSourceAuthority" value={initialParcel.provenance?.sourceAuthority ?? initialParcel.sourceAuthority ?? ""} />
           <input type="hidden" name="existingSourceReference" value={initialParcel.sourceReference ?? ""} />
           <input type="hidden" name="existingSourceProviderName" value={initialParcel.sourceProviderName ?? initialParcel.provenance?.providerName ?? ""} />
           <input type="hidden" name="existingSourceProviderParcelId" value={initialParcel.sourceProviderParcelId ?? initialParcel.provenance?.providerParcelId ?? ""} />

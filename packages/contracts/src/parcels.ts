@@ -7,7 +7,7 @@ import type {
   PointDto,
   PolygonalGeometryDto,
 } from "./common";
-import type { ScenarioStatus, SourceType } from "./enums";
+import type { ScenarioStatus, SourceAuthorityLevel, SourceType } from "./enums";
 
 export type ParcelConfidenceBand = "HIGH" | "MEDIUM" | "LOW" | "UNSCORED";
 export type ParcelTrustMode = "SOURCE_PRIMARY" | "SOURCE_INCOMPLETE" | "GROUP_DERIVED" | "MANUAL_FALLBACK";
@@ -28,6 +28,7 @@ export type SourceParcelIntakeOutcome =
   | "CREATED_GROUPED_SITE_WITH_SAFE_MIGRATION";
 export type SourceParcelIntakeConflictCode =
   | "EMPTY_SOURCE_SELECTION"
+  | "SOURCE_PROVIDER_UNAVAILABLE"
   | "SOURCE_RECORD_UNAVAILABLE"
   | "GROUP_MEMBER_ALREADY_ASSIGNED"
   | "DOWNSTREAM_RECONCILIATION_REQUIRED"
@@ -36,6 +37,7 @@ export type SourceParcelIntakeConflictCode =
 export interface ParcelProvenanceDto {
   providerName: string | null;
   providerParcelId: string | null;
+  sourceAuthority: SourceAuthorityLevel | null;
   trustMode: ParcelTrustMode;
   geometryDerived: boolean;
   areaDerived: boolean;
@@ -50,6 +52,7 @@ export interface ParcelGroupMemberDto {
   landAreaSqm: DecimalString | null;
   confidenceScore: number | null;
   confidenceBand: ParcelConfidenceBand;
+  sourceAuthority: SourceAuthorityLevel | null;
   sourceProviderName: string | null;
   sourceProviderParcelId: string | null;
   sourceReference: string | null;
@@ -65,6 +68,7 @@ export interface ParcelGroupSummaryDto {
   sourceReference: string | null;
   confidenceScore: number | null;
   confidenceBand: ParcelConfidenceBand;
+  sourceAuthority: SourceAuthorityLevel | null;
 }
 
 export interface ParcelDto {
@@ -88,6 +92,7 @@ export interface ParcelDto {
   sourceProviderParcelId: string | null;
   confidenceScore: number | null;
   confidenceBand: ParcelConfidenceBand;
+  sourceAuthority: SourceAuthorityLevel | null;
   geom: MultiPolygonDto | null;
   centroid: PointDto | null;
   provenance: ParcelProvenanceDto | null;
@@ -164,6 +169,7 @@ export interface SourceParcelSearchResultDto {
   landAreaSqm: DecimalString | null;
   confidenceScore: number | null;
   confidenceBand: ParcelConfidenceBand;
+  sourceAuthority: SourceAuthorityLevel;
   geom: MultiPolygonDto | null;
   centroid: PointDto | null;
   sourceReference: string;

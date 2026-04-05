@@ -18,6 +18,14 @@ export const SourceType = {
 } as const;
 export type SourceType = (typeof SourceType)[keyof typeof SourceType];
 
+export const SourceAuthorityLevel = {
+  DEMO: "DEMO",
+  SEARCH_GRADE: "SEARCH_GRADE",
+  CADASTRAL_GRADE: "CADASTRAL_GRADE",
+} as const;
+export type SourceAuthorityLevel =
+  (typeof SourceAuthorityLevel)[keyof typeof SourceAuthorityLevel];
+
 export const StrategyType = {
   FREE_MARKET_RENTAL: "FREE_MARKET_RENTAL",
   SUBSIDIZED_RENTAL: "SUBSIDIZED_RENTAL",
@@ -117,6 +125,9 @@ export const ScenarioReadinessIssueCode = {
   MISSING_SALES_PRICE: "MISSING_SALES_PRICE",
   SOURCE_PARCEL_INCOMPLETE: "SOURCE_PARCEL_INCOMPLETE",
   MANUAL_PARCEL_FALLBACK: "MANUAL_PARCEL_FALLBACK",
+  SEARCH_GRADE_PARCEL_SOURCE: "SEARCH_GRADE_PARCEL_SOURCE",
+  DEMO_PARCEL_SOURCE: "DEMO_PARCEL_SOURCE",
+  MIXED_AUTHORITY_GROUP_SITE: "MIXED_AUTHORITY_GROUP_SITE",
   TEMPORARY_MIXED_STRATEGY: "TEMPORARY_MIXED_STRATEGY",
   MISSING_MIX_CONFIGURATION: "MISSING_MIX_CONFIGURATION",
 } as const;

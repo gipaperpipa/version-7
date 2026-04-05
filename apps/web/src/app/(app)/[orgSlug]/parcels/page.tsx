@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { type ParcelDto, type PlanningParameterDto, type ScenarioDto } from "@repo/contracts";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -12,6 +13,49 @@ import { getParcels } from "@/lib/api/parcels";
 import { getPlanningParameters } from "@/lib/api/planning";
 import { getScenarios } from "@/lib/api/scenarios";
 import { buildParcelCompletenessSummary } from "@/lib/ui/parcel-completeness";
+import { getSourceAuthorityLabel } from "@/lib/ui/provenance";
+import { createGroupedSiteFromWorkspaceAction } from "./actions";
+
+function hasStoredPlanningValue(item: PlanningParameterDto) {
+  return item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null;
+}
+
+function isGroupedSite(parcel: ParcelDto) {
+  return parcel.isGroupSite || parcel.provenance?.trustMode === "GROUP_DERIVED";
+}
+
+function isSourceStandaloneCandidate(parcel: ParcelDto) {
+  return !isGroupedSite(parcel)
+    && !parcel.parcelGroupId
+    && parcel.provenance?.trustMode !== "MANUAL_FALLBACK"
+    && Boolean(parcel.sourceProviderName ?? parcel.provenance?.providerName)
+    && Boolean(parcel.sourceProviderParcelId ?? parcel.provenance?.providerParcelId);
+}
+
+function hasDownstreamContinuity(planningItems: PlanningParameterDto[], linkedScenarios: ScenarioDto[]) {
+  return planningItems.some(hasStoredPlanningValue) || linkedScenarios.length > 0;
+}
+
+function getSiteAssemblyStatus(parcel: ParcelDto, planningItems: PlanningParameterDto[], linkedScenarios: ScenarioDto[]) {
+  const planningValueCount = planningItems.filter(hasStoredPlanningValue).length;
+  const scenarioCount = linkedScenarios.length;
+
+  if (!hasDownstreamContinuity(planningItems, linkedScenarios)) {
+    return {
+      label: "Reusable parcel",
+      tone: "accent" as const,
+      detail: "No downstream work yet. Safe to fold directly into a grouped site without migration.",
+      counts: `${planningValueCount} planning / ${scenarioCount} scenarios`,
+    };
+  }
+
+  return {
+    label: "Safe migrate",
+    tone: "warning" as const,
+    detail: `This parcel already carries ${planningValueCount} planning value(s) and ${scenarioCount} scenario(s). If it is the only locked parcel in the selected set, continuity will be re-anchored to the grouped site.`,
+    counts: `${planningValueCount} planning / ${scenarioCount} scenarios`,
+  };
+}
 
 function ParcelRow({
   orgSlug,
@@ -133,10 +177,13 @@ function ParcelRow({
 
 export default async function ParcelsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ orgSlug: string }>;
+  searchParams?: Promise<{ error?: string; message?: string; errorCode?: string }>;
 }) {
   const { orgSlug } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
   try {
     const [parcels, scenarios] = await Promise.all([getParcels(orgSlug), getScenarios(orgSlug)]);
@@ -163,8 +210,15 @@ export default async function ParcelsPage({
     }).length;
     const groupedSiteCount = parcels.items.filter((parcel) => parcel.isGroupSite || parcel.provenance?.trustMode === "GROUP_DERIVED").length;
     const planningStartedCount = parcels.items.filter((parcel) => {
-      return (planningByParcel.get(parcel.id) ?? []).some((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null);
+      return (planningByParcel.get(parcel.id) ?? []).some(hasStoredPlanningValue);
     }).length;
+    const groupedSites = parcels.items.filter((parcel) => isGroupedSite(parcel));
+    const standaloneParcels = parcels.items.filter((parcel) => !isGroupedSite(parcel));
+    const sourceStandaloneCandidates = standaloneParcels.filter((parcel) => isSourceStandaloneCandidate(parcel));
+    const safeMigrationCandidateCount = sourceStandaloneCandidates.filter((parcel) =>
+      hasDownstreamContinuity(planningByParcel.get(parcel.id) ?? [], scenariosByParcel.get(parcel.id) ?? [])).length;
+    const directReuseCandidateCount = sourceStandaloneCandidates.length - safeMigrationCandidateCount;
+    const groupedSiteAction = createGroupedSiteFromWorkspaceAction.bind(null, orgSlug);
 
     return (
       <div className="workspace-page content-stack">
@@ -177,6 +231,7 @@ export default async function ParcelsPage({
               <span className="meta-chip">{parcels.total} top-level sites</span>
               <span className="meta-chip">{sourceBackedCount} source-backed</span>
               <span className="meta-chip">{groupedSiteCount} grouped sites</span>
+              <span className="meta-chip">{sourceStandaloneCandidates.length} site-ready standalones</span>
               <span className="meta-chip">{planningStartedCount} planning started</span>
               <span className="meta-chip">{manualCount} fallback manual</span>
             </div>
@@ -193,11 +248,45 @@ export default async function ParcelsPage({
           )}
         />
 
+        {resolvedSearchParams?.error === "grouped-site-selection-missing" ? (
+          <Alert tone="warning">
+            <AlertTitle>Select at least two source-backed parcels</AlertTitle>
+            <AlertDescription>Choose two or more standalone source-backed parcels from the workspace to assemble a grouped development site.</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {resolvedSearchParams?.error === "grouped-site-invalid-selection" ? (
+          <Alert tone="danger">
+            <AlertTitle>Grouped-site assembly needs standalone source parcels</AlertTitle>
+            <AlertDescription>Grouped sites, grouped members, and manual fallback parcels cannot be assembled from the workspace selection form.</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {resolvedSearchParams?.error === "grouped-site-source-resolution-failed" ? (
+          <Alert tone="danger">
+            <AlertTitle>Could not resolve source parcel identity</AlertTitle>
+            <AlertDescription>One or more selected workspace parcels no longer map cleanly back to their source records. Reopen source intake and reselect them from the provider if needed.</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {resolvedSearchParams?.error === "grouped-site-create-failed" ? (
+          <Alert tone="danger">
+            <AlertTitle>
+              {resolvedSearchParams.errorCode === "GROUP_MEMBER_ALREADY_ASSIGNED"
+                ? "Selected parcels already belong to another grouped site"
+                : resolvedSearchParams.errorCode === "DOWNSTREAM_RECONCILIATION_REQUIRED"
+                  ? "Selected parcels already have conflicting downstream work"
+                  : "Grouped-site creation failed"}
+            </AlertTitle>
+            <AlertDescription>{resolvedSearchParams.message ?? "The grouped-site request could not be completed."}</AlertDescription>
+          </Alert>
+        ) : null}
+
         <SectionCard
           className="summary-band summary-band--ledger"
           eyebrow="Operating summary"
           title="Portfolio scan"
-          description="Source coverage, grouped sites, planning momentum, fallback exposure."
+          description="Source coverage, grouped-site momentum, planning continuity, fallback exposure."
           tone="accent"
           size="compact"
         >
@@ -218,6 +307,11 @@ export default async function ParcelsPage({
               <div className="ops-summary-item__detail">Multi-parcel site foundations already assembled.</div>
             </div>
             <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Site-ready standalones</div>
+              <div className="ops-summary-item__value">{sourceStandaloneCandidates.length}</div>
+              <div className="ops-summary-item__detail">{directReuseCandidateCount} direct reuse / {safeMigrationCandidateCount} safe migrate.</div>
+            </div>
+            <div className="ops-summary-item">
               <div className="ops-summary-item__label">Planning started</div>
               <div className="ops-summary-item__value">{planningStartedCount}</div>
               <div className="ops-summary-item__detail">Buildability work underway.</div>
@@ -226,12 +320,105 @@ export default async function ParcelsPage({
         </SectionCard>
 
         <SectionCard
-          className="index-surface index-surface--ledger"
-          eyebrow="Acquisition workspace"
-          title="Acquisition grid"
-          description="Scan sourced identity, grouped-site continuity, planning coverage, and next move in one sweep."
+          className="index-surface index-surface--workspace"
+          eyebrow="Grouped-site workflow"
+          title="Assemble a development site from existing parcels"
+          description="Use source-backed standalone parcels already in the workspace to create or reopen a grouped site without going back through parcel search."
         >
-          {parcels.items.length ? (
+          {sourceStandaloneCandidates.length ? (
+            <form action={groupedSiteAction} className="content-stack">
+              <div className="field-grid field-grid--tri">
+                <div className="field-stack field-stack--span-full">
+                  <label className="field-label" htmlFor="siteName">Optional site name</label>
+                  <input
+                    id="siteName"
+                    name="siteName"
+                    className="ui-input"
+                    placeholder="Leave blank to use the deterministic grouped-site name"
+                  />
+                  <div className="field-help">Select two or more standalone source-backed parcels. Exactly one locked parcel can be safely migrated into the grouped site; more than one locked parcel will be blocked.</div>
+                </div>
+              </div>
+
+              <div className="ops-table">
+                <div className="ops-table__header ops-table__header--parcels">
+                  <div>Parcel</div>
+                  <div>Authority</div>
+                  <div>Area</div>
+                  <div>Downstream</div>
+                  <div>Select</div>
+                </div>
+                {sourceStandaloneCandidates.map((parcel) => {
+                  const planningItems = planningByParcel.get(parcel.id) ?? [];
+                  const linkedScenarios = scenariosByParcel.get(parcel.id) ?? [];
+                  const assemblyStatus = getSiteAssemblyStatus(parcel, planningItems, linkedScenarios);
+                  return (
+                    <div key={parcel.id} className="ops-table__row ops-table__row--parcels">
+                      <div className="ops-table__cell">
+                        <div className="list-row__body">
+                          <div className="list-row__title">
+                            <span className="list-row__title-text">{parcel.name ?? parcel.cadastralId ?? "Source parcel"}</span>
+                            <StatusBadge tone={assemblyStatus.tone}>{assemblyStatus.label}</StatusBadge>
+                          </div>
+                          <div className="inline-meta">
+                            <span className="meta-chip">{parcel.sourceProviderParcelId ?? parcel.cadastralId ?? "No parcel ID"}</span>
+                            <span className="meta-chip">{parcel.city ?? parcel.municipalityName ?? "Location not set"}</span>
+                          </div>
+                          <div className="list-row__meta list-row__meta--clamped">{assemblyStatus.detail}</div>
+                        </div>
+                      </div>
+                      <div className="ops-table__cell">
+                        <div className="ops-scan__value">{getSourceAuthorityLabel(parcel.provenance?.sourceAuthority ?? parcel.sourceAuthority) ?? "Source-backed"}</div>
+                      </div>
+                      <div className="ops-table__cell">
+                        <div className="ops-scan__value">{parcel.landAreaSqm ?? "n/a"} sqm</div>
+                      </div>
+                      <div className="ops-table__cell">
+                        <div className="ops-scan__value">{assemblyStatus.counts}</div>
+                      </div>
+                      <div className="ops-table__actions ops-table__actions--dense">
+                        <label className="field-row">
+                          <input type="checkbox" name="workspaceParcelId" value={parcel.id} />
+                          <span className="field-help">Use parcel</span>
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="action-row">
+                <button className={buttonClasses({ size: "lg" })} type="submit">
+                  Create grouped site
+                </button>
+                <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels/new`}>
+                  Source intake
+                </Link>
+              </div>
+            </form>
+          ) : (
+            <EmptyState
+              eyebrow="No standalone source parcels ready"
+              title={groupedSites.length ? "Source intake remains available for new grouped sites" : "Grouped sites will appear here once parcels are assembled"}
+              description={groupedSites.length
+                ? "Bring in more standalone source parcels through intake, then assemble them into a grouped site from this board."
+                : "The grouped-site model is active, but there are not yet enough standalone source-backed parcels in the current workspace to assemble a site."}
+              actions={(
+                <Link className={buttonClasses()} href={`/${orgSlug}/parcels/new`}>
+                  Source intake
+                </Link>
+              )}
+            />
+          )}
+        </SectionCard>
+
+        <SectionCard
+          className="index-surface index-surface--ledger"
+          eyebrow="Development sites"
+          title="Grouped sites in play"
+          description="These are the first-class site anchors for planning and scenarios."
+        >
+          {groupedSites.length ? (
             <div className="ops-table">
               <div className="ops-table__header ops-table__header--parcels">
                 <div>Site</div>
@@ -241,7 +428,7 @@ export default async function ParcelsPage({
                 <div>Continuity</div>
                 <div>Next</div>
               </div>
-              {parcels.items.map((parcel) => (
+              {groupedSites.map((parcel) => (
                 <ParcelRow
                   key={parcel.id}
                   orgSlug={orgSlug}
@@ -253,18 +440,58 @@ export default async function ParcelsPage({
             </div>
           ) : (
             <EmptyState
-              eyebrow="No parcels yet"
-              title="Start with source parcel intake"
-              description="Search and ingest real parcels first so geometry, area, and provenance stay source-derived. Manual parcel creation remains fallback."
+              eyebrow="No grouped sites yet"
+              title="Assemble the first development site"
+              description="Grouped sites are now the intended downstream anchor. Select multiple source-backed parcels above or ingest new parcels, then create the site here in the workspace."
               actions={(
                 <>
                   <Link className={buttonClasses()} href={`/${orgSlug}/parcels/new`}>
                     Source intake
                   </Link>
-                  <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels/new/manual`}>
-                    Manual fallback
+                  <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios/new`}>
+                    Scenario studio
                   </Link>
                 </>
+              )}
+            />
+          )}
+        </SectionCard>
+
+        <SectionCard
+          className="index-surface index-surface--ledger"
+          eyebrow="Standalone parcels"
+          title="Parcel candidates and single-parcel sites"
+          description="Scan sourced identity, planning coverage, and next move for parcels that are not yet grouped into a development site."
+        >
+          {standaloneParcels.length ? (
+            <div className="ops-table">
+              <div className="ops-table__header ops-table__header--parcels">
+                <div>Site</div>
+                <div>Area</div>
+                <div>Source</div>
+                <div>Planning</div>
+                <div>Continuity</div>
+                <div>Next</div>
+              </div>
+              {standaloneParcels.map((parcel) => (
+                <ParcelRow
+                  key={parcel.id}
+                  orgSlug={orgSlug}
+                  parcel={parcel}
+                  planningItems={planningByParcel.get(parcel.id) ?? []}
+                  linkedScenarios={scenariosByParcel.get(parcel.id) ?? []}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              eyebrow="No standalone parcels"
+              title="Everything in the workspace is already organized as grouped sites"
+              description="New source-backed parcels can still be ingested directly, but current daily work is already anchored to development sites."
+              actions={(
+                <Link className={buttonClasses()} href={`/${orgSlug}/parcels/new`}>
+                  Source intake
+                </Link>
               )}
             />
           )}

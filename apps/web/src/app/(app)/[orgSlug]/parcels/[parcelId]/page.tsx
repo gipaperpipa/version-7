@@ -15,7 +15,7 @@ import { getParcel } from "@/lib/api/parcels";
 import { getPlanningParameters } from "@/lib/api/planning";
 import { getScenarioReadiness, getScenarios } from "@/lib/api/scenarios";
 import { buildParcelCompletenessSummary, selectPrimaryLinkedScenario } from "@/lib/ui/parcel-completeness";
-import { getTrustModeLabel } from "@/lib/ui/provenance";
+import { getSourceAuthorityDetail, getSourceAuthorityLabel, getTrustModeLabel } from "@/lib/ui/provenance";
 import { updateParcelAction } from "../actions";
 
 function renderParcelMode(parcelType: string | null, isGroupSite: boolean) {
@@ -53,6 +53,9 @@ export default async function ParcelDetailPage({
     const planningValueCount = planningParameters.items.filter((item) => item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null).length;
     const memberCount = parcel.parcelGroup?.memberCount ?? parcel.constituentParcels.length;
     const trustModeLabel = getTrustModeLabel(parcel.provenance?.trustMode);
+    const authorityLabel = getSourceAuthorityLabel(parcel.provenance?.sourceAuthority ?? parcel.sourceAuthority);
+    const authorityDetail = getSourceAuthorityDetail(parcel.provenance?.sourceAuthority ?? parcel.sourceAuthority);
+    const mixedAuthority = Boolean(parcel.provenance?.rawMetadata && "mixedAuthority" in parcel.provenance.rawMetadata && parcel.provenance.rawMetadata.mixedAuthority);
     const action = updateParcelAction.bind(null, orgSlug, parcelId);
     const siteAnchorId = parcel.parcelGroup?.siteParcelId ?? (parcel.isGroupSite ? parcel.id : null);
     const isGroupedMember = Boolean(parcel.parcelGroupId && !parcel.isGroupSite && siteAnchorId);
@@ -118,8 +121,10 @@ export default async function ParcelDetailPage({
             </div>
             <div className="ops-summary-item">
               <div className="ops-summary-item__label">Source basis</div>
-              <div className="ops-summary-item__value">{parcel.sourceProviderName ?? parcel.provenance?.providerName ?? "Manual"}</div>
-              <div className="ops-summary-item__detail">{parcel.sourceProviderParcelId ?? parcel.cadastralId ?? "No provider reference"}</div>
+              <div className="ops-summary-item__value">{authorityLabel ?? parcel.sourceProviderName ?? parcel.provenance?.providerName ?? "Manual"}</div>
+              <div className="ops-summary-item__detail">
+                {authorityDetail ?? parcel.sourceProviderParcelId ?? parcel.cadastralId ?? "No provider reference"}
+              </div>
             </div>
             <div className="ops-summary-item">
               <div className="ops-summary-item__label">Planning values</div>
@@ -192,6 +197,14 @@ export default async function ParcelDetailPage({
                   <div className="key-value-card__value">{parcel.sourceProviderParcelId ?? parcel.cadastralId ?? "Not set"}</div>
                 </div>
                 <div className="key-value-card">
+                  <div className="key-value-card__label">Source authority</div>
+                  <div className="key-value-card__value">{authorityLabel ?? "Not source-backed"}</div>
+                </div>
+                <div className="key-value-card">
+                  <div className="key-value-card__label">Authority mix</div>
+                  <div className="key-value-card__value">{mixedAuthority ? "Mixed member authority" : "Uniform authority basis"}</div>
+                </div>
+                <div className="key-value-card">
                   <div className="key-value-card__label">Parcel type</div>
                   <div className="key-value-card__value">{renderParcelMode(trustModeLabel, parcel.isGroupSite)}</div>
                 </div>
@@ -219,6 +232,8 @@ export default async function ParcelDetailPage({
                 <div className="action-row">
                   {parcel.provenance?.geometryDerived ? <StatusBadge tone="success">Geometry derived</StatusBadge> : <StatusBadge tone="warning">Geometry incomplete</StatusBadge>}
                   {parcel.provenance?.areaDerived ? <StatusBadge tone="success">Area derived</StatusBadge> : <StatusBadge tone="warning">Area incomplete</StatusBadge>}
+                  {authorityLabel ? <StatusBadge tone={parcel.provenance?.sourceAuthority === "CADASTRAL_GRADE" ? "success" : parcel.provenance?.sourceAuthority === "SEARCH_GRADE" ? "warning" : "surface"}>{authorityLabel}</StatusBadge> : null}
+                  {mixedAuthority ? <StatusBadge tone="warning">Mixed authority</StatusBadge> : null}
                   {parcel.isGroupSite ? <StatusBadge tone="accent">{memberCount} parcel group</StatusBadge> : null}
                 </div>
               </div>
@@ -236,6 +251,7 @@ export default async function ParcelDetailPage({
                   <div className="ops-table__header ops-table__header--parcels">
                     <div>Parcel</div>
                     <div>Area</div>
+                    <div>Authority</div>
                     <div>Provider</div>
                     <div>Reference</div>
                     <div>Open</div>
@@ -255,6 +271,9 @@ export default async function ParcelDetailPage({
                       </div>
                       <div className="ops-table__cell">
                         <div className="ops-scan__value">{member.landAreaSqm ?? "n/a"} sqm</div>
+                      </div>
+                      <div className="ops-table__cell">
+                        <div className="ops-scan__value">{getSourceAuthorityLabel(member.sourceAuthority) ?? "n/a"}</div>
                       </div>
                       <div className="ops-table__cell">
                         <div className="ops-scan__value">{member.sourceProviderName ?? "Source"}</div>

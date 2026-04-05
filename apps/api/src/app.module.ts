@@ -10,6 +10,7 @@ import { FundingProgramsController } from "./modules/funding-programs/funding-pr
 import { FundingProgramsService } from "./modules/funding-programs/funding-programs.service";
 import { ParcelsController } from "./modules/parcels/parcels.controller";
 import { ParcelsService } from "./modules/parcels/parcels.service";
+import { SourceParcelProviderRegistryService } from "./modules/parcels/source-parcel-provider-registry.service";
 import { PlanningParametersController } from "./modules/planning-parameters/planning-parameters.controller";
 import { PlanningParametersService } from "./modules/planning-parameters/planning-parameters.service";
 import { ScenarioRunsController } from "./modules/scenario-runs/scenario-runs.controller";
@@ -60,6 +61,7 @@ const bullProviders = bullDisabled ? [] : [ScenarioRunsService, ScenarioRunsProc
     ScenarioReadinessService,
     ScenarioInputBuilderService,
     FeasibilityEngineV0Service,
+    SourceParcelProviderRegistryService,
     ...bullProviders,
   ],
 })

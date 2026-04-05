@@ -12,6 +12,36 @@ import type {
 } from "@repo/contracts";
 import { apiFetch } from "./client";
 
+function deriveLegacyAuthority(parcel: Partial<ParcelDto>): ParcelDto["sourceAuthority"] {
+  const sourceAuthority = parcel.provenance?.sourceAuthority ?? parcel.sourceAuthority ?? null;
+  if (sourceAuthority) {
+    return sourceAuthority;
+  }
+
+  const rawMetadata = parcel.provenance?.rawMetadata;
+  const metadataAuthority = rawMetadata && typeof rawMetadata === "object" && "sourceAuthority" in rawMetadata
+    ? rawMetadata.sourceAuthority
+    : null;
+  if (metadataAuthority === "DEMO" || metadataAuthority === "SEARCH_GRADE" || metadataAuthority === "CADASTRAL_GRADE") {
+    return metadataAuthority;
+  }
+
+  if ((parcel.sourceProviderName ?? "").toLowerCase().includes("nominatim")) {
+    return "SEARCH_GRADE";
+  }
+
+  switch (parcel.sourceType) {
+    case "GIS_CADASTRE":
+      return "CADASTRAL_GRADE";
+    case "THIRD_PARTY_API":
+      return "SEARCH_GRADE";
+    case "IMPORT":
+      return "DEMO";
+    default:
+      return null;
+  }
+}
+
 function deriveLegacyParcelProvenance(parcel: Partial<ParcelDto>): ParcelProvenanceDto | null {
   const sourceType = parcel.sourceType;
 
@@ -33,6 +63,7 @@ function deriveLegacyParcelProvenance(parcel: Partial<ParcelDto>): ParcelProvena
   return {
     providerName: parcel.sourceProviderName ?? null,
     providerParcelId: parcel.sourceProviderParcelId ?? null,
+    sourceAuthority: deriveLegacyAuthority(parcel),
     trustMode,
     geometryDerived,
     areaDerived,
@@ -56,6 +87,7 @@ function normalizeGroupMember(member: Partial<ParcelGroupMemberDto>): ParcelGrou
           ? "MEDIUM"
           : "LOW"
       : "UNSCORED")) as ParcelConfidenceBand,
+    sourceAuthority: member.sourceAuthority ?? null,
     sourceProviderName: member.sourceProviderName ?? null,
     sourceProviderParcelId: member.sourceProviderParcelId ?? null,
     sourceReference: member.sourceReference ?? null,
@@ -89,7 +121,8 @@ function normalizeParcel(parcel: Partial<ParcelDto>): ParcelDto {
         : parcel.confidenceScore >= 60
           ? "MEDIUM"
           : "LOW"
-      : "UNSCORED")) as ParcelConfidenceBand,
+        : "UNSCORED")) as ParcelConfidenceBand,
+    sourceAuthority: deriveLegacyAuthority(parcel),
     geom: parcel.geom ?? null,
     centroid: parcel.centroid ?? null,
     provenance: parcel.provenance ?? deriveLegacyParcelProvenance(parcel),
@@ -110,7 +143,9 @@ function normalizeParcel(parcel: Partial<ParcelDto>): ParcelDto {
                 : (parcel.parcelGroup as Partial<ParcelGroupSummaryDto>).confidenceScore! >= 60
                   ? "MEDIUM"
                   : "LOW"
-              : "UNSCORED")) as ParcelConfidenceBand,
+                : "UNSCORED")) as ParcelConfidenceBand,
+          sourceAuthority: (parcel.parcelGroup as Partial<ParcelGroupSummaryDto>).sourceAuthority
+            ?? deriveLegacyAuthority(parcel),
         }
       : null,
     constituentParcels: Array.isArray(parcel.constituentParcels)
@@ -125,6 +160,12 @@ function normalizeSourceParcelResult(
   item: Partial<SearchSourceParcelsResponseDto["items"][number]>,
 ): SearchSourceParcelsResponseDto["items"][number] {
   const confidenceScore = item.confidenceScore ?? null;
+  const sourceAuthority = item.sourceAuthority
+    ?? (((item.providerName ?? "").toLowerCase().includes("demo") || ((item.rawMetadata as Record<string, unknown> | null)?.sourceAuthority === "DEMO"))
+      ? "DEMO"
+      : (item.providerName ?? "").toLowerCase().includes("nominatim")
+        ? "SEARCH_GRADE"
+        : "SEARCH_GRADE");
   return {
     id: item.id ?? "",
     providerName: item.providerName ?? "Source",
@@ -147,6 +188,7 @@ function normalizeSourceParcelResult(
           ? "MEDIUM"
           : "LOW"
       : "UNSCORED")) as ParcelConfidenceBand,
+    sourceAuthority,
     geom: item.geom ?? null,
     centroid: item.centroid ?? null,
     sourceReference: item.sourceReference ?? "",

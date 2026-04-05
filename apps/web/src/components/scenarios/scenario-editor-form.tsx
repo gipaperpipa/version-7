@@ -70,22 +70,32 @@ function countFilledFields(fields: FieldConfig[]) {
 
 function getParcelSelectionLabel(parcel: ParcelDto) {
   const base = parcel.name ?? parcel.cadastralId ?? parcel.id;
+  const authorityLabel = parcel.provenance?.sourceAuthority === "CADASTRAL_GRADE"
+    ? "cadastral"
+    : parcel.provenance?.sourceAuthority === "SEARCH_GRADE"
+      ? "search-grade"
+      : parcel.provenance?.sourceAuthority === "DEMO"
+        ? "demo"
+        : null;
   if (parcel.isGroupSite) {
     const memberCount = parcel.parcelGroup?.memberCount ?? parcel.constituentParcels.length;
-    return `${base} / grouped site / ${memberCount} parcel${memberCount === 1 ? "" : "s"}`;
+    return `${base} / grouped site / ${memberCount} parcel${memberCount === 1 ? "" : "s"}${authorityLabel ? ` / ${authorityLabel}` : ""}`;
   }
 
   if (parcel.provenance?.trustMode === "MANUAL_FALLBACK") {
     return `${base} / manual fallback`;
   }
 
-  return `${base} / source-backed`;
+  return `${base} / ${authorityLabel ?? "source-backed"}`;
 }
 
 function getParcelSelectionRank(parcel: ParcelDto) {
   if (parcel.isGroupSite) return 0;
+  if (parcel.provenance?.sourceAuthority === "CADASTRAL_GRADE") return 1;
+  if (parcel.provenance?.sourceAuthority === "SEARCH_GRADE") return 2;
+  if (parcel.provenance?.sourceAuthority === "DEMO") return 3;
   if (parcel.provenance?.trustMode === "SOURCE_PRIMARY" || parcel.provenance?.trustMode === "SOURCE_INCOMPLETE") return 1;
-  return 2;
+  return 4;
 }
 
 function getWritableParcelId(parcel: ParcelDto | null | undefined) {

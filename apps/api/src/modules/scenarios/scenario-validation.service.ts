@@ -55,10 +55,20 @@ export class ScenarioValidationService {
       (item) => item.financingSourceType === FinancingSourceType.STATE_SUBSIDY && item.isEnabled,
     );
     const enabledFundingCount = scenario.fundingVariants.filter((item) => item.isEnabled).length;
-    const parcelProvenance = isRecord(scenario.parcel?.provenanceJson) ? scenario.parcel?.provenanceJson : null;
-    const parcelTrustMode = typeof parcelProvenance?.trustMode === "string" ? parcelProvenance.trustMode : null;
-    const geometryDerived = Boolean(parcelProvenance?.geometryDerived);
-    const areaDerived = Boolean(parcelProvenance?.areaDerived);
+  const parcelProvenance = isRecord(scenario.parcel?.provenanceJson) ? scenario.parcel?.provenanceJson : null;
+  const parcelTrustMode = typeof parcelProvenance?.trustMode === "string" ? parcelProvenance.trustMode : null;
+    const parcelAuthority = typeof parcelProvenance?.sourceAuthority === "string"
+      ? parcelProvenance.sourceAuthority
+      : scenario.parcel?.sourceType === "GIS_CADASTRE"
+        ? "CADASTRAL_GRADE"
+        : scenario.parcel?.sourceType === "THIRD_PARTY_API"
+          ? "SEARCH_GRADE"
+          : scenario.parcel?.sourceType === "IMPORT"
+            ? "DEMO"
+            : null;
+  const geometryDerived = Boolean(parcelProvenance?.geometryDerived);
+  const areaDerived = Boolean(parcelProvenance?.areaDerived);
+  const mixedAuthority = Boolean(parcelProvenance?.rawMetadata && isRecord(parcelProvenance.rawMetadata) && parcelProvenance.rawMetadata.mixedAuthority);
 
     if (!scenario.parcelId) {
       issues.push(this.blockExecution(ScenarioReadinessIssueCode.MISSING_PARCEL, "parcelId", "A parcel is required for Sprint 1 feasibility runs."));
@@ -90,6 +100,31 @@ export class ScenarioValidationService {
         ScenarioReadinessIssueCode.MANUAL_PARCEL_FALLBACK,
         "parcel",
         "This case is anchored to a manual fallback parcel. The run remains directional, but source-backed parcel identity should replace it when available.",
+      ));
+    }
+
+    if (scenario.parcel && parcelAuthority === "DEMO") {
+      issues.push(this.warnConfidence(
+        ScenarioReadinessIssueCode.DEMO_PARCEL_SOURCE,
+        "parcel",
+        "This parcel/site is anchored to the demo source provider. The workflow remains usable, but parcel identity should not be treated as production-grade.",
+      ));
+    }
+
+    if (scenario.parcel && parcelAuthority === "SEARCH_GRADE") {
+      issues.push(this.warnConfidence(
+        ScenarioReadinessIssueCode.SEARCH_GRADE_PARCEL_SOURCE,
+        "parcel",
+        "This parcel/site is source-backed, but only at search/location grade. The run can remain directional, but parcel-boundary trust is weaker than cadastral-grade intake.",
+      ));
+    }
+
+    if (scenario.parcel && mixedAuthority) {
+      issues.push(this.warnConfidence(
+        ScenarioReadinessIssueCode.MIXED_AUTHORITY_GROUP_SITE,
+        "parcel",
+        "This grouped site mixes constituent source authority levels. The case can proceed, but parcel/site trust should be interpreted conservatively.",
+        ScenarioReadinessIssueCategory.PLANNING_CRITICAL,
       ));
     }
 
@@ -174,7 +209,23 @@ export class ScenarioValidationService {
     const sourceAverage = sourceScores.length
       ? sourceScores.reduce((acc, value) => acc + value, 0) / sourceScores.length
       : 70;
-    const inputConfidencePct = Math.max(20, Math.round(sourceAverage - executionBlockerCount * 20 - confidenceBlockerCount * 12 - warningCount * 6));
+    const authorityPenalty = parcelAuthority === "DEMO"
+      ? 18
+      : parcelAuthority === "SEARCH_GRADE"
+        ? 8
+        : 0;
+    const mixedAuthorityPenalty = mixedAuthority ? 6 : 0;
+    const inputConfidencePct = Math.max(
+      20,
+      Math.round(
+        sourceAverage
+        - executionBlockerCount * 20
+        - confidenceBlockerCount * 12
+        - warningCount * 6
+        - authorityPenalty
+        - mixedAuthorityPenalty,
+      ),
+    );
 
     return {
       readiness: {
@@ -192,6 +243,14 @@ export class ScenarioValidationService {
       inputConfidencePct,
       confidenceReasons: [
         `Derived from source confidence average of ${Math.round(sourceAverage)}%.`,
+        parcelAuthority === "CADASTRAL_GRADE"
+          ? "Parcel/site authority is cadastral-grade, which supports stronger parcel identity trust when source completeness is also strong."
+          : parcelAuthority === "SEARCH_GRADE"
+            ? "Parcel/site authority is search-grade rather than cadastral-grade, so geometry and boundary trust remain directional."
+            : parcelAuthority === "DEMO"
+              ? "Parcel/site authority comes from the demo provider, so trust remains suitable for demo/testing rather than production parcel identity."
+              : "Parcel/site authority is not explicitly source-backed.",
+        mixedAuthority ? "Grouped-site authority is mixed across member parcels, so parcel/site trust is interpreted conservatively." : "Grouped-site authority is internally consistent.",
         `${executionBlockerCount} execution blocker(s), ${confidenceBlockerCount} confidence blocker(s), and ${warningCount} warning(s) reduced readiness confidence.`,
       ],
     };

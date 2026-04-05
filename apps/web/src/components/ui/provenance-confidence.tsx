@@ -1,5 +1,10 @@
 import type { ParcelProvenanceDto, SourceType } from "@repo/contracts";
-import { getConfidenceBand, getSourceLabel, getTrustModeLabel } from "@/lib/ui/provenance";
+import {
+  getConfidenceBand,
+  getSourceAuthorityLabel,
+  getSourceLabel,
+  getTrustModeLabel,
+} from "@/lib/ui/provenance";
 import { cx } from "@/lib/ui/cx";
 import { Badge } from "./badge";
 import { getConfidenceTone } from "./status-badge";
@@ -26,6 +31,7 @@ export function ProvenanceConfidence({
   variant?: "default" | "inline";
 }) {
   const sourceLabel = getSourceLabel(sourceType);
+  const sourceAuthorityLabel = getSourceAuthorityLabel(provenance?.sourceAuthority);
   const band = getConfidenceBand(confidenceScore);
   const trustModeLabel = getTrustModeLabel(provenance?.trustMode);
   const confidenceLabel = confidenceScore != null ? `Confidence ${band} ${confidenceScore}` : `Confidence ${band}`;
@@ -38,6 +44,7 @@ export function ProvenanceConfidence({
       <div className="provenance__line">
         <Badge variant={getConfidenceTone(band)}>{confidenceLabel}</Badge>
         {trustModeLabel ? <span className="meta-chip">{trustModeLabel}</span> : null}
+        {sourceAuthorityLabel ? <span className="meta-chip">{sourceAuthorityLabel}</span> : null}
         {providerName ?? provenance?.providerName ? <span className="meta-chip">{providerName ?? provenance?.providerName}</span> : null}
         {!trustModeLabel && sourceLabel ? <span className="meta-chip">{sourceLabel}</span> : null}
         {showDerivedFlags && provenance?.geometryDerived ? <span className="meta-chip">Geometry derived</span> : null}

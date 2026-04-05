@@ -3,6 +3,19 @@ import { calculateMultiPolygonAreaSqm, calculateMultiPolygonCentroid } from "../
 
 export type NormalizedSourceParcelRecord = SourceParcelSearchResultDto;
 
+export function getSourceAuthorityRank(level: SourceParcelSearchResultDto["sourceAuthority"] | null | undefined) {
+  switch (level) {
+    case "CADASTRAL_GRADE":
+      return 3;
+    case "SEARCH_GRADE":
+      return 2;
+    case "DEMO":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 export function normalizeConfidenceScore(score: number | null | undefined) {
   if (score == null || !Number.isFinite(score)) return null;
   return Math.max(0, Math.min(100, Math.round(score)));
@@ -41,6 +54,7 @@ export function buildNormalizedSourceSearchResult(
   > & {
     landAreaSqm?: string | null;
     confidenceScore?: number | null;
+    centroid?: SourceParcelSearchResultDto["centroid"];
     rawMetadata?: Record<string, unknown> | null;
   },
 ): NormalizedSourceParcelRecord {
@@ -55,7 +69,7 @@ export function buildNormalizedSourceSearchResult(
     landAreaSqm: resolvedArea,
     confidenceScore: normalizedConfidence,
     confidenceBand: getParcelConfidenceBand(normalizedConfidence),
-    centroid: calculateMultiPolygonCentroid(record.geom),
+    centroid: record.centroid ?? calculateMultiPolygonCentroid(record.geom),
     sourceReference: `${record.providerName}:${record.providerParcelId}`,
     hasGeometry: Boolean(record.geom),
     hasLandArea: Boolean(resolvedArea),

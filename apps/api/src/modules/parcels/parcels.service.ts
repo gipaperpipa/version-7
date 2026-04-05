@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
   Scope,
 } from "@nestjs/common";
 import { SourceType } from "@prisma/client";
@@ -24,14 +25,17 @@ import { normalizePolygonGeometryToMultiPolygon } from "../../common/geo/polygon
 import { toApiDate, toApiDecimal, toApiJson, toPrismaJson } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";
-import { getSourceParcelsByIds, searchSourceParcels } from "./source-parcel-catalog";
 import {
   getParcelConfidenceBand,
+  getSourceAuthorityRank,
   normalizeConfidenceScore,
   toNullableDecimalString,
 } from "./source-parcel-model";
+import { SourceParcelProviderRegistryService } from "./source-parcel-provider-registry.service";
+import { SourceParcelProviderError } from "./source-parcel-provider";
 
 type ParcelTrustMode = NonNullable<ParcelDto["provenance"]>["trustMode"];
+type ParcelSourceAuthority = Exclude<NonNullable<ParcelDto["provenance"]>["sourceAuthority"], null>;
 
 type ExistingParcelMatch = {
   id: string;
@@ -109,6 +113,69 @@ function hasDownstreamWork(match: ExistingParcelMatch) {
   return summary.planningValueCount > 0 || summary.scenarioCount > 0;
 }
 
+function getSourceAuthorityForSourceType(sourceType: ParcelDto["sourceType"]): ParcelSourceAuthority | null {
+  switch (sourceType) {
+    case SourceType.GIS_CADASTRE:
+      return "CADASTRAL_GRADE";
+    case SourceType.THIRD_PARTY_API:
+      return "SEARCH_GRADE";
+    case SourceType.IMPORT:
+      return "DEMO";
+    default:
+      return null;
+  }
+}
+
+function getSourceTypeForAuthority(authority: ParcelSourceAuthority): ParcelDto["sourceType"] {
+  switch (authority) {
+    case "CADASTRAL_GRADE":
+      return SourceType.GIS_CADASTRE;
+    case "SEARCH_GRADE":
+      return SourceType.THIRD_PARTY_API;
+    case "DEMO":
+      return SourceType.IMPORT;
+    default:
+      return SourceType.THIRD_PARTY_API;
+  }
+}
+
+function deriveAuthorityFromRawMetadata(rawMetadata: Record<string, unknown> | null | undefined): ParcelSourceAuthority | null {
+  const authority = rawMetadata?.sourceAuthority;
+  if (authority === "DEMO" || authority === "SEARCH_GRADE" || authority === "CADASTRAL_GRADE") {
+    return authority;
+  }
+  return null;
+}
+
+function deriveParcelSourceAuthority(args: {
+  sourceType: ParcelDto["sourceType"];
+  providerName?: string | null;
+  rawMetadata?: Record<string, unknown> | null;
+}): ParcelSourceAuthority | null {
+  const fromMetadata = deriveAuthorityFromRawMetadata(args.rawMetadata);
+  if (fromMetadata) {
+    return fromMetadata;
+  }
+
+  if ((args.providerName ?? "").toLowerCase().includes("nominatim")) {
+    return "SEARCH_GRADE";
+  }
+
+  return getSourceAuthorityForSourceType(args.sourceType);
+}
+
+function deriveGroupedSourceAuthority(sourceParcels: SourceParcelSearchResultDto[]): ParcelSourceAuthority | null {
+  const authorities = sourceParcels
+    .map((item) => item.sourceAuthority)
+    .filter((item): item is ParcelSourceAuthority => Boolean(item));
+
+  if (!authorities.length) {
+    return null;
+  }
+
+  return [...authorities].sort((left, right) => getSourceAuthorityRank(left) - getSourceAuthorityRank(right))[0];
+}
+
 function buildManualFallbackProvenance(dto: CreateParcelRequestDto | UpdateParcelRequestDto) {
   const geometryDerived = Boolean("geom" in dto && dto.geom);
   const areaDerived = Boolean("landAreaSqm" in dto && dto.landAreaSqm);
@@ -116,6 +183,7 @@ function buildManualFallbackProvenance(dto: CreateParcelRequestDto | UpdateParce
   return {
     providerName: null,
     providerParcelId: null,
+    sourceAuthority: null,
     trustMode: deriveTrustMode({
       sourceType: dto.sourceType ?? SourceType.USER_INPUT,
       geometryDerived,
@@ -128,11 +196,13 @@ function buildManualFallbackProvenance(dto: CreateParcelRequestDto | UpdateParce
 }
 
 function buildSourceParcelProvenance(sourceParcel: SourceParcelSearchResultDto) {
+  const sourceType = getSourceTypeForAuthority(sourceParcel.sourceAuthority);
   return {
     providerName: sourceParcel.providerName,
     providerParcelId: sourceParcel.providerParcelId,
+    sourceAuthority: sourceParcel.sourceAuthority,
     trustMode: deriveTrustMode({
-      sourceType: SourceType.GIS_CADASTRE,
+      sourceType,
       geometryDerived: sourceParcel.hasGeometry,
       areaDerived: sourceParcel.hasLandArea,
     }),
@@ -140,7 +210,9 @@ function buildSourceParcelProvenance(sourceParcel: SourceParcelSearchResultDto) 
     areaDerived: sourceParcel.hasLandArea,
     rawMetadata: {
       ...(sourceParcel.rawMetadata ?? {}),
+      sourceParcelId: sourceParcel.id,
       sourceReference: sourceParcel.sourceReference,
+      sourceAuthority: sourceParcel.sourceAuthority,
       confidenceScore: sourceParcel.confidenceScore,
       confidenceBand: sourceParcel.confidenceBand,
       completeness: {
@@ -200,10 +272,14 @@ function computeGroupedConfidence(sourceParcels: SourceParcelSearchResultDto[]) 
   const missingGeometryCount = sourceParcels.filter((item) => !item.hasGeometry).length;
   const unresolvedAreaCount = sourceParcels.filter((item) => !item.hasLandArea).length;
   const incompleteMemberCount = sourceParcels.filter((item) => !item.hasGeometry || !item.hasLandArea).length;
+  const demoMemberCount = sourceParcels.filter((item) => item.sourceAuthority === "DEMO").length;
+  const searchGradeMemberCount = sourceParcels.filter((item) => item.sourceAuthority === "SEARCH_GRADE").length;
   const penalties = {
     missingGeometryPenalty: missingGeometryCount * 8,
     unresolvedAreaPenalty: unresolvedAreaCount * 6,
     incompleteSourcePenalty: incompleteMemberCount * 4,
+    demoAuthorityPenalty: demoMemberCount * 10,
+    searchAuthorityPenalty: searchGradeMemberCount * 4,
   };
   const finalScore = Math.max(
     25,
@@ -213,7 +289,9 @@ function computeGroupedConfidence(sourceParcels: SourceParcelSearchResultDto[]) 
         baseAverage
         - penalties.missingGeometryPenalty
         - penalties.unresolvedAreaPenalty
-        - penalties.incompleteSourcePenalty,
+        - penalties.incompleteSourcePenalty
+        - penalties.demoAuthorityPenalty
+        - penalties.searchAuthorityPenalty,
       ),
     ),
   );
@@ -227,6 +305,8 @@ function computeGroupedConfidence(sourceParcels: SourceParcelSearchResultDto[]) 
       missingGeometryCount,
       unresolvedAreaCount,
       incompleteMemberCount,
+      demoMemberCount,
+      searchGradeMemberCount,
       penalties,
     },
   };
@@ -239,6 +319,7 @@ function buildGroupDerivedProvenance(args: {
   selectionSignature: string;
   unresolvedAreaMemberIds: string[];
   unresolvedGeometryMemberIds: string[];
+  sourceAuthority: ParcelSourceAuthority | null;
   confidenceScore: number;
   confidenceBand: ParcelDto["confidenceBand"];
   confidenceInputs: Record<string, unknown>;
@@ -252,19 +333,40 @@ function buildGroupDerivedProvenance(args: {
   return {
     providerName: "Merged source parcel set",
     providerParcelId: null,
+    sourceAuthority: args.sourceAuthority,
     trustMode: geometryComplete && areaComplete ? "GROUP_DERIVED" as const : "SOURCE_INCOMPLETE" as const,
     geometryDerived: geometryComplete,
     areaDerived: areaComplete,
     rawMetadata: {
       intakeMode: "MULTI_PARCEL_SOURCE_GROUP",
       membershipStable: true,
+      sourceAuthority: args.sourceAuthority,
       normalizedMemberSetSignature: args.selectionSignature,
       constituentSourceParcelIds: args.sourceParcels
         .map((item) => `${item.providerName}::${item.providerParcelId}`)
         .sort((left, right) => left.localeCompare(right)),
+      constituentSourceRecordIds: args.sourceParcels
+        .map((item) => item.id)
+        .sort((left, right) => left.localeCompare(right)),
+      constituentAuthorities: args.sourceParcels
+        .map((item) => ({
+          sourceParcelId: `${item.providerName}::${item.providerParcelId}`,
+          providerName: item.providerName,
+          providerParcelId: item.providerParcelId,
+          authority: item.sourceAuthority,
+        }))
+        .sort((left, right) => left.sourceParcelId.localeCompare(right.sourceParcelId)),
       providerNames: Array.from(new Set(args.sourceParcels.map((item) => item.providerName))),
       unresolvedAreaMemberIds: args.unresolvedAreaMemberIds,
       unresolvedGeometryMemberIds: args.unresolvedGeometryMemberIds,
+      mixedAuthority: new Set(args.sourceParcels.map((item) => item.sourceAuthority)).size > 1,
+      authorityInterpretation: args.sourceAuthority === "CADASTRAL_GRADE"
+        ? "ALL_MEMBERS_CADASTRAL_GRADE"
+        : args.sourceAuthority === "SEARCH_GRADE"
+          ? "MIXED_OR_SEARCH_GRADE_MEMBERS_PRESENT"
+          : args.sourceAuthority === "DEMO"
+            ? "DEMO_SOURCE_PRESENT"
+            : "UNKNOWN",
       resolution: {
         geometry: {
           state: geometryResolution,
@@ -292,6 +394,7 @@ export class ParcelsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly requestContext: RequestContextService,
+    private readonly sourceParcelProviders: SourceParcelProviderRegistryService,
   ) {}
 
   async list(params: { page: number; pageSize: number }): Promise<ListParcelsResponseDto> {
@@ -335,7 +438,7 @@ export class ParcelsService {
   }
 
   async searchSource(query?: string | null, municipality?: string | null, limit = 12): Promise<SearchSourceParcelsResponseDto> {
-    const results = searchSourceParcels(query, municipality, limit);
+    const results = await this.getSourceSearchResults(query, municipality, limit);
     if (!results.items.length) {
       return results;
     }
@@ -498,7 +601,7 @@ export class ParcelsService {
       throw buildIntakeBadRequest("EMPTY_SOURCE_SELECTION", "At least one source parcel must be selected.");
     }
 
-    const sourceParcels = getSourceParcelsByIds(sourceParcelIds);
+    const sourceParcels = await this.getSourceParcelsByIds(sourceParcelIds);
     if (sourceParcels.length !== sourceParcelIds.length) {
       throw buildIntakeBadRequest(
         "SOURCE_RECORD_UNAVAILABLE",
@@ -593,7 +696,7 @@ export class ParcelsService {
           municipalityName: sourceParcel.municipalityName,
           districtName: sourceParcel.districtName,
           landAreaSqm: sourceParcel.landAreaSqm,
-          sourceType: SourceType.GIS_CADASTRE,
+          sourceType: getSourceTypeForAuthority(sourceParcel.sourceAuthority),
           sourceReference: sourceParcel.sourceReference,
           sourceProviderName: sourceParcel.providerName,
           sourceProviderParcelId: sourceParcel.providerParcelId,
@@ -762,6 +865,7 @@ export class ParcelsService {
       sourceParcels.reduce((sum, item) => sum + Number(item.landAreaSqm ?? 0), 0),
     );
     const groupedConfidence = computeGroupedConfidence(sourceParcels);
+    const groupedAuthority = deriveGroupedSourceAuthority(sourceParcels);
     const siteName = buildGroupName(sourceParcels, dto.siteName);
 
     const transactionResult = await this.prisma.$transaction(async (transaction) => {
@@ -772,6 +876,7 @@ export class ParcelsService {
         selectionSignature,
         unresolvedAreaMemberIds,
         unresolvedGeometryMemberIds,
+        sourceAuthority: groupedAuthority,
         confidenceScore: groupedConfidence.score,
         confidenceBand: groupedConfidence.band,
         confidenceInputs: groupedConfidence.inputs,
@@ -823,7 +928,7 @@ export class ParcelsService {
             municipalityName: sourceParcel.municipalityName,
             districtName: sourceParcel.districtName,
             landAreaSqm: sourceParcel.landAreaSqm,
-            sourceType: SourceType.GIS_CADASTRE,
+            sourceType: getSourceTypeForAuthority(sourceParcel.sourceAuthority),
             sourceReference: sourceParcel.sourceReference,
             sourceProviderName: sourceParcel.providerName,
             sourceProviderParcelId: sourceParcel.providerParcelId,
@@ -923,6 +1028,7 @@ export class ParcelsService {
           selectionSignature,
           unresolvedAreaMemberIds,
           unresolvedGeometryMemberIds,
+          sourceAuthority: groupedAuthority,
           confidenceScore: groupedConfidence.score,
           confidenceBand: groupedConfidence.band,
           confidenceInputs: groupedConfidence.inputs,
@@ -977,6 +1083,40 @@ export class ParcelsService {
       createdParcels: transactionResult.createdParcels,
       parcelGroup: transactionResult.primaryParcel.parcelGroup,
     };
+  }
+
+  private async getSourceSearchResults(query?: string | null, municipality?: string | null, limit = 12) {
+    try {
+      const items = await this.sourceParcelProviders.search(query, municipality, limit);
+      return {
+        items,
+        total: items.length,
+        page: 1,
+        pageSize: items.length || limit,
+      } satisfies SearchSourceParcelsResponseDto;
+    } catch (error) {
+      this.rethrowSourceProviderError(error, "Source parcel search is currently unavailable.");
+    }
+  }
+
+  private async getSourceParcelsByIds(sourceParcelIds: string[]) {
+    try {
+      return await this.sourceParcelProviders.getByIds(sourceParcelIds);
+    } catch (error) {
+      this.rethrowSourceProviderError(error, "The configured source parcel provider is unavailable for parcel lookup.");
+    }
+  }
+
+  private rethrowSourceProviderError(error: unknown, fallbackMessage: string): never {
+    if (error instanceof SourceParcelProviderError) {
+      throw new ServiceUnavailableException({
+        code: error.code,
+        provider: error.providerKey,
+        message: error.message || fallbackMessage,
+      });
+    }
+
+    throw error;
   }
 
   async getById(parcelId: string): Promise<ParcelDto> {
@@ -1068,6 +1208,7 @@ export class ParcelsService {
       ? parcelGroup.parcels.filter((item: any) => !item.isGroupSite)
       : [];
     const confidenceScore = normalizeConfidenceScore(parcelGroup.confidenceScore);
+    const provenance = toApiJson(parcelGroup.provenanceJson as never) as ParcelDto["provenance"] | null;
 
     return {
       id: parcelGroup.id,
@@ -1079,6 +1220,12 @@ export class ParcelsService {
       sourceReference: parcelGroup.sourceReference ?? null,
       confidenceScore,
       confidenceBand: getParcelConfidenceBand(confidenceScore),
+      sourceAuthority: provenance?.sourceAuthority
+        ?? deriveParcelSourceAuthority({
+          sourceType: parcelGroup.sourceType,
+          providerName: parcelGroup.sourceProviderName ?? null,
+          rawMetadata: provenance?.rawMetadata ?? null,
+        }),
     };
   }
 
@@ -1088,6 +1235,11 @@ export class ParcelsService {
     const derivedProvenance = provenance ?? {
       providerName: parcel.sourceProviderName ?? null,
       providerParcelId: parcel.sourceProviderParcelId ?? null,
+      sourceAuthority: deriveParcelSourceAuthority({
+        sourceType: parcel.sourceType,
+        providerName: parcel.sourceProviderName ?? null,
+        rawMetadata: null,
+      }),
       trustMode: deriveTrustMode({
         sourceType: parcel.sourceType,
         geometryDerived: Boolean(parcel.geom),
@@ -1103,6 +1255,7 @@ export class ParcelsService {
           .filter((item: any) => !item.isGroupSite)
           .map((item: any) => {
             const memberConfidenceScore = normalizeConfidenceScore(item.confidenceScore);
+            const memberProvenance = toApiJson(item.provenanceJson as never) as ParcelDto["provenance"] | null;
             return {
               id: item.id,
               name: item.name,
@@ -1111,6 +1264,12 @@ export class ParcelsService {
               landAreaSqm: toApiDecimal(item.landAreaSqm as never),
               confidenceScore: memberConfidenceScore,
               confidenceBand: getParcelConfidenceBand(memberConfidenceScore),
+              sourceAuthority: memberProvenance?.sourceAuthority
+                ?? deriveParcelSourceAuthority({
+                  sourceType: item.sourceType,
+                  providerName: item.sourceProviderName ?? null,
+                  rawMetadata: memberProvenance?.rawMetadata ?? null,
+                }),
               sourceProviderName: item.sourceProviderName ?? null,
               sourceProviderParcelId: item.sourceProviderParcelId ?? null,
               sourceReference: item.sourceReference ?? null,
@@ -1139,6 +1298,7 @@ export class ParcelsService {
       sourceProviderParcelId: parcel.sourceProviderParcelId ?? null,
       confidenceScore,
       confidenceBand: getParcelConfidenceBand(confidenceScore),
+      sourceAuthority: derivedProvenance.sourceAuthority,
       geom: toApiJson(parcel.geom as never),
       centroid: toApiJson(parcel.centroid as never),
       provenance: derivedProvenance,

@@ -6,7 +6,7 @@ import {
   type ScenarioReadinessDto,
 } from "@repo/contracts";
 import type { BadgeVariant } from "@/components/ui/badge";
-import { getConfidenceBand, getSourceLabel } from "./provenance";
+import { getConfidenceBand, getSourceAuthorityLabel, getSourceLabel } from "./provenance";
 
 export type ParcelCompletenessTone = BadgeVariant;
 export type ParcelNextBestActionKind =
@@ -67,13 +67,16 @@ function getSourceStatus(parcel: ParcelDto): ParcelCompletenessItem {
   const trustMode = getParcelTrustMode(parcel);
   const hasLandArea = hasDerivedArea(parcel);
   const hasGeometry = hasDerivedGeometry(parcel);
+  const authorityLabel = getSourceAuthorityLabel(parcel.provenance?.sourceAuthority ?? parcel.sourceAuthority);
 
   if (trustMode === "SOURCE_PRIMARY") {
     return {
-      label: "Source primary",
-      detail: "Parcel identity, geometry, and area are coming from source-backed intake and can carry directly into planning work.",
-      tone: "success",
-    };
+        label: "Source primary",
+        detail: authorityLabel
+          ? `Parcel identity is ${authorityLabel.toLowerCase()} and geometry and area are source-derived for planning work.`
+          : "Parcel identity, geometry, and area are coming from source-backed intake and can carry directly into planning work.",
+        tone: "success",
+      };
   }
 
   if (trustMode === "SOURCE_INCOMPLETE") {
@@ -85,25 +88,26 @@ function getSourceStatus(parcel: ParcelDto): ParcelCompletenessItem {
       };
     }
 
-    return {
-      label: "Source incomplete",
-      detail: hasGeometry || hasLandArea
-        ? "This parcel came from source intake, but one part of the core site identity still needs confirmation."
-        : "This parcel came from source intake, but geometry and area are still incomplete.",
-      tone: "warning",
-    };
+      return {
+        label: "Source incomplete",
+        detail: hasGeometry || hasLandArea
+          ? `This ${authorityLabel ? authorityLabel.toLowerCase() : "source-backed"} parcel still needs one part of the core site identity confirmed.`
+          : `This ${authorityLabel ? authorityLabel.toLowerCase() : "source-backed"} parcel still has incomplete geometry and area context.`,
+        tone: "warning",
+      };
   }
 
   if (trustMode === "GROUP_DERIVED" || parcel.isGroupSite) {
     const unresolvedMembers = Array.isArray(parcel.provenance?.rawMetadata?.unresolvedAreaMemberIds)
       ? parcel.provenance?.rawMetadata?.unresolvedAreaMemberIds.length
       : 0;
+    const mixedAuthority = Boolean(parcel.provenance?.rawMetadata?.mixedAuthority);
     return {
       label: "Grouped site",
       detail: parcel.constituentParcels.length
         ? unresolvedMembers
-          ? `Combined site derived from ${parcel.constituentParcels.length} sourced parcel${parcel.constituentParcels.length === 1 ? "" : "s"}, with ${unresolvedMembers} member${unresolvedMembers === 1 ? "" : "s"} still incomplete.`
-          : `Combined site derived from ${parcel.constituentParcels.length} sourced parcel${parcel.constituentParcels.length === 1 ? "" : "s"}.`
+          ? `Combined site derived from ${parcel.constituentParcels.length} sourced parcel${parcel.constituentParcels.length === 1 ? "" : "s"}, with ${unresolvedMembers} member${unresolvedMembers === 1 ? "" : "s"} still incomplete${mixedAuthority ? " and mixed source authority across members" : ""}.`
+          : `Combined site derived from ${parcel.constituentParcels.length} sourced parcel${parcel.constituentParcels.length === 1 ? "" : "s"}${mixedAuthority ? " with mixed source authority across members" : ""}.`
         : "Combined site identity is derived from sourced parcel members.",
       tone: hasGeometry && hasLandArea ? "accent" : "warning",
     };
@@ -131,8 +135,8 @@ function getSourceStatus(parcel: ParcelDto): ParcelCompletenessItem {
     return {
       label: "Source-backed",
       detail: hasLandArea
-        ? "This parcel is grounded in sourced context, though the signal is not yet top-confidence."
-        : "This parcel is source-backed, but area or other core site context still needs confirmation.",
+        ? `This parcel is grounded in ${authorityLabel ? authorityLabel.toLowerCase() : "sourced"} context, though the signal is not yet top-confidence.`
+        : `This ${authorityLabel ? authorityLabel.toLowerCase() : "source-backed"} parcel still needs area or other core site confirmation.`,
       tone: "accent",
     };
   }
