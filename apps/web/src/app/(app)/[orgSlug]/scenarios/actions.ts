@@ -282,3 +282,37 @@ export async function setScenarioStatusAction(
     throw error;
   }
 }
+
+export async function archiveScenarioVariantsAction(
+  orgSlug: string,
+  returnTo: string,
+  formData: FormData,
+) {
+  const scenarioIds = Array.from(new Set(
+    formData
+      .getAll("scenarioId")
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+  ));
+
+  if (!scenarioIds.length) {
+    redirect(returnTo);
+  }
+
+  try {
+    await Promise.all(
+      scenarioIds.map((scenarioId) => apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: ScenarioStatus.ARCHIVED }),
+      })),
+    );
+
+    revalidatePath(`/${orgSlug}/scenarios`);
+    redirect(returnTo);
+  } catch (error) {
+    if (isApiResponseError(error) || isApiUnavailableError(error)) {
+      redirect(buildErrorRedirect(returnTo, "status-request-failed", error.message));
+    }
+
+    throw error;
+  }
+}
