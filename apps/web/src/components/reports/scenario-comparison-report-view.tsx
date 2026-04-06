@@ -6,6 +6,7 @@ import { DiagnosticGroup } from "@/components/ui/diagnostic-group";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge, getReadinessTone, getRunStatusTone, getScenarioGovernanceTone, getScenarioStatusTone } from "@/components/ui/status-badge";
+import { buildComparisonDecisionMemo } from "@/lib/scenarios/report-recommendations";
 import {
   humanizeTokenLabel,
   optimizationTargetLabels,
@@ -36,10 +37,6 @@ function formatTimestamp(value: string | null | undefined) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function getScenarioDetail(entry: ScenarioComparisonEntryDto) {
-  return `${entry.parcel?.name ?? entry.parcel?.cadastralId ?? "Parcel missing"} / ${strategyTypeLabels[entry.scenario.strategyType]}`;
 }
 
 function buildMetricRows(entries: ScenarioComparisonEntryDto[]) {
@@ -110,6 +107,10 @@ export function ScenarioComparisonReportView({
   const familyCount = new Set(comparison.entries.map((entry) => entry.scenario.familyKey)).size;
   const rankedEntries = comparison.entries.filter((entry) => entry.rank !== null);
   const trailingEntries = rankedEntries.filter((entry) => (entry.rank ?? 0) > 1).slice(0, 2);
+  const recommendationMemo = buildComparisonDecisionMemo({
+    comparison,
+    assumptionDiffLabels: assumptionDiffRows.map((row) => row.label),
+  });
 
   return (
     <div className="workspace-page content-stack report-page">
@@ -138,6 +139,23 @@ export function ScenarioComparisonReportView({
           </div>
         )}
       />
+
+      <div className="report-print-meta report-print-only">
+        <div className="report-print-meta__title">Feasibility OS comparison memo</div>
+        <div className="report-print-meta__row">
+          <span>Prepared {generatedAt}</span>
+          <span>{comparison.entries.length} scenarios</span>
+          <span>{familyCount} families</span>
+          <span>{optimizationTargetLabels[comparison.rankingTarget]}</span>
+        </div>
+        <div className="report-print-meta__row">
+          <span>{leader ? `${leader.scenario.name} currently leads` : "No current leader"}</span>
+          <span>{comparison.mixedOptimizationTargets ? "Mixed optimization targets" : "Aligned optimization targets"}</span>
+        </div>
+        <div className="report-print-meta__note">
+          Internal comparison memo. Ranking remains heuristic and should be read together with readiness burden, trust posture, and assumption differences.
+        </div>
+      </div>
 
       <SectionCard
         className="summary-band decision-summary report-surface"
@@ -171,6 +189,84 @@ export function ScenarioComparisonReportView({
             <div className="ops-summary-item__value">{leader?.recommendation ?? "Need more comparable runs"}</div>
             <div className="ops-summary-item__detail">Use this with the lagging-case notes below.</div>
           </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        className="index-surface report-surface"
+        eyebrow="Decision call"
+        title={recommendationMemo.headline}
+        description={recommendationMemo.summary}
+        tone={recommendationMemo.cardTone}
+        size="compact"
+        actions={<StatusBadge tone={recommendationMemo.postureTone}>{recommendationMemo.postureLabel}</StatusBadge>}
+      >
+        <div className="content-stack">
+          <div className="key-value-grid">
+            <div className="key-value-card">
+              <div className="key-value-card__label">Current call</div>
+              <div className="key-value-card__value">{recommendationMemo.decisionCall}</div>
+            </div>
+            <div className="key-value-card">
+              <div className="key-value-card__label">Leader context</div>
+              <div className="key-value-card__value">{recommendationMemo.leaderContext}</div>
+            </div>
+            <div className="key-value-card">
+              <div className="key-value-card__label">Closest challenger</div>
+              <div className="key-value-card__value">{recommendationMemo.challengerContext}</div>
+            </div>
+            <div className="key-value-card">
+              <div className="key-value-card__label">Confidence gate</div>
+              <div className="key-value-card__value">{recommendationMemo.confidenceGate}</div>
+            </div>
+          </div>
+
+          <div className="diagnostic-grid">
+            <DiagnosticGroup title="Why the leader is still ahead" emptyLabel="No leader-support reasons were synthesized.">
+              {recommendationMemo.whyLeader.length ? (
+                <div className="signal-list">
+                  {recommendationMemo.whyLeader.map((item) => (
+                    <div key={item} className="signal-row">
+                      <div className="signal-row__badges">
+                        <StatusBadge tone="accent">Support</StatusBadge>
+                      </div>
+                      <div className="signal-row__text">{item}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </DiagnosticGroup>
+
+            <DiagnosticGroup title="What could change the call" emptyLabel="No recommendation-change risks were synthesized.">
+              {recommendationMemo.changeRisks.length ? (
+                <div className="signal-list">
+                  {recommendationMemo.changeRisks.map((item) => (
+                    <div key={item} className="signal-row">
+                      <div className="signal-row__badges">
+                        <StatusBadge tone="warning">Watch</StatusBadge>
+                      </div>
+                      <div className="signal-row__text">{item}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </DiagnosticGroup>
+          </div>
+
+          <DiagnosticGroup title="Recommended next comparison moves" emptyLabel="No additional comparison follow-ups were synthesized.">
+            {recommendationMemo.nextMoves.length ? (
+              <div className="signal-list">
+                {recommendationMemo.nextMoves.map((item) => (
+                  <div key={item} className="signal-row">
+                    <div className="signal-row__badges">
+                      <StatusBadge tone="accent">Next</StatusBadge>
+                    </div>
+                    <div className="signal-row__text">{item}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </DiagnosticGroup>
         </div>
       </SectionCard>
 
@@ -443,7 +539,7 @@ export function ScenarioComparisonReportView({
       </SectionCard>
 
       <SectionCard
-        className="index-surface report-surface"
+        className="index-surface report-surface report-section--appendix"
         eyebrow="Decision-useful charts"
         title="Chart appendix"
         description="These visuals help compare rank, capital pressure, threshold pressure, output confidence, and burden. They support the memo above rather than replacing it."
@@ -455,6 +551,10 @@ export function ScenarioComparisonReportView({
       </SectionCard>
 
       <ComparisonAnalysisPanels comparison={comparison} />
+
+      <div className="report-footnote">
+        Internal memo only. Use the current leader recommendation together with blocker load, missing-data burden, and assumption-difference evidence before treating the ranking as decision-grade.
+      </div>
     </div>
   );
 }

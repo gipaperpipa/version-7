@@ -9,7 +9,7 @@ export function PrintReportButton() {
       className={buttonClasses({ variant: "ghost" })}
       onClick={() => window.print()}
     >
-      Print report
+      Print / save PDF
     </button>
   );
 }

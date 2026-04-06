@@ -10,8 +10,9 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ProvenanceConfidence } from "@/components/ui/provenance-confidence";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatBlock } from "@/components/ui/stat-block";
-import { StatusBadge, getConfidenceTone, getReadinessTone, getRunStatusTone } from "@/components/ui/status-badge";
+import { StatusBadge, getReadinessTone, getRunStatusTone } from "@/components/ui/status-badge";
 import { VerdictPanel } from "@/components/ui/verdict-panel";
+import { buildScenarioDecisionMemo } from "@/lib/scenarios/report-recommendations";
 import { buildParcelCompletenessSummary } from "@/lib/ui/parcel-completeness";
 import { sprint1PlanningFieldDefinitions } from "@/lib/ui/planning-field-definitions";
 import { getConfidenceBand } from "@/lib/ui/provenance";
@@ -145,6 +146,7 @@ export function ScenarioReportView({
   const confidenceReasons = run.confidence?.reasons ?? [];
   const outputConfidenceBand = getConfidenceBand(run.confidence?.outputConfidencePct);
   const latestRunLabel = formatTimestamp(run.finishedAt ?? run.startedAt ?? run.requestedAt);
+  const preparedAtLabel = formatTimestamp(new Date().toISOString());
   const groupedSiteLabel = parcel?.isGroupSite
     ? `Grouped site / ${parcel.parcelGroup?.memberCount ?? parcel.constituentParcels.length} parcel members`
     : "Standalone parcel anchor";
@@ -153,6 +155,12 @@ export function ScenarioReportView({
     ?? heuristicWarnings[0]?.message
     ?? explanation?.weakestLinks?.[0]
     ?? (missingDataFlags[0] ? `Missing data burden: ${humanizeTokenLabel(missingDataFlags[0])}` : "No major caveat line surfaced.");
+  const decisionMemo = buildScenarioDecisionMemo({
+    scenario,
+    run,
+    parcel,
+    planningParameters,
+  });
 
   return (
     <div className="workspace-page content-stack report-page">
@@ -186,6 +194,25 @@ export function ScenarioReportView({
           </div>
         )}
       />
+
+      <div className="report-print-meta report-print-only">
+        <div className="report-print-meta__title">Feasibility OS scenario memo</div>
+        <div className="report-print-meta__row">
+          <span>Prepared {preparedAtLabel}</span>
+          <span>Latest run {latestRunLabel}</span>
+          <span>{strategyTypeLabels[scenario.strategyType]}</span>
+          <span>{optimizationTargetLabels[scenario.optimizationTarget]}</span>
+        </div>
+        <div className="report-print-meta__row">
+          <span>{parcel?.name ?? parcel?.cadastralId ?? "Parcel/site unavailable"}</span>
+          <span>{groupedSiteLabel}</span>
+          <span>{scenarioGovernanceStatusLabels[scenario.governanceStatus]}</span>
+          {scenario.isCurrentBest ? <span>Current lead</span> : null}
+        </div>
+        <div className="report-print-meta__note">
+          Internal feasibility memo. Heuristic confidence, source trust posture, and readiness caveats remain part of the recommendation.
+        </div>
+      </div>
 
       <VerdictPanel
         className="dashboard-hero decision-hero result-hero"
@@ -259,9 +286,9 @@ export function ScenarioReportView({
               </div>
               <div className="signal-row">
                 <div className="signal-row__badges">
-                  <StatusBadge tone="surface">Recommendation</StatusBadge>
+                  <StatusBadge tone={decisionMemo.postureTone}>Decision call</StatusBadge>
                 </div>
-                <div className="signal-row__text">{nextAction.description}</div>
+                <div className="signal-row__text">{decisionMemo.decisionCall}</div>
               </div>
             </div>
           </div>
@@ -312,6 +339,89 @@ export function ScenarioReportView({
             caption={result.netSalesRevenue ? "Sale-side proceeds after closing costs" : "Operating signal after vacancy and opex"}
           />
           <StatBlock label="Output confidence" value={run.confidence?.outputConfidencePct ?? "n/a"} caption="Directional trust score returned by the run" tone={getConfidenceStatTone(outputConfidenceBand)} />
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        className="index-surface report-surface"
+        eyebrow="Recommendation path"
+        title={decisionMemo.headline}
+        description={decisionMemo.summary}
+        tone={decisionMemo.cardTone}
+        size="compact"
+        actions={(
+          <div className="action-row action-row--compact">
+            <StatusBadge tone={decisionMemo.postureTone}>{decisionMemo.postureLabel}</StatusBadge>
+            {scenario.isCurrentBest ? <StatusBadge tone="accent">Current lead</StatusBadge> : null}
+          </div>
+        )}
+      >
+        <div className="content-stack">
+          <div className="key-value-grid">
+            <div className="key-value-card">
+              <div className="key-value-card__label">Decision call</div>
+              <div className="key-value-card__value">{decisionMemo.decisionCall}</div>
+            </div>
+            <div className="key-value-card">
+              <div className="key-value-card__label">Use in review</div>
+              <div className="key-value-card__value">{decisionMemo.reviewUse}</div>
+            </div>
+            <div className="key-value-card">
+              <div className="key-value-card__label">Confidence gate</div>
+              <div className="key-value-card__value">{decisionMemo.confidenceGate}</div>
+            </div>
+            <div className="key-value-card">
+              <div className="key-value-card__label">What upgrades this</div>
+              <div className="key-value-card__value">{decisionMemo.upgradeLine}</div>
+            </div>
+          </div>
+
+          <div className="diagnostic-grid">
+            <DiagnosticGroup title="Why this is the call" emptyLabel="No supporting reasons were synthesized beyond the core verdict.">
+              {decisionMemo.whyNow.length ? (
+                <div className="signal-list">
+                  {decisionMemo.whyNow.map((item) => (
+                    <div key={item} className="signal-row">
+                      <div className="signal-row__badges">
+                        <StatusBadge tone="accent">Support</StatusBadge>
+                      </div>
+                      <div className="signal-row__text">{item}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </DiagnosticGroup>
+
+            <DiagnosticGroup title="What could change the call" emptyLabel="No major recommendation-change triggers were synthesized.">
+              {decisionMemo.watchItems.length ? (
+                <div className="signal-list">
+                  {decisionMemo.watchItems.map((item) => (
+                    <div key={item} className="signal-row">
+                      <div className="signal-row__badges">
+                        <StatusBadge tone="warning">Watch</StatusBadge>
+                      </div>
+                      <div className="signal-row__text">{item}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </DiagnosticGroup>
+          </div>
+
+          <DiagnosticGroup title="Recommended next moves" emptyLabel="No additional next-step recommendations were synthesized.">
+            {decisionMemo.nextMoves.length ? (
+              <div className="signal-list">
+                {decisionMemo.nextMoves.map((item) => (
+                  <div key={item} className="signal-row">
+                    <div className="signal-row__badges">
+                      <StatusBadge tone="accent">Next</StatusBadge>
+                    </div>
+                    <div className="signal-row__text">{item}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </DiagnosticGroup>
         </div>
       </SectionCard>
 
@@ -595,7 +705,7 @@ export function ScenarioReportView({
       </SectionCard>
 
       <SectionCard
-        className="index-surface report-surface"
+        className="index-surface report-surface report-section--appendix"
         eyebrow="Decision-useful charts"
         title="Chart appendix"
         description="These visuals support composition, comparison, and diagnosis. They are evidence for the memo above, not the memo itself."
@@ -609,6 +719,10 @@ export function ScenarioReportView({
       <ResultAnalysisPanels run={run} result={result} />
       <ResultExplanationCard explanation={explanation} />
       <RunDiagnosticsPanel run={run} />
+
+      <div className="report-footnote">
+        Internal memo only. Treat the recommendation together with source authority, missing-data burden, and heuristic caveats before relying on the scenario as decision-grade.
+      </div>
     </div>
   );
 }
