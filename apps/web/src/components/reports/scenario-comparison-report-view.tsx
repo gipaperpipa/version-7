@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { type ScenarioComparisonEntryDto, type ScenarioComparisonResponseDto } from "@repo/contracts";
 import { ComparisonAnalysisPanels } from "@/components/analysis/comparison-analysis-panels";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { buttonClasses } from "@/components/ui/button";
 import { DiagnosticGroup } from "@/components/ui/diagnostic-group";
 import { PageHeader } from "@/components/ui/page-header";
@@ -94,10 +95,12 @@ export function ScenarioComparisonReportView({
   orgSlug,
   comparison,
   scenarioIds,
+  defaultSelectionSource,
 }: {
   orgSlug: string;
   comparison: ScenarioComparisonResponseDto;
   scenarioIds: string[];
+  defaultSelectionSource?: "CURRENT_LEADS" | "FAMILY_LEADS" | null;
 }) {
   const leader = comparison.entries.find((entry) => entry.scenario.id === comparison.leaderScenarioId) ?? null;
   const metricRows = buildMetricRows(comparison.entries);
@@ -139,6 +142,21 @@ export function ScenarioComparisonReportView({
           </div>
         )}
       />
+
+      {defaultSelectionSource ? (
+        <Alert tone={defaultSelectionSource === "CURRENT_LEADS" ? "info" : "warning"}>
+          <AlertTitle>
+            {defaultSelectionSource === "CURRENT_LEADS"
+              ? "Report defaulted to current leads"
+              : "Report defaulted to family leads"}
+          </AlertTitle>
+          <AlertDescription>
+            {defaultSelectionSource === "CURRENT_LEADS"
+              ? "No manual comparison set was provided, so this memo uses current lead scenarios across working families."
+              : "No manual comparison set was provided and there were not enough explicit current leads, so this memo uses family leads as a fallback. Resolve families to make report defaults stronger."}
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="report-print-meta report-print-only">
         <div className="report-print-meta__title">Feasibility OS comparison memo</div>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { OptimizationTarget, type ScenarioComparisonEntryDto } from "@repo/contracts";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
 import { ComparisonAnalysisPanels } from "@/components/analysis/comparison-analysis-panels";
 import { buttonClasses } from "@/components/ui/button";
@@ -8,7 +9,9 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge, getReadinessTone, getScenarioStatusTone } from "@/components/ui/status-badge";
 import { isApiUnavailableError } from "@/lib/api/errors";
-import { getScenarioComparison } from "@/lib/api/scenarios";
+import { getParcels } from "@/lib/api/parcels";
+import { getScenarioComparison, getScenarios } from "@/lib/api/scenarios";
+import { getLeadFirstComparisonDefaults } from "@/lib/scenarios/family-governance";
 import {
   assumptionProfileLabels,
   humanizeTokenLabel,
@@ -93,23 +96,36 @@ export default async function ScenarioComparePage({
 }) {
   const { orgSlug } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const scenarioIds = toScenarioIdArray(resolvedSearchParams?.scenarioId);
+  const requestedScenarioIds = toScenarioIdArray(resolvedSearchParams?.scenarioId);
+  let scenarioIds = requestedScenarioIds;
+  let defaultSelectionSource: "CURRENT_LEADS" | "FAMILY_LEADS" | null = null;
 
   if (scenarioIds.length < 2) {
-    return (
-      <div className="workspace-page content-stack">
-        <EmptyState
-          eyebrow="Scenario comparison"
-          title="Select at least two scenarios"
-          description="Use the scenario board to choose multiple cases, then compare them side by side."
-          actions={(
-            <Link className={buttonClasses()} href={`/${orgSlug}/scenarios`}>
-              Back to scenarios
-            </Link>
-          )}
-        />
-      </div>
-    );
+    const [scenarios, parcels] = await Promise.all([
+      getScenarios(orgSlug),
+      getParcels(orgSlug),
+    ]);
+    const parcelById = new Map(parcels.items.map((parcel) => [parcel.id, parcel]));
+    const defaults = getLeadFirstComparisonDefaults(scenarios.items, parcelById);
+    if (defaults.scenarioIds.length >= 2) {
+      scenarioIds = defaults.scenarioIds;
+      defaultSelectionSource = defaults.source;
+    } else {
+      return (
+        <div className="workspace-page content-stack">
+          <EmptyState
+            eyebrow="Scenario comparison"
+            title="Select at least two scenarios"
+            description="Use the scenario board to choose multiple cases, then compare them side by side."
+            actions={(
+              <Link className={buttonClasses()} href={`/${orgSlug}/scenarios`}>
+                Back to scenarios
+              </Link>
+            )}
+          />
+        </div>
+      );
+    }
   }
 
   try {
@@ -142,6 +158,21 @@ export default async function ScenarioComparePage({
             </>
           )}
         />
+
+        {defaultSelectionSource ? (
+          <Alert tone={defaultSelectionSource === "CURRENT_LEADS" ? "info" : "warning"}>
+            <AlertTitle>
+              {defaultSelectionSource === "CURRENT_LEADS"
+                ? "Comparison defaulted to current leads"
+                : "Comparison defaulted to family leads"}
+            </AlertTitle>
+            <AlertDescription>
+              {defaultSelectionSource === "CURRENT_LEADS"
+                ? "No manual comparison set was selected, so the compare view is using current lead scenarios across working families."
+                : "No manual comparison set was selected and there were not enough explicit current leads yet, so the compare view fell back to family leads. Resolve families to strengthen this default."}
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         <SectionCard
           className="summary-band summary-band--ledger"

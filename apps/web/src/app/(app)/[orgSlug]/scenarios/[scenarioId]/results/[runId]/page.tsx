@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { isApiResponseError } from "@/lib/api/errors";
-import { getScenario, getScenarioRun } from "@/lib/api/scenarios";
+import { getParcels } from "@/lib/api/parcels";
+import { getScenario, getScenarioRun, getScenarios } from "@/lib/api/scenarios";
+import { buildScenarioFamilySummaries, getSuggestedLeadReasonLabel } from "@/lib/scenarios/family-governance";
 import { assumptionProfileLabels, humanizeTokenLabel } from "@/lib/ui/enum-labels";
 import { getRunVerdict } from "@/lib/ui/verdicts";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NextStepPanel } from "@/components/ui/next-step-panel";
@@ -14,8 +17,13 @@ import { ResultExplanationCard } from "@/components/scenarios/result-explanation
 import { RunDiagnosticsPanel } from "@/components/scenarios/run-diagnostics-panel";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatBlock } from "@/components/ui/stat-block";
-import { StatusBadge, getRunStatusTone } from "@/components/ui/status-badge";
+import { StatusBadge, getRunStatusTone, getScenarioGovernanceTone } from "@/components/ui/status-badge";
 import { VerdictPanel } from "@/components/ui/verdict-panel";
+import {
+  archiveScenarioVariantsAction,
+  resolveScenarioFamilyAction,
+  setScenarioCurrentBestAction,
+} from "@/app/(app)/[orgSlug]/scenarios/actions";
 
 function getNextActionCopy(runId: string, scenarioId: string, verdictTitle: string, hasPlanningLink: boolean) {
   if (verdictTitle === "Run failed") {
@@ -62,9 +70,11 @@ export default async function ScenarioResultPage({
   const { orgSlug, scenarioId, runId } = await params;
 
   try {
-    const [run, scenario] = await Promise.all([
+    const [run, scenario, scenarios, parcels] = await Promise.all([
       getScenarioRun(orgSlug, runId),
       getScenario(orgSlug, scenarioId),
+      getScenarios(orgSlug),
+      getParcels(orgSlug),
     ]);
 
     const result = run.financialResult;
@@ -74,6 +84,15 @@ export default async function ScenarioResultPage({
     const parcelHref = scenario.parcelId ? `/${orgSlug}/parcels/${scenario.parcelId}` : null;
     const planningHref = scenario.parcelId ? `/${orgSlug}/parcels/${scenario.parcelId}/planning` : null;
     const nextAction = getNextActionCopy(runId, scenarioId, verdict.title, Boolean(planningHref));
+    const parcelById = new Map(parcels.items.map((parcel) => [parcel.id, parcel]));
+    const familySummaries = buildScenarioFamilySummaries(scenarios.items, parcelById);
+    const family = familySummaries.find((item) => item.familyKey === scenario.familyKey) ?? null;
+    const unresolvedFamily = result && family && family.healthStatus !== "HEALTHY" ? family : null;
+    const familySearch = new URLSearchParams();
+    if (scenario.parcelId) familySearch.set("siteId", scenario.parcelId);
+    familySearch.set("strategy", scenario.strategyType);
+    familySearch.set("variantView", "ALL");
+    const familyBoardHref = `/${orgSlug}/scenarios?${familySearch.toString()}`;
 
     return (
       <div className="workspace-page content-stack">
@@ -131,6 +150,15 @@ export default async function ScenarioResultPage({
 
         {result ? (
           <>
+            {unresolvedFamily ? (
+              <Alert tone={unresolvedFamily.healthTone === "danger" ? "danger" : "warning"}>
+                <AlertTitle>Family governance still needs resolution</AlertTitle>
+                <AlertDescription>
+                  This run completed, but the family is still unhealthy: {unresolvedFamily.healthDetail}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
             <div className="detail-grid detail-grid--decision">
               <SectionCard
                 className="summary-band decision-summary"
@@ -177,6 +205,101 @@ export default async function ScenarioResultPage({
                 )}
               />
             </div>
+
+            {unresolvedFamily ? (
+              <SectionCard
+                className="index-surface"
+                eyebrow="Family resolution"
+                title="Use this run to tighten the family working set"
+                description="This prompt turns the finished run into a governance decision instead of leaving the family as another loose active variant."
+                size="compact"
+              >
+                <div className="content-stack">
+                  <div className="key-value-grid">
+                    <div className="key-value-card">
+                      <div className="key-value-card__label">Family health</div>
+                      <div className="key-value-card__value">{unresolvedFamily.healthLabel}</div>
+                    </div>
+                    <div className="key-value-card">
+                      <div className="key-value-card__label">Suggested lead</div>
+                      <div className="key-value-card__value">{unresolvedFamily.suggestedLeadScenario.name}</div>
+                    </div>
+                    <div className="key-value-card">
+                      <div className="key-value-card__label">Suggestion basis</div>
+                      <div className="key-value-card__value">{getSuggestedLeadReasonLabel(unresolvedFamily.suggestedLeadReason)}</div>
+                    </div>
+                    <div className="key-value-card">
+                      <div className="key-value-card__label">Active clutter</div>
+                      <div className="key-value-card__value">
+                        {unresolvedFamily.activeCandidateCount} active / {unresolvedFamily.olderActiveVariantIds.length} non-lead active
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="signal-list">
+                    <div className="signal-row">
+                      <div className="signal-row__badges">
+                        <StatusBadge tone={unresolvedFamily.healthTone}>{unresolvedFamily.healthLabel}</StatusBadge>
+                        {!unresolvedFamily.explicitLeadExists ? <StatusBadge tone="warning">No current lead</StatusBadge> : null}
+                      </div>
+                      <div className="signal-row__text">{unresolvedFamily.healthDetail}</div>
+                    </div>
+                    <div className="signal-row">
+                      <div className="signal-row__badges">
+                        <StatusBadge tone="accent">Suggested lead</StatusBadge>
+                        <StatusBadge tone={getScenarioGovernanceTone(unresolvedFamily.suggestedLeadScenario.governanceStatus)}>
+                          {humanizeTokenLabel(unresolvedFamily.suggestedLeadScenario.governanceStatus)}
+                        </StatusBadge>
+                      </div>
+                      <div className="signal-row__text">
+                        {unresolvedFamily.suggestedLeadScenario.name} / {getSuggestedLeadReasonLabel(unresolvedFamily.suggestedLeadReason)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="action-row">
+                    <Link className={buttonClasses()} href={familyBoardHref}>
+                      Open family board
+                    </Link>
+                    {!scenario.isCurrentBest ? (
+                      <form action={setScenarioCurrentBestAction.bind(null, orgSlug, scenario.id, familyBoardHref)}>
+                        <button type="submit" className={buttonClasses({ variant: "secondary" })}>
+                          Make this scenario lead
+                        </button>
+                      </form>
+                    ) : null}
+                    {!unresolvedFamily.suggestedLeadScenario.isCurrentBest ? (
+                      <form action={setScenarioCurrentBestAction.bind(null, orgSlug, unresolvedFamily.suggestedLeadScenario.id, familyBoardHref)}>
+                        <button type="submit" className={buttonClasses({ variant: "secondary" })}>
+                          Adopt suggested lead
+                        </button>
+                      </form>
+                    ) : null}
+                    {unresolvedFamily.olderActiveVariantIds.length ? (
+                      <form action={archiveScenarioVariantsAction.bind(null, orgSlug, familyBoardHref)}>
+                        {unresolvedFamily.olderActiveVariantIds.map((candidateId) => (
+                          <input key={candidateId} type="hidden" name="scenarioId" value={candidateId} />
+                        ))}
+                        <button type="submit" className={buttonClasses({ variant: "ghost" })}>
+                          Archive non-lead actives
+                        </button>
+                      </form>
+                    ) : null}
+                    {unresolvedFamily.resolutionArchiveVariantIds.length ? (
+                      <form action={resolveScenarioFamilyAction.bind(null, orgSlug, familyBoardHref)}>
+                        <input type="hidden" name="leadScenarioId" value={unresolvedFamily.suggestedLeadScenario.id} />
+                        {unresolvedFamily.resolutionArchiveVariantIds.map((candidateId) => (
+                          <input key={candidateId} type="hidden" name="archiveScenarioId" value={candidateId} />
+                        ))}
+                        <button type="submit" className={buttonClasses({ variant: "secondary" })}>
+                          Resolve family with suggestion
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
+                </div>
+              </SectionCard>
+            ) : null}
 
             <ResultAnalysisPanels run={run} result={result} />
             <RunDiagnosticsPanel run={run} />
