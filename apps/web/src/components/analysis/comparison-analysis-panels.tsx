@@ -58,6 +58,9 @@ export function ComparisonAnalysisPanels({
   comparison: ScenarioComparisonResponseDto;
 }) {
   const leader = comparison.entries.find((entry) => entry.scenario.id === comparison.leaderScenarioId) ?? null;
+  const laggard = [...comparison.entries]
+    .filter((entry) => entry.rank !== null)
+    .sort((left, right) => (right.rank ?? 0) - (left.rank ?? 0))[0] ?? null;
   const threshold = getThresholdTarget(comparison);
 
   return (
@@ -124,7 +127,7 @@ export function ComparisonAnalysisPanels({
           (value) => `${value ?? 0} signals`,
         ).map((item, index) => ({
           ...item,
-          detail: `${comparison.entries[index].blockerCount} blockers · ${comparison.entries[index].warningCount} warnings · ${comparison.entries[index].missingDataCount} missing`,
+          detail: `${comparison.entries[index].blockerCount} blockers / ${comparison.entries[index].warningCount} warnings / ${comparison.entries[index].missingDataCount} missing`,
           tone: comparison.entries[index].blockerCount > 0
             ? ("danger" as const)
             : comparison.entries[index].missingDataCount > 0 || comparison.entries[index].warningCount > 0
@@ -138,6 +141,14 @@ export function ComparisonAnalysisPanels({
         title="Why the current leader is ahead"
         description="Current leading scenario drivers under the selected comparison lens."
         items={leader?.topDrivers ?? []}
+      />
+
+      <OrderedInsightChart
+        eyebrow="Trailing case readout"
+        title="Why weaker cases trail"
+        description="Use the weakest currently ranked case to understand what is dragging the comparison set."
+        items={laggard?.latestRun?.financialResult?.explanation?.weakestLinks ?? [laggard?.recommendation ?? "No weaker-case explanation returned."]}
+        tone="warning"
       />
     </div>
   );
