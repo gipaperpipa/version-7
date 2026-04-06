@@ -7,6 +7,7 @@ import type {
   ScenarioComparisonResponseDto,
   ScenarioDto,
   UpdateScenarioRequestDto,
+  UpdateScenarioWorkspaceDefaultsRequestDto,
   UpsertScenarioFundingStackRequestDto,
 } from "../../generated-contracts/scenarios";
 import type { ScenarioReadinessDto } from "../../generated-contracts/readiness";
@@ -38,8 +39,16 @@ export class ScenariosController {
 
   @Get("assumption-templates")
   @Version("1")
-  listAssumptionTemplates(): ListScenarioAssumptionTemplatesResponseDto {
+  listAssumptionTemplates(): Promise<ListScenarioAssumptionTemplatesResponseDto> {
     return this.scenariosService.listAssumptionTemplates();
+  }
+
+  @Patch("assumption-templates/workspace-default")
+  @Version("1")
+  updateWorkspaceDefaults(
+    @Body() dto: UpdateScenarioWorkspaceDefaultsRequestDto,
+  ): Promise<ListScenarioAssumptionTemplatesResponseDto> {
+    return this.scenariosService.updateWorkspaceDefaults(dto);
   }
 
   @Get("compare")

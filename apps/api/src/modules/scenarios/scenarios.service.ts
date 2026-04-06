@@ -6,6 +6,7 @@ import type {
   ScenarioComparisonResponseDto,
   ScenarioDto,
   UpdateScenarioRequestDto,
+  UpdateScenarioWorkspaceDefaultsRequestDto,
   UpsertScenarioFundingStackRequestDto,
 } from "../../generated-contracts/scenarios";
 import type { OptimizationTarget, ScenarioReadinessDto, ScenarioRunDto } from "../../generated-contracts";
@@ -15,12 +16,16 @@ import { RequestContextService } from "../../common/request-context/request-cont
 import { mapScenarioRunDto } from "../scenario-runs/scenario-run.mapper";
 import { scenarioRunWithResultArgs } from "../scenario-runs/scenario-run.types";
 import { ScenarioValidationService } from "./scenario-validation.service";
-import { getScenarioAssumptionTemplates } from "./scenario-assumption-templates";
 import {
+  getScenarioAssumptionTemplateByKey,
+  getScenarioAssumptionTemplates,
+} from "./scenario-assumption-templates";
+import {
+  buildScenarioAssumptionSummary,
   extractScenarioAssumptionSet,
   withScenarioAssumptionSet,
 } from "./scenario-assumptions";
-import { scenarioWithFundingArgs, type ScenarioWithFunding } from "./scenario.types";
+import { scenarioForValidationArgs, type ScenarioForValidation } from "./scenario.types";
 
 @Injectable({ scope: Scope.REQUEST })
 export class ScenariosService {
@@ -34,9 +39,13 @@ export class ScenariosService {
     const page = Math.max(1, params.page);
     const pageSize = Math.min(100, Math.max(1, params.pageSize));
 
-    const [items, total] = await this.prisma.$transaction([
+    const [organization, items, total, familyRows] = await this.prisma.$transaction([
+      this.prisma.organization.findUniqueOrThrow({
+        where: { id: this.requestContext.organizationId },
+        select: { defaultScenarioTemplateKey: true },
+      }),
       this.prisma.scenario.findMany({
-        ...scenarioWithFundingArgs,
+        ...scenarioForValidationArgs,
         where: { organizationId: this.requestContext.organizationId },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * pageSize,
@@ -45,35 +54,99 @@ export class ScenariosService {
       this.prisma.scenario.count({
         where: { organizationId: this.requestContext.organizationId },
       }),
+      this.prisma.scenario.findMany({
+        where: { organizationId: this.requestContext.organizationId },
+        select: {
+          id: true,
+          parcelId: true,
+          parcelGroupId: true,
+          strategyType: true,
+          optimizationTarget: true,
+          createdAt: true,
+          governanceStatus: true,
+          isCurrentBest: true,
+        },
+      }),
     ]);
+    const familyMetadata = this.buildFamilyMetadataMap(familyRows);
 
     return {
-      items: items.map((item) => this.mapScenario(item)),
+      items: items.map((item) => this.mapScenario(item, {
+        workspaceDefaultTemplateKey: organization.defaultScenarioTemplateKey,
+        familyMetadata,
+        readinessSnapshot: this.toReadinessSnapshot(this.scenarioValidationService.evaluateLoadedScenario(item).readiness),
+      })),
       total,
       page,
       pageSize,
     };
   }
 
-  listAssumptionTemplates(): ListScenarioAssumptionTemplatesResponseDto {
+  async listAssumptionTemplates(): Promise<ListScenarioAssumptionTemplatesResponseDto> {
+    const organization = await this.prisma.organization.findUniqueOrThrow({
+      where: { id: this.requestContext.organizationId },
+      select: { defaultScenarioTemplateKey: true },
+    });
+    const items = getScenarioAssumptionTemplates(organization.defaultScenarioTemplateKey);
+    const defaultTemplate = items.find((item) => item.key === organization.defaultScenarioTemplateKey) ?? null;
+
     return {
-      items: getScenarioAssumptionTemplates(),
+      items,
+      workspaceDefaultTemplateKey: organization.defaultScenarioTemplateKey,
+      workspaceDefaultTemplateName: defaultTemplate?.name ?? null,
     };
+  }
+
+  async updateWorkspaceDefaults(dto: UpdateScenarioWorkspaceDefaultsRequestDto): Promise<ListScenarioAssumptionTemplatesResponseDto> {
+    const nextTemplateKey = dto.defaultTemplateKey ?? null;
+    if (nextTemplateKey && !getScenarioAssumptionTemplateByKey(nextTemplateKey)) {
+      throw new UnprocessableEntityException("Unknown scenario assumption template key.");
+    }
+
+    await this.prisma.organization.update({
+      where: { id: this.requestContext.organizationId },
+      data: { defaultScenarioTemplateKey: nextTemplateKey },
+    });
+
+    return this.listAssumptionTemplates();
   }
 
   async create(dto: CreateScenarioRequestDto): Promise<ScenarioDto> {
     const parcelAnchor = await this.resolveScenarioParcelAnchor(dto.parcelId ?? null, dto.parcelGroupId ?? null, true);
+    const familyDefinition = this.buildScenarioFamilyDefinition(
+      parcelAnchor.parcelId ?? null,
+      parcelAnchor.parcelGroupId ?? null,
+      dto.strategyType,
+      dto.optimizationTarget,
+    );
+    const [organization, familySiblings] = await Promise.all([
+      this.prisma.organization.findUniqueOrThrow({
+        where: { id: this.requestContext.organizationId },
+        select: { defaultScenarioTemplateKey: true },
+      }),
+      this.findFamilyScenarios(familyDefinition),
+    ]);
+    const nextFamilyVersion = familySiblings.length + 1;
+    const requestedGovernanceStatus = dto.governanceStatus ?? "DRAFT";
+    const governanceStatus = dto.isCurrentBest ? "ACTIVE_CANDIDATE" : requestedGovernanceStatus;
+    const shouldMarkCurrentBest = governanceStatus === "ACTIVE_CANDIDATE"
+      && (dto.isCurrentBest === true || !familySiblings.some((item) => item.isCurrentBest));
+    const assumptionSet = dto.assumptionSet ?? null;
+    const inputsJson = withScenarioAssumptionSet(dto.inputsJson ?? null, assumptionSet) ?? null;
+
     const created = await this.prisma.scenario.create({
       data: {
         organizationId: this.requestContext.organizationId,
         createdById: this.requestContext.userId,
         parcelId: parcelAnchor.parcelId,
         parcelGroupId: parcelAnchor.parcelGroupId,
-        name: dto.name,
+        name: this.buildScenarioName(dto.name, nextFamilyVersion),
         description: dto.description ?? null,
         strategyType: dto.strategyType,
         acquisitionType: dto.acquisitionType,
         optimizationTarget: dto.optimizationTarget,
+        governanceStatus,
+        isCurrentBest: shouldMarkCurrentBest,
         strategyMixJson: toPrismaJson(dto.strategyType === "MIXED_STRATEGY" ? dto.strategyMixJson ?? null : null),
         avgUnitSizeSqm: toPrismaDecimal(dto.avgUnitSizeSqm),
         targetMarketRentEurSqm: toPrismaDecimal(dto.targetMarketRentEurSqm),
@@ -85,16 +158,20 @@ export class ScenariosService {
         parkingCostPerSpace: toPrismaDecimal(dto.parkingCostPerSpace),
         landCost: toPrismaDecimal(dto.landCost),
         equityTargetPct: toPrismaDecimal(dto.equityTargetPct),
-        inputsJson: toPrismaJson(withScenarioAssumptionSet(dto.inputsJson ?? null, dto.assumptionSet) ?? null),
+        inputsJson: toPrismaJson(inputsJson),
       },
     });
 
-    return this.getById(created.id);
+    if (shouldMarkCurrentBest) {
+      await this.clearCurrentBestForFamily(familyDefinition, created.id);
+    }
+
+    return this.getById(created.id, organization.defaultScenarioTemplateKey);
   }
 
-  async getById(scenarioId: string): Promise<ScenarioDto> {
+  async getById(scenarioId: string, workspaceDefaultTemplateKey?: string | null): Promise<ScenarioDto> {
     const scenario = await this.prisma.scenario.findFirst({
-      ...scenarioWithFundingArgs,
+      ...scenarioForValidationArgs,
       where: {
         id: scenarioId,
         organizationId: this.requestContext.organizationId,
@@ -105,7 +182,29 @@ export class ScenariosService {
       throw new NotFoundException("Scenario not found");
     }
 
-    return this.mapScenario(scenario);
+    const resolvedWorkspaceDefaultTemplateKey = workspaceDefaultTemplateKey ?? (await this.prisma.organization.findUniqueOrThrow({
+      where: { id: this.requestContext.organizationId },
+      select: { defaultScenarioTemplateKey: true },
+    })).defaultScenarioTemplateKey;
+    const familyRows = await this.prisma.scenario.findMany({
+      where: { organizationId: this.requestContext.organizationId },
+      select: {
+        id: true,
+        parcelId: true,
+        parcelGroupId: true,
+        strategyType: true,
+        optimizationTarget: true,
+        createdAt: true,
+        governanceStatus: true,
+        isCurrentBest: true,
+      },
+    });
+
+    return this.mapScenario(scenario, {
+      workspaceDefaultTemplateKey: resolvedWorkspaceDefaultTemplateKey,
+      familyMetadata: this.buildFamilyMetadataMap(familyRows),
+      readinessSnapshot: this.toReadinessSnapshot(this.scenarioValidationService.evaluateLoadedScenario(scenario).readiness),
+    });
   }
 
   async update(scenarioId: string, dto: UpdateScenarioRequestDto): Promise<ScenarioDto> {
@@ -114,6 +213,30 @@ export class ScenariosService {
       dto.parcelId === undefined ? undefined : dto.parcelId,
       dto.parcelGroupId === undefined ? undefined : dto.parcelGroupId,
       true,
+    );
+    const nextParcelId = parcelAnchor.parcelId === undefined ? existing.parcelId : parcelAnchor.parcelId;
+    const nextParcelGroupId = parcelAnchor.parcelGroupId === undefined ? existing.parcelGroupId : parcelAnchor.parcelGroupId;
+    const nextStrategyType = dto.strategyType ?? existing.strategyType;
+    const nextOptimizationTarget = dto.optimizationTarget ?? existing.optimizationTarget;
+    const nextFamilyDefinition = this.buildScenarioFamilyDefinition(
+      nextParcelId ?? null,
+      nextParcelGroupId ?? null,
+      nextStrategyType,
+      nextOptimizationTarget,
+    );
+    const requestedGovernanceStatus = dto.governanceStatus ?? existing.governanceStatus;
+    const governanceStatus = dto.isCurrentBest === true
+      ? "ACTIVE_CANDIDATE"
+      : requestedGovernanceStatus;
+    const nextIsCurrentBest = governanceStatus === "ACTIVE_CANDIDATE"
+      ? dto.isCurrentBest ?? existing.isCurrentBest
+      : false;
+    const nextAssumptionSet = dto.assumptionSet === undefined
+      ? extractScenarioAssumptionSet(toApiJson(existing.inputsJson))
+      : dto.assumptionSet;
+    const nextInputsJson = withScenarioAssumptionSet(
+      dto.inputsJson === undefined ? toApiJson(existing.inputsJson) : dto.inputsJson,
+      nextAssumptionSet,
     );
 
     await this.prisma.scenario.update({
@@ -126,6 +249,8 @@ export class ScenariosService {
         strategyType: dto.strategyType,
         acquisitionType: dto.acquisitionType,
         optimizationTarget: dto.optimizationTarget,
+        governanceStatus,
+        isCurrentBest: nextIsCurrentBest,
         strategyMixJson:
           dto.strategyType === undefined
             ? toPrismaJson(dto.strategyMixJson)
@@ -142,13 +267,14 @@ export class ScenariosService {
         parkingCostPerSpace: dto.parkingCostPerSpace === undefined ? undefined : toPrismaDecimal(dto.parkingCostPerSpace),
         landCost: dto.landCost === undefined ? undefined : toPrismaDecimal(dto.landCost),
         equityTargetPct: dto.equityTargetPct === undefined ? undefined : toPrismaDecimal(dto.equityTargetPct),
-        inputsJson: toPrismaJson(withScenarioAssumptionSet(
-          dto.inputsJson === undefined ? toApiJson(existing.inputsJson) : dto.inputsJson,
-          dto.assumptionSet,
-        )),
+        inputsJson: toPrismaJson(nextInputsJson),
         status: dto.status,
       },
     });
+
+    if (nextIsCurrentBest) {
+      await this.clearCurrentBestForFamily(nextFamilyDefinition, scenarioId);
+    }
 
     return this.getById(scenarioId);
   }
@@ -329,7 +455,16 @@ export class ScenariosService {
         id: scenarioId,
         organizationId: this.requestContext.organizationId,
       },
-      select: { id: true, inputsJson: true },
+      select: {
+        id: true,
+        parcelId: true,
+        parcelGroupId: true,
+        strategyType: true,
+        optimizationTarget: true,
+        governanceStatus: true,
+        isCurrentBest: true,
+        inputsJson: true,
+      },
     });
 
     if (!scenario) {
@@ -409,7 +544,21 @@ export class ScenariosService {
     };
   }
 
-  private mapScenario(item: ScenarioWithFunding): ScenarioDto {
+  private mapScenario(
+    item: ScenarioForValidation,
+    options: {
+      workspaceDefaultTemplateKey: string | null;
+      familyMetadata: Map<string, { familyKey: string; familyVersion: number }>;
+      readinessSnapshot: ScenarioDto["readinessSnapshot"];
+    },
+  ): ScenarioDto {
+    const assumptionSet = extractScenarioAssumptionSet(toApiJson(item.inputsJson));
+    const template = getScenarioAssumptionTemplateByKey(assumptionSet?.templateKey ?? options.workspaceDefaultTemplateKey);
+    const family = options.familyMetadata.get(item.id) ?? {
+      familyKey: this.buildScenarioFamilyKey(item.parcelId, item.parcelGroupId, item.strategyType, item.optimizationTarget),
+      familyVersion: 1,
+    };
+
     return {
       id: item.id,
       organizationId: item.organizationId,
@@ -419,6 +568,10 @@ export class ScenariosService {
       name: item.name,
       description: item.description,
       status: item.status,
+      governanceStatus: item.governanceStatus,
+      isCurrentBest: item.isCurrentBest,
+      familyKey: family.familyKey,
+      familyVersion: family.familyVersion,
       strategyType: item.strategyType,
       acquisitionType: item.acquisitionType,
       optimizationTarget: item.optimizationTarget,
@@ -433,9 +586,18 @@ export class ScenariosService {
       parkingCostPerSpace: toApiDecimal(item.parkingCostPerSpace),
       landCost: toApiDecimal(item.landCost),
       equityTargetPct: toApiDecimal(item.equityTargetPct),
-      assumptionSet: extractScenarioAssumptionSet(toApiJson(item.inputsJson)),
+      assumptionSet,
+      assumptionSummary: buildScenarioAssumptionSummary(assumptionSet, {
+        templateDefaults: template?.defaults ?? null,
+        templateScope: template?.scope ?? null,
+        isWorkspaceDefault: Boolean(template?.key && template.key === options.workspaceDefaultTemplateKey),
+        fallbackTemplateKey: assumptionSet ? null : template?.key ?? null,
+        fallbackTemplateName: assumptionSet ? null : template?.name ?? null,
+        fallbackProfileKey: assumptionSet ? undefined : template?.profileKey,
+      }),
       inputsJson: toApiJson(item.inputsJson),
       latestRunAt: toApiDate(item.latestRunAt),
+      readinessSnapshot: options.readinessSnapshot,
       fundingVariants: item.fundingVariants.map((variant) => ({
         id: variant.id,
         scenarioId: variant.scenarioId,
@@ -453,6 +615,123 @@ export class ScenariosService {
       createdAt: toApiDate(item.createdAt)!,
       updatedAt: toApiDate(item.updatedAt)!,
     };
+  }
+
+  private buildScenarioFamilyDefinition(
+    parcelId: string | null,
+    parcelGroupId: string | null,
+    strategyType: CreateScenarioRequestDto["strategyType"],
+    optimizationTarget: CreateScenarioRequestDto["optimizationTarget"],
+  ) {
+    return {
+      parcelId,
+      parcelGroupId,
+      strategyType,
+      optimizationTarget,
+      familyKey: this.buildScenarioFamilyKey(parcelId, parcelGroupId, strategyType, optimizationTarget),
+    };
+  }
+
+  private buildScenarioFamilyKey(
+    parcelId: string | null,
+    parcelGroupId: string | null,
+    strategyType: CreateScenarioRequestDto["strategyType"],
+    optimizationTarget: CreateScenarioRequestDto["optimizationTarget"],
+  ) {
+    const anchorKey = parcelGroupId ?? parcelId ?? "unlinked";
+    return `${anchorKey}::${strategyType}::${optimizationTarget}`;
+  }
+
+  private async findFamilyScenarios(family: ReturnType<ScenariosService["buildScenarioFamilyDefinition"]>) {
+    return this.prisma.scenario.findMany({
+      where: {
+        organizationId: this.requestContext.organizationId,
+        parcelId: family.parcelId,
+        parcelGroupId: family.parcelGroupId,
+        strategyType: family.strategyType,
+        optimizationTarget: family.optimizationTarget,
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        governanceStatus: true,
+        isCurrentBest: true,
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+  }
+
+  private async clearCurrentBestForFamily(
+    family: ReturnType<ScenariosService["buildScenarioFamilyDefinition"]>,
+    keepScenarioId: string,
+  ) {
+    await this.prisma.scenario.updateMany({
+      where: {
+        organizationId: this.requestContext.organizationId,
+        parcelId: family.parcelId,
+        parcelGroupId: family.parcelGroupId,
+        strategyType: family.strategyType,
+        optimizationTarget: family.optimizationTarget,
+        NOT: { id: keepScenarioId },
+      },
+      data: {
+        isCurrentBest: false,
+      },
+    });
+  }
+
+  private buildFamilyMetadataMap(
+    rows: Array<{
+      id: string;
+      parcelId: string | null;
+      parcelGroupId: string | null;
+      strategyType: CreateScenarioRequestDto["strategyType"];
+      optimizationTarget: CreateScenarioRequestDto["optimizationTarget"];
+      createdAt: Date;
+    }>,
+  ) {
+    const families = new Map<string, typeof rows>();
+
+    for (const row of rows) {
+      const familyKey = this.buildScenarioFamilyKey(row.parcelId, row.parcelGroupId, row.strategyType, row.optimizationTarget);
+      const bucket = families.get(familyKey) ?? [];
+      bucket.push(row);
+      families.set(familyKey, bucket);
+    }
+
+    const metadata = new Map<string, { familyKey: string; familyVersion: number }>();
+
+    for (const [familyKey, familyRows] of families.entries()) {
+      const sorted = [...familyRows].sort((left, right) => {
+        const createdAtDiff = left.createdAt.getTime() - right.createdAt.getTime();
+        if (createdAtDiff !== 0) return createdAtDiff;
+        return left.id.localeCompare(right.id);
+      });
+
+      sorted.forEach((row, index) => {
+        metadata.set(row.id, {
+          familyKey,
+          familyVersion: index + 1,
+        });
+      });
+    }
+
+    return metadata;
+  }
+
+  private toReadinessSnapshot(readiness: ScenarioReadinessDto): ScenarioDto["readinessSnapshot"] {
+    return {
+      status: readiness.status,
+      executionBlockers: readiness.summary.executionBlockers,
+      confidenceBlockers: readiness.summary.confidenceBlockers,
+      warningCount: readiness.issues.filter((issue) => issue.severity === "WARNING").length,
+    };
+  }
+
+  private buildScenarioName(name: string, familyVersion: number) {
+    if (familyVersion <= 1) return name;
+    if (/\/ v\d+$/i.test(name)) return name;
+    return `${name} / v${familyVersion}`;
   }
 
   private getObjectiveDirection(target: OptimizationTarget): "min" | "max" {
@@ -495,12 +774,10 @@ export class ScenariosService {
   }
 
   private getAssumptionSummary(scenario: ScenarioDto) {
-    const assumptionSet = scenario.assumptionSet;
-    if (!assumptionSet) return "Baseline assumptions";
-    const overrideCount = Object.values(assumptionSet.overrides).filter((value) => value !== null).length;
-    const templateLabel = assumptionSet.templateName ?? assumptionSet.templateKey ?? `${assumptionSet.profileKey} template`;
-    return overrideCount
-      ? `${templateLabel} + ${overrideCount} override${overrideCount === 1 ? "" : "s"}`
+    const summary = scenario.assumptionSummary;
+    const templateLabel = summary.templateName ?? `${summary.profileKey} template`;
+    return summary.overrideCount
+      ? `${templateLabel} + ${summary.overrideCount} override${summary.overrideCount === 1 ? "" : "s"}`
       : templateLabel;
   }
 

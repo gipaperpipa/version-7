@@ -7,7 +7,7 @@ import {
   AssumptionProfileKey,
   FinancingSourceType,
   OptimizationTarget,
-  ScenarioStatus,
+  ScenarioGovernanceStatus,
   StrategyType,
   type CreateScenarioRequestDto,
   type ScenarioAssumptionSetDto,
@@ -29,6 +29,21 @@ function optionalInteger(formData: FormData, key: string) {
   if (typeof value !== "string" || !value.trim()) return null;
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) ? parsed : null;
+}
+
+function isChecked(formData: FormData, key: string) {
+  return formData.get(key) === "on";
+}
+
+function getGovernanceStatus(formData: FormData) {
+  const value = formData.get("governanceStatus");
+  if (value === ScenarioGovernanceStatus.DRAFT
+    || value === ScenarioGovernanceStatus.ACTIVE_CANDIDATE
+    || value === ScenarioGovernanceStatus.ARCHIVED) {
+    return value;
+  }
+
+  return ScenarioGovernanceStatus.DRAFT;
 }
 
 function humanizeToken(value: string) {
@@ -123,8 +138,22 @@ function buildScenarioPayload(formData: FormData, strategyMixJson: Record<string
     parkingCostPerSpace: optionalString(formData, "parkingCostPerSpace"),
     landCost: optionalString(formData, "landCost"),
     equityTargetPct: optionalString(formData, "equityTargetPct"),
+    governanceStatus: getGovernanceStatus(formData),
+    isCurrentBest: isChecked(formData, "isCurrentBest"),
     assumptionSet: buildAssumptionSet(formData),
   };
+}
+
+async function maybeUpdateWorkspaceDefaultTemplate(orgSlug: string, formData: FormData) {
+  if (!isChecked(formData, "applyWorkspaceDefaultTemplate")) {
+    return;
+  }
+
+  const templateKey = optionalString(formData, "assumptionTemplateKey");
+  await apiFetch(orgSlug, "/api/v1/scenarios/assumption-templates/workspace-default", {
+    method: "PATCH",
+    body: JSON.stringify({ defaultTemplateKey: templateKey }),
+  });
 }
 
 function buildErrorRedirect(pathname: string, code: string, message?: string, extraParams?: Record<string, string | null | undefined>) {
@@ -153,6 +182,7 @@ export async function createScenarioAction(orgSlug: string, formData: FormData) 
       method: "POST",
       body: JSON.stringify(buildScenarioPayload(formData, parsedMix.value)),
     });
+    await maybeUpdateWorkspaceDefaultTemplate(orgSlug, formData);
 
     redirect(`/${orgSlug}/scenarios/${scenario.id}/builder`);
   } catch (error) {
@@ -176,6 +206,7 @@ export async function updateScenarioAction(orgSlug: string, scenarioId: string, 
       method: "PATCH",
       body: JSON.stringify(payload),
     });
+    await maybeUpdateWorkspaceDefaultTemplate(orgSlug, formData);
 
     revalidatePath(`/${orgSlug}/scenarios/${scenarioId}/builder`);
     redirect(`/${orgSlug}/scenarios/${scenarioId}/builder`);
@@ -259,16 +290,42 @@ export async function triggerFeasibilityRunAction(orgSlug: string, scenarioId: s
   }
 }
 
-export async function setScenarioStatusAction(
+export async function setScenarioGovernanceAction(
   orgSlug: string,
   scenarioId: string,
-  nextStatus: ScenarioStatus,
+  nextGovernanceStatus: ScenarioGovernanceStatus,
   returnTo: string,
 ) {
   try {
     await apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}`, {
       method: "PATCH",
-      body: JSON.stringify({ status: nextStatus }),
+      body: JSON.stringify({ governanceStatus: nextGovernanceStatus }),
+    });
+
+    revalidatePath(`/${orgSlug}/scenarios`);
+    revalidatePath(`/${orgSlug}/scenarios/${scenarioId}/builder`);
+    redirect(returnTo);
+  } catch (error) {
+    if (isApiResponseError(error) || isApiUnavailableError(error)) {
+      redirect(buildErrorRedirect(returnTo, "status-request-failed", error.message));
+    }
+
+    throw error;
+  }
+}
+
+export async function setScenarioCurrentBestAction(
+  orgSlug: string,
+  scenarioId: string,
+  returnTo: string,
+) {
+  try {
+    await apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        governanceStatus: ScenarioGovernanceStatus.ACTIVE_CANDIDATE,
+        isCurrentBest: true,
+      }),
     });
 
     revalidatePath(`/${orgSlug}/scenarios`);
@@ -302,7 +359,7 @@ export async function archiveScenarioVariantsAction(
     await Promise.all(
       scenarioIds.map((scenarioId) => apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}`, {
         method: "PATCH",
-        body: JSON.stringify({ status: ScenarioStatus.ARCHIVED }),
+        body: JSON.stringify({ governanceStatus: ScenarioGovernanceStatus.ARCHIVED }),
       })),
     );
 

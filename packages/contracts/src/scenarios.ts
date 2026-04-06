@@ -5,6 +5,8 @@ import type {
   AssumptionTemplateScope,
   FinancingSourceType,
   OptimizationTarget,
+  ScenarioGovernanceStatus,
+  ScenarioReadinessStatus,
   ScenarioStatus,
   StrategyType,
 } from "./enums";
@@ -54,13 +56,40 @@ export interface ScenarioAssumptionEffectiveDto extends ScenarioAssumptionOverri
   profileKey: AssumptionProfileKey;
 }
 
+export interface ScenarioAssumptionValueDetailDto {
+  label: string;
+  templateValue: DecimalString | number | null;
+  overrideValue: DecimalString | number | null;
+  effectiveValue: DecimalString | number | null;
+  isOverridden: boolean;
+}
+
 export interface ScenarioAssumptionTemplateDto {
   key: string;
   name: string;
   description: string;
   scope: AssumptionTemplateScope;
   profileKey: AssumptionProfileKey;
+  isWorkspaceDefault: boolean;
   defaults: ScenarioAssumptionEffectiveDto;
+}
+
+export interface ScenarioAssumptionSummaryDto {
+  templateKey: string | null;
+  templateName: string | null;
+  templateScope: AssumptionTemplateScope | null;
+  profileKey: AssumptionProfileKey;
+  isWorkspaceDefault: boolean;
+  overrideCount: number;
+  effective: ScenarioAssumptionEffectiveDto;
+  details: Record<string, ScenarioAssumptionValueDetailDto>;
+}
+
+export interface ScenarioReadinessSnapshotDto {
+  status: ScenarioReadinessStatus;
+  executionBlockers: number;
+  confidenceBlockers: number;
+  warningCount: number;
 }
 
 export interface ScenarioDto {
@@ -72,6 +101,10 @@ export interface ScenarioDto {
   name: string;
   description: string | null;
   status: ScenarioStatus;
+  governanceStatus: ScenarioGovernanceStatus;
+  isCurrentBest: boolean;
+  familyKey: string;
+  familyVersion: number;
   strategyType: StrategyType;
   acquisitionType: AcquisitionType;
   optimizationTarget: OptimizationTarget;
@@ -87,8 +120,10 @@ export interface ScenarioDto {
   landCost: DecimalString | null;
   equityTargetPct: DecimalString | null;
   assumptionSet: ScenarioAssumptionSetDto | null;
+  assumptionSummary: ScenarioAssumptionSummaryDto;
   inputsJson: Record<string, unknown> | null;
   latestRunAt: IsoDateTime | null;
+  readinessSnapshot: ScenarioReadinessSnapshotDto | null;
   fundingVariants: ScenarioFundingVariantDto[];
   createdAt: IsoDateTime;
   updatedAt: IsoDateTime;
@@ -113,6 +148,8 @@ export interface CreateScenarioRequestDto {
   parkingCostPerSpace?: DecimalString | null;
   landCost?: DecimalString | null;
   equityTargetPct?: DecimalString | null;
+  governanceStatus?: ScenarioGovernanceStatus;
+  isCurrentBest?: boolean;
   assumptionSet?: ScenarioAssumptionSetDto | null;
   inputsJson?: Record<string, unknown> | null;
 }
@@ -173,4 +210,10 @@ export interface ScenarioComparisonResponseDto {
 export type ListScenariosResponseDto = PagedResponseDto<ScenarioDto>;
 export interface ListScenarioAssumptionTemplatesResponseDto {
   items: ScenarioAssumptionTemplateDto[];
+  workspaceDefaultTemplateKey: string | null;
+  workspaceDefaultTemplateName: string | null;
+}
+
+export interface UpdateScenarioWorkspaceDefaultsRequestDto {
+  defaultTemplateKey: string | null;
 }

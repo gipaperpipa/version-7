@@ -2,7 +2,7 @@ import { AssumptionProfileKey, AssumptionTemplateScope } from "../../generated-c
 import type { ScenarioAssumptionTemplateDto } from "../../generated-contracts/scenarios";
 import { SCENARIO_ASSUMPTION_PROFILE_DEFAULTS } from "./scenario-assumptions";
 
-export const SCENARIO_ASSUMPTION_TEMPLATES: ScenarioAssumptionTemplateDto[] = [
+const SCENARIO_ASSUMPTION_TEMPLATES: Omit<ScenarioAssumptionTemplateDto, "isWorkspaceDefault">[] = [
   {
     key: "baseline-standard",
     name: "Baseline Standard",
@@ -37,8 +37,11 @@ export const SCENARIO_ASSUMPTION_TEMPLATES: ScenarioAssumptionTemplateDto[] = [
   },
 ];
 
-export function getScenarioAssumptionTemplates(): ScenarioAssumptionTemplateDto[] {
-  return SCENARIO_ASSUMPTION_TEMPLATES;
+export function getScenarioAssumptionTemplates(workspaceDefaultTemplateKey?: string | null): ScenarioAssumptionTemplateDto[] {
+  return SCENARIO_ASSUMPTION_TEMPLATES.map((template) => ({
+    ...template,
+    isWorkspaceDefault: template.key === workspaceDefaultTemplateKey,
+  }));
 }
 
 export function getScenarioAssumptionTemplateByKey(key: string | null | undefined) {

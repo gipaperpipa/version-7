@@ -76,6 +76,14 @@ export const ScenarioStatus = {
 } as const;
 export type ScenarioStatus = (typeof ScenarioStatus)[keyof typeof ScenarioStatus];
 
+export const ScenarioGovernanceStatus = {
+  DRAFT: "DRAFT",
+  ACTIVE_CANDIDATE: "ACTIVE_CANDIDATE",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type ScenarioGovernanceStatus =
+  (typeof ScenarioGovernanceStatus)[keyof typeof ScenarioGovernanceStatus];
+
 export const ScenarioRunStatus = {
   QUEUED: "QUEUED",
   RUNNING: "RUNNING",

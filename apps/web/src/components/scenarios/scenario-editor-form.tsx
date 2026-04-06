@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AcquisitionType,
   OptimizationTarget,
+  ScenarioGovernanceStatus,
   StrategyType,
   type ParcelDto,
   type ScenarioAssumptionTemplateDto,
@@ -17,7 +18,14 @@ import { Label } from "@/components/ui/label";
 import { SectionCard } from "@/components/ui/section-card";
 import { Textarea } from "@/components/ui/textarea";
 import { cx } from "@/lib/ui/cx";
-import { acquisitionTypeLabels, assumptionProfileLabels, optimizationTargetLabels, strategyFieldHints, strategyTypeLabels } from "@/lib/ui/enum-labels";
+import {
+  acquisitionTypeLabels,
+  assumptionProfileLabels,
+  optimizationTargetLabels,
+  scenarioGovernanceStatusLabels,
+  strategyFieldHints,
+  strategyTypeLabels,
+} from "@/lib/ui/enum-labels";
 
 type FormMode = "create" | "builder";
 
@@ -108,11 +116,16 @@ function getWritableParcelId(parcel: ParcelDto | null | undefined) {
 
 function getDefaultTemplate(
   templates: ScenarioAssumptionTemplateDto[],
+  workspaceDefaultTemplateKey?: string | null,
   initialScenario?: ScenarioDto,
 ) {
   const assumptionSet = initialScenario?.assumptionSet ?? null;
   if (assumptionSet?.templateKey) {
     return templates.find((template) => template.key === assumptionSet.templateKey) ?? null;
+  }
+
+  if (workspaceDefaultTemplateKey) {
+    return templates.find((template) => template.key === workspaceDefaultTemplateKey) ?? null;
   }
 
   if (assumptionSet?.profileKey) {
@@ -136,6 +149,7 @@ export function ScenarioEditorForm({
   action,
   parcels,
   templates,
+  workspaceDefaultTemplateKey,
   initialScenario,
   initialParcelId,
   submitLabel,
@@ -144,6 +158,7 @@ export function ScenarioEditorForm({
   action: (formData: FormData) => void | Promise<void>;
   parcels: ParcelDto[];
   templates: ScenarioAssumptionTemplateDto[];
+  workspaceDefaultTemplateKey?: string | null;
   initialScenario?: ScenarioDto;
   initialParcelId?: string | null;
   submitLabel: string;
@@ -158,9 +173,13 @@ export function ScenarioEditorForm({
     return getWritableParcelId(requestedParcel) || requestedParcelId;
   }, [initialParcelId, initialScenario?.parcelId, parcels]);
   const initialAssumptionSet = initialScenario?.assumptionSet ?? null;
-  const defaultTemplate = getDefaultTemplate(templates, initialScenario);
+  const defaultTemplate = getDefaultTemplate(templates, workspaceDefaultTemplateKey, initialScenario);
   const [strategyType, setStrategyType] = useState<StrategyType>(initialStrategy);
   const [selectedParcelId, setSelectedParcelId] = useState(initialSelectedParcelId);
+  const [governanceStatus, setGovernanceStatus] = useState<ScenarioGovernanceStatus>(
+    initialScenario?.governanceStatus ?? ScenarioGovernanceStatus.DRAFT,
+  );
+  const [isCurrentBest, setIsCurrentBest] = useState(initialScenario?.isCurrentBest ?? false);
   const hint = strategyFieldHints[strategyType];
   const isRequiredNow = (label: string) => hint.requiredFields.includes(label);
   const selectableParcels = useMemo(
@@ -200,6 +219,11 @@ export function ScenarioEditorForm({
       setNameValue(suggestedScenarioName);
     }
   }, [nameEdited, suggestedScenarioName]);
+  useEffect(() => {
+    if (governanceStatus !== ScenarioGovernanceStatus.ACTIVE_CANDIDATE) {
+      setIsCurrentBest(false);
+    }
+  }, [governanceStatus]);
   const selectedParcelSignal = selectedParcel
     ? selectedParcel.isGroupSite
       ? "Grouped site"
@@ -207,6 +231,7 @@ export function ScenarioEditorForm({
         ? "Manual fallback"
         : "Source-backed"
     : "Select parcel";
+  const selectedTemplateIsWorkspaceDefault = selectedTemplate?.key === workspaceDefaultTemplateKey;
 
   const revenueFields: FieldConfig[] = [
     {
@@ -496,6 +521,72 @@ export function ScenarioEditorForm({
             </div>
           </div>
 
+          <div className="field-grid field-grid--tri">
+            <div className="field-stack">
+              <div className="field-row">
+                <Label htmlFor="governanceStatus">Lifecycle</Label>
+                <FieldTag requiredNow={mode === "builder"} />
+              </div>
+              <select
+                id="governanceStatus"
+                name="governanceStatus"
+                value={governanceStatus}
+                onChange={(event) => setGovernanceStatus(event.target.value as ScenarioGovernanceStatus)}
+                className="ui-select"
+              >
+                {Object.values(ScenarioGovernanceStatus).map((value) => (
+                  <option key={value} value={value}>{scenarioGovernanceStatusLabels[value]}</option>
+                ))}
+              </select>
+              <div className="field-help">
+                Draft keeps exploratory cases out of the default working set. Archive variants once they are no longer part of the live decision set.
+              </div>
+            </div>
+
+            <div className="field-stack">
+              <div className="field-row">
+                <Label htmlFor="isCurrentBest">Family lead</Label>
+                <FieldTag requiredNow={false} />
+              </div>
+              <label className="checkbox-row" htmlFor="isCurrentBest">
+                <input
+                  id="isCurrentBest"
+                  name="isCurrentBest"
+                  type="checkbox"
+                  checked={isCurrentBest}
+                  disabled={governanceStatus !== ScenarioGovernanceStatus.ACTIVE_CANDIDATE}
+                  onChange={(event) => {
+                    const nextChecked = event.target.checked;
+                    setIsCurrentBest(nextChecked);
+                    if (nextChecked) {
+                      setGovernanceStatus(ScenarioGovernanceStatus.ACTIVE_CANDIDATE);
+                    }
+                  }}
+                />
+                <span>Mark this case as the current lead in its family</span>
+              </label>
+              <div className="field-help">
+                Leads should stay rare and explicit. Only active candidates can be treated as the current best case for a site-strategy family.
+              </div>
+            </div>
+
+            <div className="field-stack">
+              <div className="field-row">
+                <Label>Scenario family</Label>
+                <FieldTag requiredNow={false} />
+              </div>
+              <div className="chip-row">
+                <Badge variant={selectedParcel?.isGroupSite ? "accent" : "surface"}>{selectedParcelSignal}</Badge>
+                <Badge variant="surface">{strategyTypeLabels[strategyType]}</Badge>
+                {initialScenario?.familyVersion ? <Badge variant="surface">v{initialScenario.familyVersion}</Badge> : null}
+                {initialScenario?.isCurrentBest ? <Badge variant="accent">Current lead</Badge> : null}
+              </div>
+              <div className="field-help">
+                Families group scenarios by site anchor, strategy, and decision target so variants stay understandable as the workspace grows.
+              </div>
+            </div>
+          </div>
+
           <details className="compact-disclosure" open={advancedFieldsOpen}>
             <summary className="compact-disclosure__summary">Additional framing</summary>
             <div className="compact-disclosure__body">
@@ -561,6 +652,7 @@ export function ScenarioEditorForm({
           <div className="action-row action-row--compact">
             <Badge variant="accent">{selectedTemplateName}</Badge>
             <Badge variant="surface">{assumptionProfileLabels[assumptionProfileKey]}</Badge>
+            {selectedTemplateIsWorkspaceDefault ? <Badge variant="surface">Workspace default</Badge> : null}
             <Badge variant="surface">{assumptionOverrideCount} override{assumptionOverrideCount === 1 ? "" : "s"}</Badge>
           </div>
         )}
@@ -580,15 +672,36 @@ export function ScenarioEditorForm({
                 className="ui-select"
               >
                 {templates.map((template) => (
-                  <option key={template.key} value={template.key}>{template.name}</option>
+                  <option key={template.key} value={template.key}>
+                    {template.name}{template.isWorkspaceDefault ? " / workspace default" : ""}
+                  </option>
                 ))}
               </select>
               <input type="hidden" name="assumptionProfileKey" value={assumptionProfileKey} />
               <input type="hidden" name="assumptionTemplateName" value={selectedTemplateName} />
               <div className="field-help">
                 {selectedTemplate
-                  ? `${selectedTemplate.description} Uses the ${assumptionProfileLabels[selectedTemplate.profileKey].toLowerCase()} posture as the reusable base.`
+                  ? `${selectedTemplate.description} Uses the ${assumptionProfileLabels[selectedTemplate.profileKey].toLowerCase()} posture as the reusable base.${selectedTemplateIsWorkspaceDefault ? " This is also the current workspace default." : ""}`
                   : "Choose the reusable base posture, then override only what is case-specific."}
+              </div>
+            </div>
+
+            <div className="field-stack">
+              <div className="field-row">
+                <Label htmlFor="applyWorkspaceDefaultTemplate">Workspace default</Label>
+                <FieldTag requiredNow={false} />
+              </div>
+              <label className="checkbox-row" htmlFor="applyWorkspaceDefaultTemplate">
+                <input
+                  id="applyWorkspaceDefaultTemplate"
+                  name="applyWorkspaceDefaultTemplate"
+                  type="checkbox"
+                  defaultChecked={false}
+                />
+                <span>Set the selected template as the workspace default</span>
+              </label>
+              <div className="field-help">
+                Use this sparingly. It changes the default assumption posture for new scenario setup across the workspace.
               </div>
             </div>
 

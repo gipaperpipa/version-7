@@ -1,4 +1,4 @@
-import { AcquisitionType, AssumptionProfileKey, OptimizationTarget, ScenarioStatus, StrategyType } from "@repo/contracts";
+import { AcquisitionType, AssumptionProfileKey, OptimizationTarget, ScenarioGovernanceStatus, ScenarioStatus, StrategyType } from "@repo/contracts";
 
 export const strategyTypeLabels: Record<StrategyType, string> = {
   [StrategyType.FREE_MARKET_RENTAL]: "Free-Market Rental",
@@ -36,6 +36,12 @@ export const scenarioStatusLabels: Record<ScenarioStatus, string> = {
   [ScenarioStatus.COMPLETED]: "Completed",
   [ScenarioStatus.FAILED]: "Failed",
   [ScenarioStatus.ARCHIVED]: "Archived",
+};
+
+export const scenarioGovernanceStatusLabels: Record<ScenarioGovernanceStatus, string> = {
+  [ScenarioGovernanceStatus.DRAFT]: "Draft",
+  [ScenarioGovernanceStatus.ACTIVE_CANDIDATE]: "Active candidate",
+  [ScenarioGovernanceStatus.ARCHIVED]: "Archived",
 };
 
 export function humanizeTokenLabel(token: string) {

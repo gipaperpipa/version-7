@@ -1,41 +1,63 @@
 import Link from "next/link";
-import { OptimizationTarget, ScenarioStatus, StrategyType, type ParcelDto, type ScenarioDto } from "@repo/contracts";
+import {
+  OptimizationTarget,
+  ScenarioGovernanceStatus,
+  StrategyType,
+  type ParcelDto,
+  type ScenarioDto,
+} from "@repo/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
-import { StatusBadge, getScenarioStatusTone } from "@/components/ui/status-badge";
+import {
+  StatusBadge,
+  getReadinessTone,
+  getScenarioGovernanceTone,
+  getScenarioStatusTone,
+} from "@/components/ui/status-badge";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { getParcels } from "@/lib/api/parcels";
 import { getScenarios } from "@/lib/api/scenarios";
 import {
   humanizeTokenLabel,
   optimizationTargetLabels,
+  scenarioGovernanceStatusLabels,
   scenarioStatusLabels,
   strategyTypeLabels,
 } from "@/lib/ui/enum-labels";
-import { archiveScenarioVariantsAction, setScenarioStatusAction } from "./actions";
+import {
+  archiveScenarioVariantsAction,
+  setScenarioCurrentBestAction,
+  setScenarioGovernanceAction,
+} from "./actions";
 
-type BoardScope = "ACTIVE" | "ARCHIVED" | "ALL";
+type LifecycleScope = "WORKING" | "ALL" | ScenarioGovernanceStatus;
 type AnchorScope = "ALL" | "GROUPED_SITE" | "STANDALONE" | "UNLINKED";
 type VariantView = "LEADS" | "ALL";
+type RunHistoryScope = "ANY" | "HAS_RUN" | "NO_RUN";
+type FundingScope = "ANY" | "HAS_ENABLED" | "NO_ENABLED";
 
-type FamilyScenarioStats = {
+type FamilySummary = {
   familyKey: string;
   familyLabel: string;
-  familySize: number;
-  activeFamilySize: number;
-  archivedFamilySize: number;
-  isLead: boolean;
-  olderActiveVariantIds: string[];
+  leadScenario: ScenarioDto;
+  leadReason: "CURRENT_BEST" | "LATEST_CANDIDATE" | "LATEST_DRAFT" | "LATEST_ACTIVITY";
+  scenarios: ScenarioDto[];
   groupedSiteAnchor: boolean;
+  anchorLabel: string;
+  olderActiveVariantIds: string[];
+  activeCandidateCount: number;
+  draftCount: number;
+  archivedCount: number;
 };
 
 function formatScenarioSignal(value: string | null) {
   if (!value) return "No run";
-
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value));
 }
 
@@ -48,78 +70,6 @@ function getSiteAnchorLabel(parcel: ParcelDto | null | undefined) {
   return parcel.name ?? parcel.cadastralId ?? "Unnamed site";
 }
 
-function getScenarioFamilyKey(scenario: ScenarioDto) {
-  const anchorKey = scenario.parcelGroupId ?? scenario.parcelId ?? "unlinked";
-  return `${anchorKey}::${scenario.strategyType}::${scenario.acquisitionType}`;
-}
-
-function getScenarioNextAction(scenario: ScenarioDto) {
-  if (!scenario.parcelId) {
-    return { label: "Link parcel", detail: "Add a site anchor before treating the case as decision-ready.", tone: "warning" as const };
-  }
-
-  if (scenario.status === ScenarioStatus.READY) {
-    return { label: "Run", detail: "Open builder and launch the next directional pass.", tone: "accent" as const };
-  }
-
-  if (scenario.status === ScenarioStatus.RUNNING) {
-    return { label: "Monitor", detail: "A run is active. Re-open the builder once it clears.", tone: "info" as const };
-  }
-
-  if (scenario.status === ScenarioStatus.COMPLETED && scenario.latestRunAt) {
-    return { label: "Review output", detail: "Open the builder and continue from the latest run context.", tone: "success" as const };
-  }
-
-  if (scenario.status === ScenarioStatus.FAILED) {
-    return { label: "Fix and rerun", detail: "Return to the builder and correct the failing input path.", tone: "danger" as const };
-  }
-
-  if (scenario.status === ScenarioStatus.ARCHIVED) {
-    return { label: "Archived", detail: "Kept for reference. Restore only if this version needs more work.", tone: "surface" as const };
-  }
-
-  return { label: "Continue setup", detail: "Finish framing the case, then move into funding and readiness.", tone: "neutral" as const };
-}
-
-function buildFamilyStats(scenarios: ScenarioDto[], parcelById: Map<string, ParcelDto>) {
-  const families = new Map<string, ScenarioDto[]>();
-
-  for (const scenario of scenarios) {
-    const familyKey = getScenarioFamilyKey(scenario);
-    const bucket = families.get(familyKey) ?? [];
-    bucket.push(scenario);
-    families.set(familyKey, bucket);
-  }
-
-  const familyStats = new Map<string, FamilyScenarioStats>();
-
-  for (const [familyKey, bucket] of families.entries()) {
-    const sorted = [...bucket].sort((left, right) => {
-      return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
-    });
-    const activeSorted = sorted.filter((scenario) => scenario.status !== ScenarioStatus.ARCHIVED);
-    const lead = activeSorted[0] ?? sorted[0];
-    const linkedParcel = lead.parcelId ? parcelById.get(lead.parcelId) ?? null : null;
-    const familyLabel = `${getSiteAnchorLabel(linkedParcel)} / ${strategyTypeLabels[lead.strategyType]}`;
-    const olderActiveVariantIds = activeSorted.slice(1).map((scenario) => scenario.id);
-
-    sorted.forEach((scenario) => {
-      familyStats.set(scenario.id, {
-        familyKey,
-        familySize: sorted.length,
-        activeFamilySize: activeSorted.length,
-        archivedFamilySize: sorted.length - activeSorted.length,
-        isLead: scenario.id === lead.id,
-        familyLabel,
-        olderActiveVariantIds,
-        groupedSiteAnchor: isGroupedSite(linkedParcel),
-      });
-    });
-  }
-
-  return familyStats;
-}
-
 function matchesScenarioQuery(scenario: ScenarioDto, linkedParcelName: string, query: string) {
   if (!query) return true;
   const haystack = [
@@ -128,6 +78,8 @@ function matchesScenarioQuery(scenario: ScenarioDto, linkedParcelName: string, q
     linkedParcelName,
     scenario.strategyType,
     scenario.optimizationTarget,
+    scenario.assumptionSummary.templateName ?? "",
+    scenario.assumptionSummary.profileKey,
   ].join(" ").toLowerCase();
   return haystack.includes(query.toLowerCase());
 }
@@ -136,23 +88,33 @@ function buildBoardHref(
   orgSlug: string,
   filters: {
     q?: string;
-    scope?: BoardScope;
+    lifecycle?: LifecycleScope;
     strategy?: StrategyType | "ALL";
     anchor?: AnchorScope;
     siteId?: string;
     variantView?: VariantView;
+    runHistory?: RunHistoryScope;
+    funding?: FundingScope;
   },
 ) {
   const search = new URLSearchParams();
   if (filters.q) search.set("q", filters.q);
-  if (filters.scope && filters.scope !== "ACTIVE") search.set("scope", filters.scope);
+  if (filters.lifecycle && filters.lifecycle !== "WORKING") search.set("lifecycle", filters.lifecycle);
   if (filters.strategy && filters.strategy !== "ALL") search.set("strategy", filters.strategy);
   if (filters.anchor && filters.anchor !== "ALL") search.set("anchor", filters.anchor);
   if (filters.siteId && filters.siteId !== "ALL") search.set("siteId", filters.siteId);
   if (filters.variantView && filters.variantView !== "LEADS") search.set("variantView", filters.variantView);
+  if (filters.runHistory && filters.runHistory !== "ANY") search.set("runHistory", filters.runHistory);
+  if (filters.funding && filters.funding !== "ANY") search.set("funding", filters.funding);
 
   const searchString = search.toString();
   return searchString ? `/${orgSlug}/scenarios?${searchString}` : `/${orgSlug}/scenarios`;
+}
+
+function matchesLifecycleFilter(scenario: ScenarioDto, lifecycle: LifecycleScope) {
+  if (lifecycle === "WORKING") return scenario.governanceStatus !== ScenarioGovernanceStatus.ARCHIVED;
+  if (lifecycle === "ALL") return true;
+  return scenario.governanceStatus === lifecycle;
 }
 
 function matchesAnchorFilter(
@@ -161,9 +123,7 @@ function matchesAnchorFilter(
   anchorFilter: AnchorScope,
   selectedSiteId: string,
 ) {
-  if (selectedSiteId !== "ALL" && scenario.parcelId !== selectedSiteId) {
-    return false;
-  }
+  if (selectedSiteId !== "ALL" && scenario.parcelId !== selectedSiteId) return false;
 
   switch (anchorFilter) {
     case "GROUPED_SITE":
@@ -178,6 +138,128 @@ function matchesAnchorFilter(
   }
 }
 
+function matchesRunHistoryFilter(scenario: ScenarioDto, runHistory: RunHistoryScope) {
+  if (runHistory === "HAS_RUN") return Boolean(scenario.latestRunAt);
+  if (runHistory === "NO_RUN") return !scenario.latestRunAt;
+  return true;
+}
+
+function matchesFundingFilter(scenario: ScenarioDto, funding: FundingScope) {
+  const enabledFundingCount = scenario.fundingVariants.filter((item) => item.isEnabled).length;
+  if (funding === "HAS_ENABLED") return enabledFundingCount > 0;
+  if (funding === "NO_ENABLED") return enabledFundingCount === 0;
+  return true;
+}
+
+function getGovernanceNextAction(scenario: ScenarioDto) {
+  if (scenario.governanceStatus === ScenarioGovernanceStatus.ARCHIVED) {
+    return { label: "Archived reference", detail: "Kept outside the working set until restored.", tone: "surface" as const };
+  }
+  if (scenario.governanceStatus === ScenarioGovernanceStatus.DRAFT) {
+    return { label: "Promote or refine", detail: "Still exploratory until it becomes a serious candidate.", tone: "neutral" as const };
+  }
+  if (scenario.isCurrentBest) {
+    return { label: "Current lead", detail: "This is the scenario the workspace is currently leaning toward.", tone: "accent" as const };
+  }
+  return { label: "Active variant", detail: "Still in play, but not the lead case right now.", tone: "info" as const };
+}
+
+function getLeadReasonLabel(reason: FamilySummary["leadReason"]) {
+  switch (reason) {
+    case "CURRENT_BEST":
+      return "Current best";
+    case "LATEST_CANDIDATE":
+      return "Latest candidate";
+    case "LATEST_DRAFT":
+      return "Latest draft";
+    case "LATEST_ACTIVITY":
+    default:
+      return "Latest activity";
+  }
+}
+
+function formatFundingState(scenario: ScenarioDto) {
+  const enabledFundingCount = scenario.fundingVariants.filter((item) => item.isEnabled).length;
+  return enabledFundingCount ? `${enabledFundingCount} lane${enabledFundingCount === 1 ? "" : "s"} enabled` : "No active stack";
+}
+
+function formatAssumptionLine(scenario: ScenarioDto) {
+  const templateLabel = scenario.assumptionSummary.templateName ?? humanizeTokenLabel(scenario.assumptionSummary.profileKey);
+  const workspaceLabel = scenario.assumptionSummary.isWorkspaceDefault ? " / workspace default" : "";
+  return `${templateLabel}${workspaceLabel}${scenario.assumptionSummary.overrideCount ? ` / ${scenario.assumptionSummary.overrideCount} override${scenario.assumptionSummary.overrideCount === 1 ? "" : "s"}` : ""}`;
+}
+
+function formatReadinessLine(scenario: ScenarioDto) {
+  const snapshot = scenario.readinessSnapshot;
+  if (!snapshot) return "Readiness not evaluated yet";
+  const blockerLine = snapshot.executionBlockers
+    ? `${snapshot.executionBlockers} execution blocker${snapshot.executionBlockers === 1 ? "" : "s"}`
+    : snapshot.confidenceBlockers
+      ? `${snapshot.confidenceBlockers} confidence blocker${snapshot.confidenceBlockers === 1 ? "" : "s"}`
+      : `${snapshot.warningCount} warning${snapshot.warningCount === 1 ? "" : "s"}`;
+  return `${humanizeTokenLabel(snapshot.status)} / ${blockerLine}`;
+}
+
+function sortScenariosForBoard(
+  scenarios: ScenarioDto[],
+  parcelById: Map<string, ParcelDto>,
+  familySummariesByKey: Map<string, FamilySummary>,
+) {
+  return [...scenarios].sort((left, right) => {
+    const leftParcel = left.parcelId ? parcelById.get(left.parcelId) ?? null : null;
+    const rightParcel = right.parcelId ? parcelById.get(right.parcelId) ?? null : null;
+    const leftFamily = familySummariesByKey.get(left.familyKey);
+    const rightFamily = familySummariesByKey.get(right.familyKey);
+    const anchorRank = Number(isGroupedSite(rightParcel)) - Number(isGroupedSite(leftParcel));
+    if (anchorRank !== 0) return anchorRank;
+    const leadRank = Number((rightFamily?.leadScenario.id ?? right.id) === right.id) - Number((leftFamily?.leadScenario.id ?? left.id) === left.id);
+    if (leadRank !== 0) return leadRank;
+    return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+  });
+}
+
+function buildFamilySummaries(scenarios: ScenarioDto[], parcelById: Map<string, ParcelDto>) {
+  const families = new Map<string, ScenarioDto[]>();
+  for (const scenario of scenarios) {
+    const bucket = families.get(scenario.familyKey) ?? [];
+    bucket.push(scenario);
+    families.set(scenario.familyKey, bucket);
+  }
+
+  return Array.from(families.entries()).map(([familyKey, bucket]) => {
+    const sorted = [...bucket].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+    const activeCandidates = sorted.filter((scenario) => scenario.governanceStatus === ScenarioGovernanceStatus.ACTIVE_CANDIDATE);
+    const drafts = sorted.filter((scenario) => scenario.governanceStatus === ScenarioGovernanceStatus.DRAFT);
+    const explicitLead = activeCandidates.find((scenario) => scenario.isCurrentBest) ?? null;
+    const leadScenario = explicitLead ?? activeCandidates[0] ?? drafts[0] ?? sorted[0];
+    const linkedParcel = leadScenario.parcelId ? parcelById.get(leadScenario.parcelId) ?? null : null;
+
+    return {
+      familyKey,
+      familyLabel: `${getSiteAnchorLabel(linkedParcel)} / ${strategyTypeLabels[leadScenario.strategyType]}`,
+      leadScenario,
+      leadReason: explicitLead
+        ? "CURRENT_BEST"
+        : activeCandidates.length
+          ? "LATEST_CANDIDATE"
+          : drafts.length
+            ? "LATEST_DRAFT"
+            : "LATEST_ACTIVITY",
+      scenarios: sorted,
+      groupedSiteAnchor: isGroupedSite(linkedParcel),
+      anchorLabel: getSiteAnchorLabel(linkedParcel),
+      olderActiveVariantIds: activeCandidates.filter((scenario) => scenario.id !== leadScenario.id).map((scenario) => scenario.id),
+      activeCandidateCount: activeCandidates.length,
+      draftCount: drafts.length,
+      archivedCount: sorted.filter((scenario) => scenario.governanceStatus === ScenarioGovernanceStatus.ARCHIVED).length,
+    } satisfies FamilySummary;
+  }).sort((left, right) => {
+    const anchorRank = Number(right.groupedSiteAnchor) - Number(left.groupedSiteAnchor);
+    if (anchorRank !== 0) return anchorRank;
+    return new Date(right.leadScenario.updatedAt).getTime() - new Date(left.leadScenario.updatedAt).getTime();
+  });
+}
+
 export default async function ScenariosPage({
   params,
   searchParams,
@@ -187,11 +269,13 @@ export default async function ScenariosPage({
     error?: string;
     message?: string;
     q?: string;
-    scope?: BoardScope;
+    lifecycle?: LifecycleScope;
     strategy?: StrategyType | "ALL";
     anchor?: AnchorScope;
     siteId?: string;
     variantView?: VariantView;
+    runHistory?: RunHistoryScope;
+    funding?: FundingScope;
   }>;
 }) {
   const { orgSlug } = await params;
@@ -200,436 +284,535 @@ export default async function ScenariosPage({
   try {
     const [scenarios, parcels] = await Promise.all([getScenarios(orgSlug), getParcels(orgSlug)]);
     const parcelById = new Map(parcels.items.map((parcel) => [parcel.id, parcel]));
-    const familyStats = buildFamilyStats(scenarios.items, parcelById);
     const searchQuery = resolvedSearchParams?.q?.trim() ?? "";
-    const scope = resolvedSearchParams?.scope ?? "ACTIVE";
+    const lifecycle = resolvedSearchParams?.lifecycle ?? "WORKING";
     const strategyFilter = resolvedSearchParams?.strategy ?? "ALL";
     const anchorFilter = resolvedSearchParams?.anchor ?? "ALL";
     const selectedSiteId = resolvedSearchParams?.siteId ?? "ALL";
-    const variantView = scope === "ARCHIVED" ? "ALL" : resolvedSearchParams?.variantView ?? "LEADS";
+    const variantView = lifecycle === ScenarioGovernanceStatus.ARCHIVED ? "ALL" : resolvedSearchParams?.variantView ?? "LEADS";
+    const runHistory = resolvedSearchParams?.runHistory ?? "ANY";
+    const funding = resolvedSearchParams?.funding ?? "ANY";
     const scenarioAnchors = parcels.items
       .filter((parcel) => parcel.isGroupSite || !parcel.parcelGroupId)
       .sort((left, right) => {
-        const anchorRank = Number(isGroupedSite(left)) === Number(isGroupedSite(right))
-          ? 0
-          : isGroupedSite(left) ? -1 : 1;
+        const anchorRank = Number(isGroupedSite(right)) - Number(isGroupedSite(left));
         if (anchorRank !== 0) return anchorRank;
         return getSiteAnchorLabel(left).localeCompare(getSiteAnchorLabel(right));
       });
 
-    const baseFilteredScenarios = [...scenarios.items]
-      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
-      .filter((scenario) => {
-        if (scope === "ACTIVE" && scenario.status === ScenarioStatus.ARCHIVED) return false;
-        if (scope === "ARCHIVED" && scenario.status !== ScenarioStatus.ARCHIVED) return false;
-        if (strategyFilter !== "ALL" && scenario.strategyType !== strategyFilter) return false;
+    const baseFilteredScenarios = [...scenarios.items].filter((scenario) => {
+      const linkedParcel = scenario.parcelId ? parcelById.get(scenario.parcelId) ?? null : null;
+      const linkedParcelName = linkedParcel?.name ?? linkedParcel?.cadastralId ?? "";
+      return matchesLifecycleFilter(scenario, lifecycle)
+        && (strategyFilter === "ALL" || scenario.strategyType === strategyFilter)
+        && matchesAnchorFilter(scenario, linkedParcel, anchorFilter, selectedSiteId)
+        && matchesRunHistoryFilter(scenario, runHistory)
+        && matchesFundingFilter(scenario, funding)
+        && matchesScenarioQuery(scenario, linkedParcelName, searchQuery);
+    });
 
-        const linkedParcel = scenario.parcelId ? parcelById.get(scenario.parcelId) : null;
-        const linkedParcelName = linkedParcel?.name ?? linkedParcel?.cadastralId ?? "";
-        return matchesScenarioQuery(scenario, linkedParcelName, searchQuery)
-          && matchesAnchorFilter(scenario, linkedParcel ?? null, anchorFilter, selectedSiteId);
-      });
-    const filteredScenarios = baseFilteredScenarios
-      .filter((scenario) => {
+    const familySummaries = buildFamilySummaries(baseFilteredScenarios, parcelById);
+    const familySummariesByKey = new Map(familySummaries.map((family) => [family.familyKey, family]));
+    const filteredScenarios = sortScenariosForBoard(
+      baseFilteredScenarios.filter((scenario) => {
         if (variantView !== "LEADS") return true;
-        return familyStats.get(scenario.id)?.isLead ?? true;
-      })
-      .sort((left, right) => {
-        const leftParcel = left.parcelId ? parcelById.get(left.parcelId) ?? null : null;
-        const rightParcel = right.parcelId ? parcelById.get(right.parcelId) ?? null : null;
-        const anchorRank = Number(isGroupedSite(rightParcel)) - Number(isGroupedSite(leftParcel));
-        if (anchorRank !== 0) return anchorRank;
+        return familySummariesByKey.get(scenario.familyKey)?.leadScenario.id === scenario.id;
+      }),
+      parcelById,
+      familySummariesByKey,
+    );
 
-        const leftLead = familyStats.get(left.id)?.isLead ?? false;
-        const rightLead = familyStats.get(right.id)?.isLead ?? false;
-        const leadRank = Number(rightLead) - Number(leftLead);
-        if (leadRank !== 0) return leadRank;
-
-        return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
-      });
-
-    const withLinkedParcel = scenarios.items.filter((scenario) => scenario.parcelId).length;
-    const withRunHistory = scenarios.items.filter((scenario) => scenario.latestRunAt).length;
-    const activeCases = scenarios.items.filter((scenario) => scenario.status !== ScenarioStatus.ARCHIVED).length;
-    const archivedCases = scenarios.items.filter((scenario) => scenario.status === ScenarioStatus.ARCHIVED).length;
     const groupedSiteAnchoredCount = scenarios.items.filter((scenario) => {
       const linkedParcel = scenario.parcelId ? parcelById.get(scenario.parcelId) ?? null : null;
       return isGroupedSite(linkedParcel);
     }).length;
-    const standaloneAnchoredCount = withLinkedParcel - groupedSiteAnchoredCount;
-    const familyCount = new Set(scenarios.items.map((scenario) => getScenarioFamilyKey(scenario))).size;
-    const familyLeadCount = new Set(
-      scenarios.items
-        .filter((scenario) => familyStats.get(scenario.id)?.isLead)
-        .map((scenario) => familyStats.get(scenario.id)?.familyKey),
-    ).size;
-    const olderVariantCount = scenarios.items.filter((scenario) => {
-      const stats = familyStats.get(scenario.id);
-      return Boolean(stats && !stats.isLead && scenario.status !== ScenarioStatus.ARCHIVED);
-    }).length;
+    const activeCandidateCount = scenarios.items.filter((scenario) => scenario.governanceStatus === ScenarioGovernanceStatus.ACTIVE_CANDIDATE).length;
+    const draftCount = scenarios.items.filter((scenario) => scenario.governanceStatus === ScenarioGovernanceStatus.DRAFT).length;
+    const archivedCount = scenarios.items.filter((scenario) => scenario.governanceStatus === ScenarioGovernanceStatus.ARCHIVED).length;
+    const currentBestCount = scenarios.items.filter((scenario) => scenario.isCurrentBest).length;
+    const withRunHistory = scenarios.items.filter((scenario) => scenario.latestRunAt).length;
+    const withFundingEnabled = scenarios.items.filter((scenario) => scenario.fundingVariants.some((item) => item.isEnabled)).length;
     const workspaceGroupedSiteCount = parcels.items.filter((parcel) => isGroupedSite(parcel)).length;
     const groupedSiteAnchorGap = workspaceGroupedSiteCount > 0 && groupedSiteAnchoredCount === 0;
     const filterHref = buildBoardHref(orgSlug, {
       q: searchQuery,
-      scope,
+      lifecycle,
       strategy: strategyFilter,
       anchor: anchorFilter,
       siteId: selectedSiteId,
       variantView,
+      runHistory,
+      funding,
     });
 
     return (
       <div className="workspace-page content-stack">
         <PageHeader
-          eyebrow="Workspace / Scenarios"
-          title="Scenario board"
-          description="Govern the case set by site, strategy, status, and latest signal."
+          eyebrow="Scenario workspace"
+          title="Governed scenario board"
+          description="Keep live candidates visible, cluster variants into families, and move superseded cases out of the default working set."
           meta={(
             <div className="action-row">
-              <span className="meta-chip">{scenarios.total} cases</span>
-              <span className="meta-chip">{withLinkedParcel} site-linked</span>
+              <span className="meta-chip">{scenarios.total} total cases</span>
+              <span className="meta-chip">{activeCandidateCount} active candidate{activeCandidateCount === 1 ? "" : "s"}</span>
+              <span className="meta-chip">{draftCount} draft{draftCount === 1 ? "" : "s"}</span>
+              <span className="meta-chip">{archivedCount} archived</span>
+              <span className="meta-chip">{currentBestCount} current lead{currentBestCount === 1 ? "" : "s"}</span>
               <span className="meta-chip">{groupedSiteAnchoredCount} grouped-site anchored</span>
-              <span className="meta-chip">{withRunHistory} with runs</span>
-              <span className="meta-chip">{activeCases} active</span>
-              <span className="meta-chip">{archivedCases} archived</span>
+              <span className="meta-chip">{withRunHistory} with run history</span>
             </div>
           )}
           actions={(
-            <Link className={buttonClasses({ size: "lg" })} href={`/${orgSlug}/scenarios/new`}>
-              New scenario
-            </Link>
+            <>
+              <Link className={buttonClasses()} href={`/${orgSlug}/scenarios/new`}>
+                New scenario
+              </Link>
+              <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios/compare`}>
+                Compare
+              </Link>
+            </>
           )}
         />
 
-        {groupedSiteAnchorGap ? (
-          <Alert tone="warning">
-            <AlertTitle>Grouped sites exist, but scenarios still are not anchored to them</AlertTitle>
-            <AlertDescription>Grouped sites are now the intended daily working unit. Start the next cases from a grouped site so site-level planning, readiness, and result continuity stay together.</AlertDescription>
+        {resolvedSearchParams?.error === "status-request-failed" ? (
+          <Alert tone="danger">
+            <AlertTitle>Scenario governance update failed</AlertTitle>
+            <AlertDescription>{resolvedSearchParams.message ?? "The scenario board could not save that governance change. Try again after the workspace refreshes."}</AlertDescription>
           </Alert>
         ) : null}
 
-        {resolvedSearchParams?.error === "status-request-failed" ? (
-          <Alert tone="danger">
-            <AlertTitle>Scenario status update failed</AlertTitle>
-            <AlertDescription>{resolvedSearchParams.message ?? "The scenario board could not save the requested status change."}</AlertDescription>
+        {groupedSiteAnchorGap ? (
+          <Alert tone="warning">
+            <AlertTitle>Grouped sites exist, but scenarios are still not using them</AlertTitle>
+            <AlertDescription>
+              The workspace already has {workspaceGroupedSiteCount} grouped site{workspaceGroupedSiteCount === 1 ? "" : "s"}, but no scenarios are anchored to them yet.
+              Move new analysis onto grouped sites so site-level scenario families become the normal working model.
+            </AlertDescription>
           </Alert>
         ) : null}
 
         <SectionCard
-          className="summary-band summary-band--ledger"
-          eyebrow="Operating summary"
-          title="Studio scan"
-          description="Keep scenario sprawl under control without losing comparison power."
-          tone="accent"
-          size="compact"
+          className="index-surface index-surface--workspace"
+          eyebrow="Governance posture"
+          title="Working set over flat list"
+          description="The default board view surfaces family leads and hides archived noise until you explicitly ask for it."
         >
-          <div className="ops-summary-grid ops-summary-grid--planning">
+          <div className="ops-summary-grid">
             <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Cases</div>
-              <div className="ops-summary-item__value">{scenarios.total}</div>
-              <div className="ops-summary-item__detail">Current scenario workspace.</div>
+              <div className="ops-summary-item__label">Family leads</div>
+              <div className="ops-summary-item__value">{familySummaries.filter((family) => family.leadScenario.isCurrentBest).length}</div>
+              <div className="ops-summary-item__detail">Explicit current-best scenarios across site-strategy families.</div>
             </div>
             <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Active board</div>
-              <div className="ops-summary-item__value">{activeCases}</div>
-              <div className="ops-summary-item__detail">Visible working set before archive noise accumulates.</div>
+              <div className="ops-summary-item__label">Working families</div>
+              <div className="ops-summary-item__value">{familySummaries.length}</div>
+              <div className="ops-summary-item__detail">Families visible under the current lifecycle and filter scope.</div>
             </div>
             <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Run history</div>
-              <div className="ops-summary-item__value">{withRunHistory}</div>
-              <div className="ops-summary-item__detail">Cases with recorded output.</div>
-            </div>
-            <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Site anchors</div>
+              <div className="ops-summary-item__label">Grouped-site anchors</div>
               <div className="ops-summary-item__value">{groupedSiteAnchoredCount}</div>
-              <div className="ops-summary-item__detail">{standaloneAnchoredCount} standalone-linked / grouped sites should become the default.</div>
+              <div className="ops-summary-item__detail">Scenarios already grounded in grouped development sites.</div>
             </div>
             <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Scenario families</div>
-              <div className="ops-summary-item__value">{familyCount}</div>
-              <div className="ops-summary-item__detail">{olderVariantCount} older active variant{olderVariantCount === 1 ? "" : "s"} still adding board noise.</div>
-            </div>
-            <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Filtered view</div>
-              <div className="ops-summary-item__value">{filteredScenarios.length}</div>
-              <div className="ops-summary-item__detail">{variantView === "LEADS" ? `${familyLeadCount} current family leads in view.` : "Current set after governance filters."}</div>
+              <div className="ops-summary-item__label">Funding enabled</div>
+              <div className="ops-summary-item__value">{withFundingEnabled}</div>
+              <div className="ops-summary-item__detail">Cases with at least one active funding lane in the stack.</div>
             </div>
           </div>
         </SectionCard>
 
         <SectionCard
-          className="index-surface index-surface--ledger"
           eyebrow="Board controls"
-          title="Govern the scenario set"
-          description="Filter by site anchor, strategy, and lifecycle, then trim the board to family leads when variants start to sprawl."
+          title="Filter the working set"
+          description="Search by site, strategy, lifecycle, funding posture, or run history. The default view shows working-family leads so superseded variants stop crowding the board."
           size="compact"
         >
-          <form action={`/${orgSlug}/scenarios`} method="GET" className="comparison-toolbar comparison-toolbar--filters">
-            <div className="comparison-toolbar__form comparison-toolbar__form--wide">
-              <label className="field-stack">
-                <span className="field-help">Search</span>
-                <input className="ui-input" type="search" name="q" defaultValue={searchQuery} placeholder="Scenario, parcel, strategy" />
-              </label>
-              <label className="field-stack">
-                <span className="field-help">Board scope</span>
-                <select name="scope" defaultValue={scope} className="ui-select">
-                  <option value="ACTIVE">Active only</option>
-                  <option value="ARCHIVED">Archived only</option>
-                  <option value="ALL">All cases</option>
+          <form method="get" action={`/${orgSlug}/scenarios`} className="content-stack">
+            <div className="field-grid field-grid--quad">
+              <div className="field-stack">
+                <Label htmlFor="q">Search</Label>
+                <Input id="q" name="q" defaultValue={searchQuery} placeholder="Scenario name, site, template..." />
+              </div>
+
+              <div className="field-stack">
+                <Label htmlFor="lifecycle">Lifecycle</Label>
+                <select id="lifecycle" name="lifecycle" defaultValue={lifecycle} className="ui-select">
+                  <option value="WORKING">Working set</option>
+                  <option value="ALL">All scenarios</option>
+                  {Object.values(ScenarioGovernanceStatus).map((value) => (
+                    <option key={value} value={value}>{scenarioGovernanceStatusLabels[value]}</option>
+                  ))}
                 </select>
-              </label>
-              <label className="field-stack">
-                <span className="field-help">Strategy</span>
-                <select name="strategy" defaultValue={strategyFilter} className="ui-select">
+              </div>
+
+              <div className="field-stack">
+                <Label htmlFor="strategy">Strategy</Label>
+                <select id="strategy" name="strategy" defaultValue={strategyFilter} className="ui-select">
                   <option value="ALL">All strategies</option>
                   {Object.values(StrategyType).map((value) => (
                     <option key={value} value={value}>{strategyTypeLabels[value]}</option>
                   ))}
                 </select>
-              </label>
-              <label className="field-stack">
-                <span className="field-help">Site anchor</span>
-                <select name="anchor" defaultValue={anchorFilter} className="ui-select">
-                  <option value="ALL">All site anchors</option>
-                  <option value="GROUPED_SITE">Grouped sites only</option>
-                  <option value="STANDALONE">Standalone parcels only</option>
-                  <option value="UNLINKED">Unlinked only</option>
+              </div>
+
+              <div className="field-stack">
+                <Label htmlFor="anchor">Anchor type</Label>
+                <select id="anchor" name="anchor" defaultValue={anchorFilter} className="ui-select">
+                  <option value="ALL">All anchors</option>
+                  <option value="GROUPED_SITE">Grouped sites</option>
+                  <option value="STANDALONE">Standalone parcels</option>
+                  <option value="UNLINKED">Unlinked</option>
                 </select>
-              </label>
-              <label className="field-stack">
-                <span className="field-help">Specific site</span>
-                <select name="siteId" defaultValue={selectedSiteId} className="ui-select">
-                  <option value="ALL">All grouped sites and parcels</option>
+              </div>
+
+              <div className="field-stack">
+                <Label htmlFor="siteId">Specific site</Label>
+                <select id="siteId" name="siteId" defaultValue={selectedSiteId} className="ui-select">
+                  <option value="ALL">All sites</option>
                   {scenarioAnchors.map((parcel) => (
-                    <option key={parcel.id} value={parcel.id}>
-                      {`${isGroupedSite(parcel) ? "Site" : "Parcel"} / ${getSiteAnchorLabel(parcel)}`}
-                    </option>
+                    <option key={parcel.id} value={parcel.id}>{getSiteAnchorLabel(parcel)}</option>
                   ))}
                 </select>
-              </label>
-              <label className="field-stack">
-                <span className="field-help">Variant view</span>
-                <select name="variantView" defaultValue={variantView} className="ui-select">
-                  <option value="LEADS">Current family leads only</option>
-                  <option value="ALL">Show all variants</option>
+              </div>
+
+              <div className="field-stack">
+                <Label htmlFor="runHistory">Run history</Label>
+                <select id="runHistory" name="runHistory" defaultValue={runHistory} className="ui-select">
+                  <option value="ANY">Any</option>
+                  <option value="HAS_RUN">Has run history</option>
+                  <option value="NO_RUN">No run history</option>
                 </select>
-              </label>
-              <button className={buttonClasses({ variant: "secondary" })} type="submit">
-                Apply filters
-              </button>
-              <Link className={buttonClasses({ variant: "ghost" })} href={`/${orgSlug}/scenarios`}>
-                Clear
+              </div>
+
+              <div className="field-stack">
+                <Label htmlFor="funding">Funding</Label>
+                <select id="funding" name="funding" defaultValue={funding} className="ui-select">
+                  <option value="ANY">Any</option>
+                  <option value="HAS_ENABLED">Has enabled funding</option>
+                  <option value="NO_ENABLED">No enabled funding</option>
+                </select>
+              </div>
+
+              <div className="field-stack">
+                <Label htmlFor="variantView">Variant view</Label>
+                <select id="variantView" name="variantView" defaultValue={variantView} className="ui-select">
+                  <option value="LEADS">Family leads only</option>
+                  <option value="ALL">All variants</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="action-row">
+              <button type="submit" className={buttonClasses()}>Apply filters</button>
+              <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios`}>
+                Clear filters
               </Link>
+              <span className="field-help">{filteredScenarios.length} scenario{filteredScenarios.length === 1 ? "" : "s"} match the current board view.</span>
             </div>
           </form>
         </SectionCard>
 
         <SectionCard
-          className="index-surface index-surface--ledger"
-          eyebrow="Decision workspace"
-          title="Scenario studio"
-          description="Filter, compare, archive, and reopen the right case fast."
+          eyebrow="Scenario families"
+          title="Lead cases by site and strategy"
+          description="Families help the board answer which case is the real candidate, which ones are exploratory drafts, and which older variants can leave the working set."
         >
-          {filteredScenarios.length ? (
+          {familySummaries.length ? (
             <div className="content-stack">
-              <form id="scenario-compare-form" action={`/${orgSlug}/scenarios/compare`} method="GET" className="comparison-toolbar">
-                <div className="comparison-toolbar__summary">
-                  <div className="ops-summary-item__label">Comparison</div>
-                  <div className="ops-summary-item__value">Select cases to rank and compare</div>
-                  <div className="ops-summary-item__detail">Use governance filters first, then compare only the cases still worth discussing.</div>
-                </div>
-                <div className="comparison-toolbar__form">
-                  <label className="field-stack">
-                    <span className="field-help">Ranking target</span>
-                    <select name="rankingTarget" defaultValue={OptimizationTarget.MIN_REQUIRED_EQUITY} className="ui-select">
-                      {Object.values(OptimizationTarget).map((value) => (
-                        <option key={value} value={value}>{optimizationTargetLabels[value]}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <button className={buttonClasses({ variant: "secondary" })} type="submit">
-                    Compare selected
-                  </button>
-                </div>
-              </form>
+              {familySummaries.map((family) => {
+                const leadScenario = family.leadScenario;
+                const linkedParcel = leadScenario.parcelId ? parcelById.get(leadScenario.parcelId) ?? null : null;
+                const nextAction = getGovernanceNextAction(leadScenario);
+                const activateAction = setScenarioGovernanceAction.bind(
+                  null,
+                  orgSlug,
+                  leadScenario.id,
+                  ScenarioGovernanceStatus.ACTIVE_CANDIDATE,
+                  filterHref,
+                );
+                const draftAction = setScenarioGovernanceAction.bind(
+                  null,
+                  orgSlug,
+                  leadScenario.id,
+                  ScenarioGovernanceStatus.DRAFT,
+                  filterHref,
+                );
+                const archiveAction = setScenarioGovernanceAction.bind(
+                  null,
+                  orgSlug,
+                  leadScenario.id,
+                  ScenarioGovernanceStatus.ARCHIVED,
+                  filterHref,
+                );
+                const makeLeadAction = setScenarioCurrentBestAction.bind(null, orgSlug, leadScenario.id, filterHref);
+                const archiveOlderAction = archiveScenarioVariantsAction.bind(null, orgSlug, filterHref);
 
-              <div className="ops-table">
-                <div className="ops-table__header ops-table__header--scenarios">
-                  <div>Select</div>
-                  <div>Scenario</div>
-                  <div>Parcel</div>
-                  <div>Strategy</div>
-                  <div>Funding</div>
-                  <div>Status</div>
-                  <div>Activity</div>
-                  <div>Next</div>
-                </div>
-                {filteredScenarios.map((scenario) => {
-                  const linkedParcel = scenario.parcelId ? parcelById.get(scenario.parcelId) : null;
-                  const selectedFundingCount = scenario.fundingVariants.filter((item) => item.isEnabled).length;
-                  const selectedFundingLabels = scenario.fundingVariants
-                    .filter((item) => item.isEnabled)
-                    .slice(0, 2)
-                    .map((item) => humanizeTokenLabel(item.financingSourceType));
-                  const nextAction = getScenarioNextAction(scenario);
-                  const family = familyStats.get(scenario.id);
-                  const statusAction = setScenarioStatusAction.bind(
-                    null,
-                    orgSlug,
-                    scenario.id,
-                    scenario.status === ScenarioStatus.ARCHIVED ? ScenarioStatus.DRAFT : ScenarioStatus.ARCHIVED,
-                    filterHref,
-                  );
-                  const archiveOlderVariantsAction = archiveScenarioVariantsAction.bind(null, orgSlug, filterHref);
-                  const anchorLabel = linkedParcel ? getSiteAnchorLabel(linkedParcel) : "Unlinked";
-                  const anchorTypeLabel = linkedParcel ? (isGroupedSite(linkedParcel) ? "Grouped site anchor" : "Standalone parcel anchor") : "Unlinked";
-                  const memberCount = linkedParcel && isGroupedSite(linkedParcel)
-                    ? linkedParcel.parcelGroup?.memberCount ?? linkedParcel.constituentParcels.length
-                    : 0;
-                  const assumptionLabel = scenario.assumptionSet?.templateName
-                    ?? scenario.assumptionSet?.templateKey
-                    ?? "Baseline";
-
-                  return (
-                    <div key={scenario.id} className="ops-table__row ops-table__row--scenarios">
-                      <div className="ops-table__cell ops-table__cell--select">
-                        <label className="compare-checkbox">
-                          <input form="scenario-compare-form" type="checkbox" name="scenarioId" value={scenario.id} />
-                          <span>Compare</span>
-                        </label>
-                      </div>
-
-                      <div className="ops-table__cell">
-                        <div className="list-row__body">
-                          <div className="list-row__title">
-                            <span className="list-row__title-text">{scenario.name}</span>
-                            <StatusBadge tone={getScenarioStatusTone(scenario.status)}>
-                              {scenarioStatusLabels[scenario.status]}
-                            </StatusBadge>
-                            {scenario.latestRunAt ? <StatusBadge tone="success">Has run</StatusBadge> : null}
-                            {scenario.parcelId ? <StatusBadge tone={linkedParcel && isGroupedSite(linkedParcel) ? "accent" : "info"}>{anchorTypeLabel}</StatusBadge> : <StatusBadge tone="warning">Parcel missing</StatusBadge>}
-                            {family && family.familySize > 1 ? <StatusBadge tone="surface">{family.familySize} in family</StatusBadge> : null}
-                            {family?.isLead && family.familySize > 1 ? <StatusBadge tone="info">Current lead</StatusBadge> : null}
-                            {family && !family.isLead && scenario.status !== ScenarioStatus.ARCHIVED ? <StatusBadge tone="warning">Older variant</StatusBadge> : null}
-                          </div>
-
-                          {scenario.description ? <div className="list-row__meta list-row__meta--clamped">{scenario.description}</div> : null}
-
-                          <div className="inline-meta">
-                            <span className="meta-chip">{assumptionLabel}</span>
-                            <span className="meta-chip">{optimizationTargetLabels[scenario.optimizationTarget]}</span>
-                            <span className="meta-chip">{formatScenarioSignal(scenario.updatedAt)} update</span>
-                            {family?.familySize ? <span className="meta-chip">{family.familyLabel}</span> : null}
-                          </div>
+                return (
+                  <div key={family.familyKey} className="ops-table__row ops-table__row--parcels">
+                    <div className="ops-table__cell">
+                      <div className="list-row__body">
+                        <div className="list-row__title">
+                          <span className="list-row__title-text">{family.familyLabel}</span>
+                          <StatusBadge tone={family.groupedSiteAnchor ? "accent" : "surface"}>
+                            {family.groupedSiteAnchor ? "Grouped-site family" : "Parcel family"}
+                          </StatusBadge>
+                          <StatusBadge tone={getScenarioGovernanceTone(leadScenario.governanceStatus)}>
+                            {scenarioGovernanceStatusLabels[leadScenario.governanceStatus]}
+                          </StatusBadge>
+                          {leadScenario.isCurrentBest ? <StatusBadge tone="accent">Current lead</StatusBadge> : null}
+                        </div>
+                        <div className="inline-meta">
+                          <span className="meta-chip">{family.anchorLabel}</span>
+                          <span className="meta-chip">{optimizationTargetLabels[leadScenario.optimizationTarget]}</span>
+                          <span className="meta-chip">{getLeadReasonLabel(family.leadReason)}</span>
+                          <span className="meta-chip">v{leadScenario.familyVersion}</span>
+                        </div>
+                        <div className="list-row__meta list-row__meta--clamped">
+                          {leadScenario.name} / {formatAssumptionLine(leadScenario)} / {formatReadinessLine(leadScenario)}
                         </div>
                       </div>
+                    </div>
 
-                      <div className="ops-table__cell">
-                        <div className="ops-cell-stack">
-                          <div className="ops-scan__label">Site anchor</div>
-                          <div className="ops-scan__value">{anchorLabel}</div>
-                          <div className="ops-scan__detail">
-                            {linkedParcel
-                              ? isGroupedSite(linkedParcel)
-                                ? `${memberCount} parcel member${memberCount === 1 ? "" : "s"} / ${linkedParcel.municipalityName ?? linkedParcel.city ?? "Site context attached"}`
-                                : linkedParcel.municipalityName ?? "Standalone parcel context attached"
-                              : "Needs site anchor"}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="ops-table__cell">
-                        <div className="ops-cell-stack">
-                          <div className="ops-scan__label">Strategy</div>
-                          <div className="ops-scan__value">{strategyTypeLabels[scenario.strategyType]}</div>
-                          <div className="ops-scan__detail">{optimizationTargetLabels[scenario.optimizationTarget]}</div>
-                        </div>
-                      </div>
-
-                      <div className="ops-table__cell">
-                        <div className="ops-cell-stack">
-                          <div className="ops-scan__label">Funding</div>
-                          <div className="ops-scan__value">{selectedFundingCount} lane(s)</div>
-                          <div className="ops-scan__detail">
-                            {selectedFundingLabels.length ? selectedFundingLabels.join(" / ") : "No active stack"}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="ops-table__cell">
-                        <div className="ops-cell-stack">
-                          <div className="ops-scan__label">Status</div>
-                          <div className="action-row">
-                            <StatusBadge tone={getScenarioStatusTone(scenario.status)}>
-                              {scenarioStatusLabels[scenario.status]}
-                            </StatusBadge>
-                          </div>
-                          <div className="ops-scan__detail">
-                            {scenario.latestRunAt ? "Run history present" : "No completed run yet"}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="ops-table__cell">
-                        <div className="ops-cell-stack">
-                          <div className="ops-scan__label">Activity</div>
-                          <div className="ops-scan__value">
-                            {scenario.latestRunAt ? `Ran ${formatScenarioSignal(scenario.latestRunAt)}` : `Updated ${formatScenarioSignal(scenario.updatedAt)}`}
-                          </div>
-                          <div className="ops-scan__detail">
-                            {scenario.latestRunAt ? "Latest engine output recorded" : "Builder edits only"}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="ops-table__actions ops-table__actions--dense">
+                    <div className="ops-table__cell">
+                      <div className="ops-cell-stack">
+                        <div className="ops-scan__label">Family posture</div>
                         <div className="action-row">
                           <StatusBadge tone={nextAction.tone}>{nextAction.label}</StatusBadge>
                         </div>
                         <div className="ops-scan__detail">{nextAction.detail}</div>
-                        <div className="action-row action-row--compact">
-                          {scenario.parcelId ? (
-                            <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${scenario.parcelId}`}>
-                              {linkedParcel && isGroupedSite(linkedParcel) ? "Site" : "Parcel"}
-                            </Link>
-                          ) : null}
-                          <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/scenarios/${scenario.id}/builder`}>
-                            Builder
-                          </Link>
-                          <form action={statusAction}>
-                            <button className={buttonClasses({ variant: "ghost", size: "sm" })} type="submit">
-                              {scenario.status === ScenarioStatus.ARCHIVED ? "Restore" : "Archive"}
-                            </button>
-                          </form>
-                          {family && family.isLead && family.olderActiveVariantIds.length ? (
-                            <form action={archiveOlderVariantsAction}>
-                              {family.olderActiveVariantIds.map((variantId) => (
-                                <input key={variantId} type="hidden" name="scenarioId" value={variantId} />
-                              ))}
-                              <button className={buttonClasses({ variant: "ghost", size: "sm" })} type="submit">
-                                Archive older
-                              </button>
-                            </form>
-                          ) : null}
+                      </div>
+                    </div>
+
+                    <div className="ops-table__cell">
+                      <div className="ops-cell-stack">
+                        <div className="ops-scan__label">Variants</div>
+                        <div className="ops-scan__value">
+                          {family.activeCandidateCount} active / {family.draftCount} draft / {family.archivedCount} archived
+                        </div>
+                        <div className="ops-scan__detail">
+                          {family.olderActiveVariantIds.length
+                            ? `${family.olderActiveVariantIds.length} older active variant${family.olderActiveVariantIds.length === 1 ? "" : "s"} can be archived from this family.`
+                            : "No extra active variants competing with the family lead right now."}
                         </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+
+                    <div className="ops-table__actions ops-table__actions--dense">
+                      <div className="action-row">
+                        <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/${leadScenario.id}/builder`}>
+                          Open lead
+                        </Link>
+                        {linkedParcel ? (
+                          <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/parcels/${linkedParcel.id}`}>
+                            Open site
+                          </Link>
+                        ) : null}
+                      </div>
+
+                      <div className="action-row action-row--compact">
+                        {leadScenario.governanceStatus !== ScenarioGovernanceStatus.ACTIVE_CANDIDATE ? (
+                          <form action={activateAction}>
+                            <button type="submit" className={buttonClasses({ variant: "secondary", size: "sm" })}>Activate</button>
+                          </form>
+                        ) : null}
+                        {!leadScenario.isCurrentBest ? (
+                          <form action={makeLeadAction}>
+                            <button type="submit" className={buttonClasses({ variant: "secondary", size: "sm" })}>Make lead</button>
+                          </form>
+                        ) : null}
+                        {leadScenario.governanceStatus !== ScenarioGovernanceStatus.DRAFT ? (
+                          <form action={draftAction}>
+                            <button type="submit" className={buttonClasses({ variant: "ghost", size: "sm" })}>Move to draft</button>
+                          </form>
+                        ) : null}
+                        {leadScenario.governanceStatus !== ScenarioGovernanceStatus.ARCHIVED ? (
+                          <form action={archiveAction}>
+                            <button type="submit" className={buttonClasses({ variant: "ghost", size: "sm" })}>Archive</button>
+                          </form>
+                        ) : null}
+                        {family.olderActiveVariantIds.length ? (
+                          <form action={archiveOlderAction}>
+                            {family.olderActiveVariantIds.map((scenarioId) => (
+                              <input key={scenarioId} type="hidden" name="scenarioId" value={scenarioId} />
+                            ))}
+                            <button type="submit" className={buttonClasses({ variant: "secondary", size: "sm" })}>Archive older variants</button>
+                          </form>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <EmptyState
-              eyebrow="No scenarios in this view"
-              title="No scenarios match the current governance filters"
-              description="Adjust search or status filters, or create a new case from a sourced parcel or grouped site."
+              eyebrow="No families in view"
+              title="No scenario families match the current filter scope"
+              description="Widen the lifecycle or site filters, or create a new scenario family from a parcel or grouped site."
               actions={(
                 <>
                   <Link className={buttonClasses()} href={`/${orgSlug}/scenarios/new`}>
                     Create scenario
                   </Link>
                   <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios`}>
-                    Clear filters
+                    Reset board
+                  </Link>
+                </>
+              )}
+            />
+          )}
+        </SectionCard>
+
+        <SectionCard
+          eyebrow="Filtered scenarios"
+          title="Scenario rows"
+          description="Use the full row list when you need to inspect individual variants, not just the family leads."
+        >
+          {filteredScenarios.length ? (
+            <div className="ops-table">
+              <div className="ops-table__header ops-table__header--parcels">
+                <div>Scenario</div>
+                <div>Anchor</div>
+                <div>Assumptions</div>
+                <div>Readiness and funding</div>
+                <div>Actions</div>
+              </div>
+
+              {filteredScenarios.map((scenario) => {
+                const linkedParcel = scenario.parcelId ? parcelById.get(scenario.parcelId) ?? null : null;
+                const family = familySummariesByKey.get(scenario.familyKey) ?? null;
+                const isFamilyLead = family?.leadScenario.id === scenario.id;
+                const activateAction = setScenarioGovernanceAction.bind(
+                  null,
+                  orgSlug,
+                  scenario.id,
+                  ScenarioGovernanceStatus.ACTIVE_CANDIDATE,
+                  filterHref,
+                );
+                const draftAction = setScenarioGovernanceAction.bind(
+                  null,
+                  orgSlug,
+                  scenario.id,
+                  ScenarioGovernanceStatus.DRAFT,
+                  filterHref,
+                );
+                const archiveAction = setScenarioGovernanceAction.bind(
+                  null,
+                  orgSlug,
+                  scenario.id,
+                  ScenarioGovernanceStatus.ARCHIVED,
+                  filterHref,
+                );
+                const makeLeadAction = setScenarioCurrentBestAction.bind(null, orgSlug, scenario.id, filterHref);
+
+                return (
+                  <div key={scenario.id} className="ops-table__row ops-table__row--parcels">
+                    <div className="ops-table__cell">
+                      <div className="list-row__body">
+                        <div className="list-row__title">
+                          <span className="list-row__title-text">{scenario.name}</span>
+                          <StatusBadge tone={getScenarioGovernanceTone(scenario.governanceStatus)}>
+                            {scenarioGovernanceStatusLabels[scenario.governanceStatus]}
+                          </StatusBadge>
+                          <StatusBadge tone={getScenarioStatusTone(scenario.status)}>
+                            {scenarioStatusLabels[scenario.status]}
+                          </StatusBadge>
+                          {scenario.isCurrentBest ? <StatusBadge tone="accent">Current lead</StatusBadge> : null}
+                          {!scenario.isCurrentBest && isFamilyLead ? <StatusBadge tone="info">Family lead</StatusBadge> : null}
+                        </div>
+                        <div className="inline-meta">
+                          <span className="meta-chip">v{scenario.familyVersion}</span>
+                          <span className="meta-chip">{strategyTypeLabels[scenario.strategyType]}</span>
+                          <span className="meta-chip">{optimizationTargetLabels[scenario.optimizationTarget]}</span>
+                          <span className="meta-chip">Latest run {formatScenarioSignal(scenario.latestRunAt)}</span>
+                        </div>
+                        <div className="list-row__meta list-row__meta--clamped">
+                          {getGovernanceNextAction(scenario).detail}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="ops-table__cell">
+                      <div className="ops-cell-stack">
+                        <div className="ops-scan__label">Site anchor</div>
+                        <div className="ops-scan__value">{getSiteAnchorLabel(linkedParcel)}</div>
+                        <div className="ops-scan__detail">
+                          {linkedParcel
+                            ? isGroupedSite(linkedParcel)
+                              ? "Grouped-site anchor"
+                              : "Standalone parcel anchor"
+                            : "Parcel link missing"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="ops-table__cell">
+                      <div className="ops-cell-stack">
+                        <div className="ops-scan__label">Template</div>
+                        <div className="ops-scan__value">{scenario.assumptionSummary.templateName ?? humanizeTokenLabel(scenario.assumptionSummary.profileKey)}</div>
+                        <div className="ops-scan__detail">{formatAssumptionLine(scenario)}</div>
+                      </div>
+                    </div>
+
+                    <div className="ops-table__cell">
+                      <div className="ops-cell-stack">
+                        <div className="ops-scan__label">Readiness</div>
+                        <div className="action-row">
+                          <StatusBadge tone={getReadinessTone(scenario.readinessSnapshot?.status ?? null)}>
+                            {scenario.readinessSnapshot ? humanizeTokenLabel(scenario.readinessSnapshot.status) : "Not checked"}
+                          </StatusBadge>
+                        </div>
+                        <div className="ops-scan__detail">{formatReadinessLine(scenario)} / {formatFundingState(scenario)}</div>
+                      </div>
+                    </div>
+
+                    <div className="ops-table__actions ops-table__actions--dense">
+                      <div className="action-row action-row--compact">
+                        <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/${scenario.id}/builder`}>
+                          Open
+                        </Link>
+                        {scenario.governanceStatus !== ScenarioGovernanceStatus.ACTIVE_CANDIDATE ? (
+                          <form action={activateAction}>
+                            <button type="submit" className={buttonClasses({ variant: "secondary", size: "sm" })}>Activate</button>
+                          </form>
+                        ) : null}
+                        {!scenario.isCurrentBest ? (
+                          <form action={makeLeadAction}>
+                            <button type="submit" className={buttonClasses({ variant: "secondary", size: "sm" })}>Make lead</button>
+                          </form>
+                        ) : null}
+                        {scenario.governanceStatus !== ScenarioGovernanceStatus.DRAFT ? (
+                          <form action={draftAction}>
+                            <button type="submit" className={buttonClasses({ variant: "ghost", size: "sm" })}>Draft</button>
+                          </form>
+                        ) : null}
+                        {scenario.governanceStatus !== ScenarioGovernanceStatus.ARCHIVED ? (
+                          <form action={archiveAction}>
+                            <button type="submit" className={buttonClasses({ variant: "ghost", size: "sm" })}>Archive</button>
+                          </form>
+                        ) : (
+                          <form action={draftAction}>
+                            <button type="submit" className={buttonClasses({ variant: "ghost", size: "sm" })}>Restore</button>
+                          </form>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState
+              eyebrow="No scenarios"
+              title="No scenarios match the current board filters"
+              description="Relax the lifecycle or anchor filters, or create a new scenario from a parcel or grouped site."
+              actions={(
+                <>
+                  <Link className={buttonClasses()} href={`/${orgSlug}/scenarios/new`}>
+                    Create scenario
+                  </Link>
+                  <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios`}>
+                    Reset board
                   </Link>
                 </>
               )}

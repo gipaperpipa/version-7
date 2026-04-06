@@ -3,6 +3,8 @@ import type {
   ScenarioAssumptionEffectiveDto,
   ScenarioAssumptionOverridesDto,
   ScenarioAssumptionSetDto,
+  ScenarioAssumptionSummaryDto,
+  ScenarioAssumptionValueDetailDto,
 } from "../../generated-contracts/scenarios";
 
 type ScenarioInputsRecord = Record<string, unknown>;
@@ -176,6 +178,7 @@ export function withScenarioAssumptionSet(
 
 export function getEffectiveScenarioAssumptions(
   assumptionSet: ScenarioAssumptionSetDto | null | undefined,
+  templateDefaults?: ScenarioAssumptionEffectiveDto | null,
 ): ScenarioAssumptionEffectiveDto {
   const normalized = assumptionSet ?? {
     profileKey: AssumptionProfileKey.BASELINE,
@@ -184,7 +187,7 @@ export function getEffectiveScenarioAssumptions(
     notes: null,
     overrides: emptyScenarioAssumptionOverrides(),
   };
-  const profileDefaults = SCENARIO_ASSUMPTION_PROFILE_DEFAULTS[normalized.profileKey];
+  const profileDefaults = templateDefaults ?? SCENARIO_ASSUMPTION_PROFILE_DEFAULTS[normalized.profileKey];
   const overrides = normalizeScenarioAssumptionOverrides(normalized.overrides);
 
   return {
@@ -207,6 +210,72 @@ export function getEffectiveScenarioAssumptions(
       overrides.parkingRevenuePerSpaceMonth ?? profileDefaults.parkingRevenuePerSpaceMonth,
     parkingSalePricePerSpace:
       overrides.parkingSalePricePerSpace ?? profileDefaults.parkingSalePricePerSpace,
+  };
+}
+
+const SCENARIO_ASSUMPTION_DETAIL_LABELS: Record<keyof ScenarioAssumptionOverridesDto, string> = {
+  planningBufferPct: "Planning buffer",
+  efficiencyFactorPct: "Efficiency",
+  vacancyPct: "Vacancy",
+  operatingCostPerNlaSqmYear: "Operating cost",
+  acquisitionClosingCostPct: "Acquisition closing cost",
+  contingencyPct: "Contingency",
+  developerFeePct: "Developer fee",
+  targetProfitPct: "Target profit",
+  exitCapRatePct: "Exit cap rate",
+  salesClosingCostPct: "Sales closing cost",
+  salesAbsorptionMonths: "Sales absorption months",
+  parkingRevenuePerSpaceMonth: "Parking revenue",
+  parkingSalePricePerSpace: "Parking sale price",
+};
+
+export function buildScenarioAssumptionSummary(
+  assumptionSet: ScenarioAssumptionSetDto | null | undefined,
+  options?: {
+    templateDefaults?: ScenarioAssumptionEffectiveDto | null;
+    templateScope?: "SYSTEM" | "WORKSPACE" | null;
+    isWorkspaceDefault?: boolean;
+    fallbackTemplateKey?: string | null;
+    fallbackTemplateName?: string | null;
+    fallbackProfileKey?: AssumptionProfileKey;
+  },
+): ScenarioAssumptionSummaryDto {
+  const normalized = assumptionSet ?? {
+    profileKey: options?.fallbackProfileKey ?? AssumptionProfileKey.BASELINE,
+    templateKey: options?.fallbackTemplateKey ?? null,
+    templateName: options?.fallbackTemplateName ?? null,
+    notes: null,
+    overrides: emptyScenarioAssumptionOverrides(),
+  };
+  const templateDefaults = options?.templateDefaults ?? SCENARIO_ASSUMPTION_PROFILE_DEFAULTS[normalized.profileKey];
+  const effective = getEffectiveScenarioAssumptions(normalized, templateDefaults);
+  const overrides = normalizeScenarioAssumptionOverrides(normalized.overrides);
+  const details = Object.entries(SCENARIO_ASSUMPTION_DETAIL_LABELS).reduce<Record<string, ScenarioAssumptionValueDetailDto>>(
+    (accumulator, [fieldKey, label]) => {
+      const key = fieldKey as keyof ScenarioAssumptionOverridesDto;
+      const templateValue = templateDefaults[key];
+      const overrideValue = overrides[key];
+      accumulator[key] = {
+        label,
+        templateValue,
+        overrideValue,
+        effectiveValue: effective[key],
+        isOverridden: overrideValue !== null,
+      };
+      return accumulator;
+    },
+    {},
+  );
+
+  return {
+    templateKey: normalized.templateKey ?? null,
+    templateName: normalized.templateName ?? null,
+    templateScope: (normalized.templateKey || normalized.templateName) ? options?.templateScope ?? null : null,
+    profileKey: normalized.profileKey,
+    isWorkspaceDefault: Boolean(options?.isWorkspaceDefault),
+    overrideCount: Object.values(overrides).filter((value) => value !== null).length,
+    effective,
+    details,
   };
 }
 

@@ -7,6 +7,7 @@ import {
   assumptionProfileLabels,
   humanizeTokenLabel,
   optimizationTargetLabels,
+  scenarioGovernanceStatusLabels,
   strategyTypeLabels,
 } from "@/lib/ui/enum-labels";
 import { getReadinessVerdict } from "@/lib/ui/verdicts";
@@ -56,7 +57,8 @@ export default async function ScenarioBuilderPage({
     const warningCount = readiness.issues.filter((issue) => issue.severity === "WARNING").length;
     const readinessVerdict = getReadinessVerdict(readiness);
     const validatedLabel = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(readiness.validatedAt));
-    const assumptionOverrideCount = Object.values(scenario.assumptionSet?.overrides ?? {}).filter((value) => value !== null).length;
+    const assumptionSummary = scenario.assumptionSummary;
+    const effectiveAssumptionRows = Object.values(assumptionSummary.details);
     const readinessGroups = [
       {
         title: "Execution blockers",
@@ -86,9 +88,12 @@ export default async function ScenarioBuilderPage({
               {linkedParcel ? <span className="meta-chip">{linkedParcel.name ?? linkedParcel.cadastralId ?? "Linked parcel"}</span> : <StatusBadge tone="warning">Parcel missing</StatusBadge>}
               <span className="meta-chip">{strategyTypeLabels[scenario.strategyType]}</span>
               <span className="meta-chip">
-                {scenario.assumptionSet?.templateName ?? assumptionProfileLabels[scenario.assumptionSet?.profileKey ?? "BASELINE"]}
-                {assumptionOverrideCount ? ` + ${assumptionOverrideCount} override${assumptionOverrideCount === 1 ? "" : "s"}` : ""}
+                {assumptionSummary.templateName ?? assumptionProfileLabels[assumptionSummary.profileKey]}
+                {assumptionSummary.overrideCount ? ` + ${assumptionSummary.overrideCount} override${assumptionSummary.overrideCount === 1 ? "" : "s"}` : ""}
               </span>
+              <StatusBadge tone={scenario.isCurrentBest ? "accent" : "neutral"}>
+                {scenario.isCurrentBest ? "Current lead" : scenarioGovernanceStatusLabels[scenario.governanceStatus]}
+              </StatusBadge>
               <span className="meta-chip">{selectedFundingCount ? `${selectedFundingCount} funding lane(s)` : "No funding lanes"}</span>
               <StatusBadge tone={getReadinessTone(readiness.status)}>{humanizeTokenLabel(readiness.status)}</StatusBadge>
             </div>
@@ -169,12 +174,25 @@ export default async function ScenarioBuilderPage({
                 </div>
               </div>
               <div className="ops-summary-item">
+                <div className="ops-summary-item__label">Lifecycle</div>
+                <div className="ops-summary-item__value">{scenarioGovernanceStatusLabels[scenario.governanceStatus]}</div>
+                <div className="ops-summary-item__detail">
+                  {scenario.isCurrentBest
+                    ? `Current lead in family / v${scenario.familyVersion}`
+                    : `Family version v${scenario.familyVersion}`}
+                </div>
+              </div>
+              <div className="ops-summary-item">
                 <div className="ops-summary-item__label">Assumptions</div>
                 <div className="ops-summary-item__value">
-                  {scenario.assumptionSet?.templateName ?? assumptionProfileLabels[scenario.assumptionSet?.profileKey ?? "BASELINE"]}
+                  {assumptionSummary.templateName ?? assumptionProfileLabels[assumptionSummary.profileKey]}
                 </div>
                 <div className="ops-summary-item__detail">
-                  {assumptionOverrideCount ? `${assumptionOverrideCount} case-specific override(s)` : "Profile defaults only"}
+                  {assumptionSummary.isWorkspaceDefault
+                    ? "Workspace default template in use"
+                    : assumptionSummary.overrideCount
+                      ? `${assumptionSummary.overrideCount} case-specific override(s)`
+                      : "Template defaults only"}
                 </div>
               </div>
               <div className="ops-summary-item">
@@ -223,6 +241,7 @@ export default async function ScenarioBuilderPage({
             action={updateAction}
             parcels={parcels.items}
             templates={assumptionTemplates.items}
+            workspaceDefaultTemplateKey={assumptionTemplates.workspaceDefaultTemplateKey}
             initialScenario={scenario}
             submitLabel="Save scenario"
             mode="builder"
@@ -234,6 +253,38 @@ export default async function ScenarioBuilderPage({
               fundingPrograms={fundingPrograms.items}
               selectedItems={scenario.fundingVariants}
             />
+
+            <SectionCard
+              className="rail-panel"
+              eyebrow="Assumption audit"
+              title="Effective assumptions"
+              tone="muted"
+              size="compact"
+            >
+              <div className="content-stack">
+                <div className="action-row">
+                  <StatusBadge tone="info">
+                    {assumptionSummary.templateName ?? assumptionProfileLabels[assumptionSummary.profileKey]}
+                  </StatusBadge>
+                  {assumptionSummary.isWorkspaceDefault ? <StatusBadge tone="surface">Workspace default</StatusBadge> : null}
+                  <StatusBadge tone="surface">{assumptionSummary.overrideCount} override{assumptionSummary.overrideCount === 1 ? "" : "s"}</StatusBadge>
+                </div>
+                <div className="signal-list">
+                  {effectiveAssumptionRows.map((detail) => (
+                    <div key={detail.label} className="signal-row">
+                      <div className="signal-row__badges">
+                        <StatusBadge tone={detail.isOverridden ? "accent" : "surface"}>{detail.label}</StatusBadge>
+                        {detail.isOverridden ? <StatusBadge tone="warning">Overridden</StatusBadge> : <StatusBadge tone="surface">Template</StatusBadge>}
+                      </div>
+                      <div className="signal-row__text">
+                        Template: {detail.templateValue ?? "n/a"} / Effective: {detail.effectiveValue ?? "n/a"}
+                        {detail.isOverridden ? ` / Override: ${detail.overrideValue ?? "n/a"}` : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </SectionCard>
 
             <SectionCard
               className="rail-panel"

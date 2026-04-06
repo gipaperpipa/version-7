@@ -57,6 +57,18 @@ export function getScenarioStatusTone(status: string | null | undefined): BadgeV
   }
 }
 
+export function getScenarioGovernanceTone(status: string | null | undefined): BadgeVariant {
+  switch (status) {
+    case "ACTIVE_CANDIDATE":
+      return "accent";
+    case "ARCHIVED":
+      return "surface";
+    case "DRAFT":
+    default:
+      return "neutral";
+  }
+}
+
 export function getIssueTone(severity: string | null | undefined): BadgeVariant {
   switch (severity) {
     case "BLOCKING":

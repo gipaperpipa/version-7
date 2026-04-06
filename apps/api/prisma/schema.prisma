@@ -56,6 +56,12 @@ enum ScenarioStatus {
   ARCHIVED
 }
 
+enum ScenarioGovernanceStatus {
+  DRAFT
+  ACTIVE_CANDIDATE
+  ARCHIVED
+}
+
 enum ScenarioRunStatus {
   QUEUED
   RUNNING
@@ -123,6 +129,7 @@ model Organization {
   id          String                   @id @default(uuid())
   slug        String                   @unique
   name        String
+  defaultScenarioTemplateKey String?
   memberships OrganizationMembership[]
   parcels     Parcel[]
   parcelGroups ParcelGroup[]
@@ -271,6 +278,8 @@ model Scenario {
   name                      String
   description               String?
   status                    ScenarioStatus           @default(DRAFT)
+  governanceStatus          ScenarioGovernanceStatus @default(ACTIVE_CANDIDATE)
+  isCurrentBest             Boolean                  @default(false)
   strategyType              StrategyType
   acquisitionType           AcquisitionType
   optimizationTarget        OptimizationTarget

@@ -235,6 +235,7 @@ export default async function NewScenarioPage({
                 action={action}
                 parcels={parcels.items}
                 templates={assumptionTemplates.items}
+                workspaceDefaultTemplateKey={assumptionTemplates.workspaceDefaultTemplateKey}
                 initialParcelId={effectiveParcelId}
                 submitLabel="Create scenario"
                 mode="create"
