@@ -1,5 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import type {
+  SourceParcelMapBoundsDto,
+} from "../../generated-contracts/parcels";
 import { isLocalDevAuthFallbackEnabled } from "../../common/auth/local-dev-auth";
 import {
   getSourceAuthorityRank,
@@ -35,6 +38,15 @@ function toPositiveInt(value: string | undefined, fallback: number) {
 function toNumber(value: string | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function boundsIntersect(left: SourceParcelMapBoundsDto, right: SourceParcelMapBoundsDto) {
+  return !(
+    left.east < right.west
+    || left.west > right.east
+    || left.north < right.south
+    || left.south > right.north
+  );
 }
 
 @Injectable()
@@ -169,5 +181,81 @@ export class SourceParcelProviderRegistryService {
     }
 
     return records;
+  }
+
+  getSupportedRegions() {
+    if (this.mode === "DEMO_ONLY") {
+      return [];
+    }
+
+    return this.realProviders.flatMap((provider) => provider.getSupportedRegions?.() ?? []);
+  }
+
+  async searchByBounds(bounds: SourceParcelMapBoundsDto, limit = 120) {
+    if (this.mode === "DEMO_ONLY") {
+      return [];
+    }
+
+    const supportedRegions = this.getSupportedRegions();
+    const relevantProviders = this.realProviders.filter((provider) => {
+      const providerRegions = provider.getSupportedRegions?.() ?? [];
+      return providerRegions.some((region) => boundsIntersect(region.bounds, bounds));
+    });
+
+    if (!relevantProviders.length || !supportedRegions.some((region) => boundsIntersect(region.bounds, bounds))) {
+      return [];
+    }
+
+    const resultsById = new Map<string, NormalizedSourceParcelRecord>();
+    let lastProviderError: SourceParcelProviderError | null = null;
+
+    for (const provider of relevantProviders) {
+      if (!provider.searchByBounds) {
+        continue;
+      }
+
+      try {
+        const records = await provider.searchByBounds(bounds, limit);
+        for (const record of records) {
+          const existing = resultsById.get(record.id);
+          if (!existing) {
+            resultsById.set(record.id, record);
+            continue;
+          }
+
+          const authorityDiff = getSourceAuthorityRank(record.sourceAuthority) - getSourceAuthorityRank(existing.sourceAuthority);
+          if (authorityDiff > 0 || (authorityDiff === 0 && (record.confidenceScore ?? 0) > (existing.confidenceScore ?? 0))) {
+            resultsById.set(record.id, record);
+          }
+        }
+      } catch (error) {
+        lastProviderError = error instanceof SourceParcelProviderError
+          ? error
+          : new SourceParcelProviderError(
+              "SOURCE_PROVIDER_UNAVAILABLE",
+              provider.key,
+              "Real source parcel provider is currently unavailable for map previews.",
+              error,
+            );
+      }
+    }
+
+    const results = Array.from(resultsById.values())
+      .sort((left, right) => {
+        const authorityDiff = getSourceAuthorityRank(right.sourceAuthority) - getSourceAuthorityRank(left.sourceAuthority);
+        if (authorityDiff !== 0) return authorityDiff;
+        return (right.confidenceScore ?? 0) - (left.confidenceScore ?? 0);
+      })
+      .slice(0, Math.max(1, Math.min(limit, 200)));
+
+    if (results.length) {
+      return results;
+    }
+
+    if (lastProviderError) {
+      throw lastProviderError;
+    }
+
+    return [];
   }
 }

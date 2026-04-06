@@ -4,6 +4,8 @@ import type {
   ParcelConfidenceBand,
   ParcelGroupMemberDto,
   ParcelGroupSummaryDto,
+  SourceParcelMapConfigDto,
+  SourceParcelMapPreviewsResponseDto,
   ParcelProvenanceDto,
   ParcelDto,
   SearchSourceParcelsResponseDto,
@@ -255,6 +257,36 @@ export function searchSourceParcels(
 
   const suffix = search.size ? `?${search.toString()}` : "";
   return apiFetch<SearchSourceParcelsResponseDto>(orgSlug, `/api/v1/parcels/source/search${suffix}`).then((response) => ({
+    ...response,
+    items: Array.isArray(response.items) ? response.items.map((item) => normalizeSourceParcelResult(item)) : [],
+  }));
+}
+
+export function getSourceParcelMapConfig(orgSlug: string) {
+  return apiFetch<SourceParcelMapConfigDto>(orgSlug, "/api/v1/parcels/source/map/config");
+}
+
+export function getSourceParcelMapPreviews(
+  orgSlug: string,
+  params: {
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+    zoom: number;
+    limit?: number;
+  },
+) {
+  const search = new URLSearchParams({
+    west: String(params.west),
+    south: String(params.south),
+    east: String(params.east),
+    north: String(params.north),
+    zoom: String(params.zoom),
+  });
+  if (params.limit) search.set("limit", String(params.limit));
+
+  return apiFetch<SourceParcelMapPreviewsResponseDto>(orgSlug, `/api/v1/parcels/source/map/previews?${search.toString()}`).then((response) => ({
     ...response,
     items: Array.isArray(response.items) ? response.items.map((item) => normalizeSourceParcelResult(item)) : [],
   }));

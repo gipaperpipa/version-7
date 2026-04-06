@@ -13,6 +13,9 @@ import type {
   ListParcelsResponseDto,
   ParcelDto,
   ParcelGroupSummaryDto,
+  SourceParcelMapBoundsDto,
+  SourceParcelMapConfigDto,
+  SourceParcelMapPreviewsResponseDto,
   SearchSourceParcelsResponseDto,
   SourceParcelIntakeConflictCode,
   SourceParcelIntakeOutcome,
@@ -67,6 +70,22 @@ type ExistingParcelMatch = {
     } | null;
   } | null;
 };
+
+const GERMANY_DEFAULT_CENTER: SourceParcelMapConfigDto["defaultCenter"] = {
+  type: "Point",
+  coordinates: [10.4515, 51.1657],
+};
+const GERMANY_DEFAULT_ZOOM = 5.6;
+const MAP_MIN_PARCEL_SELECTION_ZOOM = 15;
+
+function boundsIntersect(left: SourceParcelMapBoundsDto, right: SourceParcelMapBoundsDto) {
+  return !(
+    left.east < right.west
+    || left.west > right.east
+    || left.north < right.south
+    || left.south > right.north
+  );
+}
 
 function deriveTrustMode({
   sourceType,
@@ -439,122 +458,81 @@ export class ParcelsService {
 
   async searchSource(query?: string | null, municipality?: string | null, limit = 12): Promise<SearchSourceParcelsResponseDto> {
     const results = await this.getSourceSearchResults(query, municipality, limit);
-    if (!results.items.length) {
-      return results;
-    }
-
-    const existingMatches = await this.prisma.parcel.findMany({
-      where: {
-        organizationId: this.requestContext.organizationId,
-        OR: results.items.map((item) => ({
-          sourceProviderName: item.providerName,
-          sourceProviderParcelId: item.providerParcelId,
-        })),
-      },
-      select: {
-        id: true,
-        name: true,
-        sourceProviderName: true,
-        sourceProviderParcelId: true,
-        parcelGroupId: true,
-        isGroupSite: true,
-        planningParameters: {
-          select: {
-            id: true,
-            valueNumber: true,
-            valueBoolean: true,
-            valueJson: true,
-            geom: true,
-          },
-        },
-        scenarios: {
-          select: {
-            id: true,
-            name: true,
-            status: true,
-            latestRunAt: true,
-          },
-          orderBy: [{ latestRunAt: "desc" }, { updatedAt: "desc" }],
-          take: 3,
-        },
-        parcelGroup: {
-          select: {
-            id: true,
-            name: true,
-            siteParcelId: true,
-            siteParcel: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-        },
-      },
-    }) satisfies ExistingParcelMatch[];
-
-    const matchesBySourceKey = new Map<string, ExistingParcelMatch[]>();
-    for (const match of existingMatches) {
-      const key = `${match.sourceProviderName ?? ""}::${match.sourceProviderParcelId ?? ""}`;
-      const bucket = matchesBySourceKey.get(key) ?? [];
-      bucket.push(match);
-      matchesBySourceKey.set(key, bucket);
-    }
-
     return {
       ...results,
-      items: results.items.map((item) => {
-        const matches = matchesBySourceKey.get(`${item.providerName}::${item.providerParcelId}`) ?? [];
-        const groupedMember = matches.find((match) => !match.isGroupSite && Boolean(match.parcelGroupId)) ?? null;
-        const standalone = matches.find((match) => !match.isGroupSite && !match.parcelGroupId) ?? null;
-
-        if (groupedMember) {
-          return {
-            ...item,
-            workspaceState: "GROUPED_SITE_MEMBER" as const,
-            regroupingEligible: false,
-            lockReason: "GROUP_SITE_MEMBERSHIP_STABLE" as const,
-            existingParcelId: groupedMember.id,
-            existingSite: groupedMember.parcelGroup
-              ? {
-                  id: groupedMember.parcelGroup.id,
-                  name: groupedMember.parcelGroup.siteParcel?.name ?? groupedMember.parcelGroup.name,
-                  siteParcelId: groupedMember.parcelGroup.siteParcel?.id ?? groupedMember.parcelGroup.siteParcelId ?? null,
-                }
-              : null,
-            downstreamWork: getDownstreamWorkSummary(groupedMember),
-          };
-        }
-
-        if (standalone) {
-          const downstreamWork = getDownstreamWorkSummary(standalone);
-          const locked = downstreamWork.planningValueCount > 0 || downstreamWork.scenarioCount > 0;
-          return {
-            ...item,
-            workspaceState: locked ? "EXISTING_STANDALONE_LOCKED" as const : "EXISTING_STANDALONE_REUSABLE" as const,
-            regroupingEligible: true,
-            lockReason: locked ? "DOWNSTREAM_WORK_PRESENT" as const : "NONE" as const,
-            existingParcelId: standalone.id,
-            existingSite: null,
-            downstreamWork,
-          };
-        }
-
-        return {
-          ...item,
-          workspaceState: "NEW" as const,
-          regroupingEligible: true,
-          lockReason: "NONE" as const,
-          existingParcelId: null,
-          existingSite: null,
-          downstreamWork: {
-            planningValueCount: 0,
-            scenarioCount: 0,
-            scenarios: [],
-          },
-        };
-      }),
+      items: await this.enrichSourceSearchItems(results.items),
     };
+  }
+
+  async getSourceMapConfig(): Promise<SourceParcelMapConfigDto> {
+    const supportedRegions = this.sourceParcelProviders.getSupportedRegions();
+    return {
+      defaultCenter: GERMANY_DEFAULT_CENTER,
+      defaultZoom: GERMANY_DEFAULT_ZOOM,
+      minParcelSelectionZoom: MAP_MIN_PARCEL_SELECTION_ZOOM,
+      parcelSelectionAvailable: supportedRegions.length > 0,
+      supportedRegions,
+    };
+  }
+
+  async getSourceMapPreviews(
+    bounds: SourceParcelMapBoundsDto,
+    zoom: number,
+    limit = 120,
+  ): Promise<SourceParcelMapPreviewsResponseDto> {
+    const numbers = [bounds.west, bounds.south, bounds.east, bounds.north, zoom];
+    if (numbers.some((value) => !Number.isFinite(value))) {
+      throw new BadRequestException("Map preview bounds and zoom must be numeric.");
+    }
+
+    const supportedRegions = this.sourceParcelProviders.getSupportedRegions();
+    const activeRegion = supportedRegions.find((region) => boundsIntersect(region.bounds, bounds)) ?? null;
+
+    if (!activeRegion) {
+      return {
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 0,
+        bounds,
+        zoom,
+        minParcelSelectionZoom: MAP_MIN_PARCEL_SELECTION_ZOOM,
+        coverageState: "SEARCH_GUIDANCE_ONLY",
+        activeRegion: null,
+      };
+    }
+
+    if (zoom < MAP_MIN_PARCEL_SELECTION_ZOOM) {
+      return {
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 0,
+        bounds,
+        zoom,
+        minParcelSelectionZoom: MAP_MIN_PARCEL_SELECTION_ZOOM,
+        coverageState: "ZOOM_IN_REQUIRED",
+        activeRegion,
+      };
+    }
+
+    try {
+      const items = await this.sourceParcelProviders.searchByBounds(bounds, limit);
+      const enrichedItems = await this.enrichSourceSearchItems(items);
+      return {
+        items: enrichedItems,
+        total: enrichedItems.length,
+        page: 1,
+        pageSize: enrichedItems.length || limit,
+        bounds,
+        zoom,
+        minParcelSelectionZoom: MAP_MIN_PARCEL_SELECTION_ZOOM,
+        coverageState: "PARCEL_SELECTION_AVAILABLE",
+        activeRegion,
+      };
+    } catch (error) {
+      this.rethrowSourceProviderError(error, "Source parcel map previews are currently unavailable.");
+    }
   }
 
   async create(dto: CreateParcelRequestDto): Promise<ParcelDto> {
@@ -1083,6 +1061,125 @@ export class ParcelsService {
       createdParcels: transactionResult.createdParcels,
       parcelGroup: transactionResult.primaryParcel.parcelGroup,
     };
+  }
+
+  private async enrichSourceSearchItems(items: SourceParcelSearchResultDto[]) {
+    if (!items.length) {
+      return [];
+    }
+
+    const existingMatches = await this.loadExistingSourceMatches(items);
+    const matchesBySourceKey = new Map<string, ExistingParcelMatch[]>();
+    for (const match of existingMatches) {
+      const key = `${match.sourceProviderName ?? ""}::${match.sourceProviderParcelId ?? ""}`;
+      const bucket = matchesBySourceKey.get(key) ?? [];
+      bucket.push(match);
+      matchesBySourceKey.set(key, bucket);
+    }
+
+    return items.map((item) => {
+      const matches = matchesBySourceKey.get(`${item.providerName}::${item.providerParcelId}`) ?? [];
+      const groupedMember = matches.find((match) => !match.isGroupSite && Boolean(match.parcelGroupId)) ?? null;
+      const standalone = matches.find((match) => !match.isGroupSite && !match.parcelGroupId) ?? null;
+
+      if (groupedMember) {
+        return {
+          ...item,
+          workspaceState: "GROUPED_SITE_MEMBER" as const,
+          regroupingEligible: false,
+          lockReason: "GROUP_SITE_MEMBERSHIP_STABLE" as const,
+          existingParcelId: groupedMember.id,
+          existingSite: groupedMember.parcelGroup
+            ? {
+                id: groupedMember.parcelGroup.id,
+                name: groupedMember.parcelGroup.siteParcel?.name ?? groupedMember.parcelGroup.name,
+                siteParcelId: groupedMember.parcelGroup.siteParcel?.id ?? groupedMember.parcelGroup.siteParcelId ?? null,
+              }
+            : null,
+          downstreamWork: getDownstreamWorkSummary(groupedMember),
+        };
+      }
+
+      if (standalone) {
+        const downstreamWork = getDownstreamWorkSummary(standalone);
+        const locked = downstreamWork.planningValueCount > 0 || downstreamWork.scenarioCount > 0;
+        return {
+          ...item,
+          workspaceState: locked ? "EXISTING_STANDALONE_LOCKED" as const : "EXISTING_STANDALONE_REUSABLE" as const,
+          regroupingEligible: true,
+          lockReason: locked ? "DOWNSTREAM_WORK_PRESENT" as const : "NONE" as const,
+          existingParcelId: standalone.id,
+          existingSite: null,
+          downstreamWork,
+        };
+      }
+
+      return {
+        ...item,
+        workspaceState: "NEW" as const,
+        regroupingEligible: true,
+        lockReason: "NONE" as const,
+        existingParcelId: null,
+        existingSite: null,
+        downstreamWork: {
+          planningValueCount: 0,
+          scenarioCount: 0,
+          scenarios: [],
+        },
+      };
+    });
+  }
+
+  private loadExistingSourceMatches(items: SourceParcelSearchResultDto[]) {
+    return this.prisma.parcel.findMany({
+      where: {
+        organizationId: this.requestContext.organizationId,
+        OR: items.map((item) => ({
+          sourceProviderName: item.providerName,
+          sourceProviderParcelId: item.providerParcelId,
+        })),
+      },
+      select: {
+        id: true,
+        name: true,
+        sourceProviderName: true,
+        sourceProviderParcelId: true,
+        parcelGroupId: true,
+        isGroupSite: true,
+        planningParameters: {
+          select: {
+            id: true,
+            valueNumber: true,
+            valueBoolean: true,
+            valueJson: true,
+            geom: true,
+          },
+        },
+        scenarios: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            latestRunAt: true,
+          },
+          orderBy: [{ latestRunAt: "desc" }, { updatedAt: "desc" }],
+          take: 3,
+        },
+        parcelGroup: {
+          select: {
+            id: true,
+            name: true,
+            siteParcelId: true,
+            siteParcel: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    }) satisfies Promise<ExistingParcelMatch[]>;
   }
 
   private async getSourceSearchResults(query?: string | null, municipality?: string | null, limit = 12) {

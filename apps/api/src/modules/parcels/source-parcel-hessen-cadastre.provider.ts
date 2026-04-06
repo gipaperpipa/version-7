@@ -260,6 +260,55 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
       .map((item) => item.record);
   }
 
+  getSupportedRegions() {
+    return [
+      {
+        id: "hessen-alkis",
+        name: "Hessen parcel-grade selection",
+        providerName: "Hessen ALKIS Flurstueck",
+        description: "Parcel-grade map selection is supported inside the Hessen ALKIS coverage area only.",
+        sourceAuthority: "CADASTRAL_GRADE" as const,
+        bounds: {
+          west: this.config.bboxWest,
+          south: this.config.bboxSouth,
+          east: this.config.bboxEast,
+          north: this.config.bboxNorth,
+        },
+      },
+    ];
+  }
+
+  async searchByBounds(bounds: {
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+  }, limit = 120) {
+    const url = new URL(`/collections/${encodeURIComponent(this.config.collectionId)}/items`, this.withTrailingSlash(this.config.baseUrl));
+    url.searchParams.set("f", "json");
+    url.searchParams.set("limit", String(Math.max(1, Math.min(limit, 200))));
+    url.searchParams.set("bbox", [bounds.west, bounds.south, bounds.east, bounds.north].join(","));
+
+    const json = await this.fetchJson(url);
+    if (!isFeatureCollection(json)) {
+      throw new SourceParcelProviderError(
+        "SOURCE_PROVIDER_LOOKUP_FAILED",
+        this.key,
+        "Hessen cadastre provider returned an unexpected map preview payload.",
+      );
+    }
+
+    return (json.features ?? [])
+      .map((feature) => this.mapFeature(feature, null))
+      .filter((item): item is NormalizedSourceParcelRecord => Boolean(item && item.geom))
+      .sort((left, right) => {
+        const confidenceDiff = (right.confidenceScore ?? 0) - (left.confidenceScore ?? 0);
+        if (confidenceDiff !== 0) return confidenceDiff;
+        return left.providerParcelId.localeCompare(right.providerParcelId);
+      })
+      .slice(0, Math.max(1, Math.min(limit, 200)));
+  }
+
   async getByIds(sourceParcelIds: string[]) {
     const featureIds = sourceParcelIds
       .map((item) => decodeSourceId(item.trim()))

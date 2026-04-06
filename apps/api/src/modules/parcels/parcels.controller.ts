@@ -5,6 +5,8 @@ import type {
   CreateSourceParcelIntakeRequestDto,
   ListParcelsResponseDto,
   ParcelDto,
+  SourceParcelMapConfigDto,
+  SourceParcelMapPreviewsResponseDto,
   SearchSourceParcelsResponseDto,
   SourceParcelIntakeResponseDto,
   UpdateParcelRequestDto,
@@ -39,6 +41,30 @@ export class ParcelsController {
     @Query("limit") limit = "12",
   ): Promise<SearchSourceParcelsResponseDto> {
     return this.parcelsService.searchSource(query, municipality, Number(limit));
+  }
+
+  @Get("source/map/config")
+  @Version("1")
+  getSourceMapConfig(): Promise<SourceParcelMapConfigDto> {
+    return this.parcelsService.getSourceMapConfig();
+  }
+
+  @Get("source/map/previews")
+  @Version("1")
+  getSourceMapPreviews(
+    @Query("west") west?: string,
+    @Query("south") south?: string,
+    @Query("east") east?: string,
+    @Query("north") north?: string,
+    @Query("zoom") zoom = "0",
+    @Query("limit") limit = "120",
+  ): Promise<SourceParcelMapPreviewsResponseDto> {
+    return this.parcelsService.getSourceMapPreviews({
+      west: Number(west),
+      south: Number(south),
+      east: Number(east),
+      north: Number(north),
+    }, Number(zoom), Number(limit));
   }
 
   @Post("source/intake")

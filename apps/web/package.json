@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "@repo/contracts": "workspace:*",
+    "maplibre-gl": "^4.7.1",
     "next": "^15.2.4",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-map-gl": "^8.1.0"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

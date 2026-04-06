@@ -236,6 +236,14 @@ export class SourceParcelNominatimProvider implements SourceParcelProvider {
       .filter((item): item is NormalizedSourceParcelRecord => Boolean(item));
   }
 
+  getSupportedRegions() {
+    return [];
+  }
+
+  async searchByBounds() {
+    return [];
+  }
+
   private async fetchNominatim(url: URL) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);

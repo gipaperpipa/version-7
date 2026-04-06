@@ -186,6 +186,43 @@ export interface SourceParcelSearchResultDto {
 
 export type SearchSourceParcelsResponseDto = PagedResponseDto<SourceParcelSearchResultDto>;
 
+export interface SourceParcelMapBoundsDto {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
+export interface SourceParcelMapSupportedRegionDto {
+  id: string;
+  name: string;
+  providerName: string | null;
+  description: string;
+  sourceAuthority: SourceAuthorityLevel;
+  bounds: SourceParcelMapBoundsDto;
+}
+
+export type SourceParcelMapCoverageState =
+  | "PARCEL_SELECTION_AVAILABLE"
+  | "ZOOM_IN_REQUIRED"
+  | "SEARCH_GUIDANCE_ONLY";
+
+export interface SourceParcelMapConfigDto {
+  defaultCenter: PointDto;
+  defaultZoom: number;
+  minParcelSelectionZoom: number;
+  parcelSelectionAvailable: boolean;
+  supportedRegions: SourceParcelMapSupportedRegionDto[];
+}
+
+export interface SourceParcelMapPreviewsResponseDto extends PagedResponseDto<SourceParcelSearchResultDto> {
+  bounds: SourceParcelMapBoundsDto;
+  zoom: number;
+  minParcelSelectionZoom: number;
+  coverageState: SourceParcelMapCoverageState;
+  activeRegion: SourceParcelMapSupportedRegionDto | null;
+}
+
 export interface CreateSourceParcelIntakeRequestDto {
   sourceParcelIds: Id[];
   siteName?: string | null;

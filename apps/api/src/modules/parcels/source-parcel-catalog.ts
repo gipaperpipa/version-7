@@ -249,4 +249,12 @@ export class SourceParcelDemoProvider implements SourceParcelProvider {
     const wanted = new Set(sourceParcelIds);
     return SOURCE_PARCELS.filter((parcel) => wanted.has(parcel.id));
   }
+
+  getSupportedRegions() {
+    return [];
+  }
+
+  async searchByBounds() {
+    return [];
+  }
 }
