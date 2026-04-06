@@ -138,8 +138,8 @@ export default async function ScenarioComparePage({
       <div className="workspace-page content-stack">
         <PageHeader
           eyebrow="Scenario comparison"
-          title="Scenario board compare"
-          description="Rank by target, compare KPI deltas, and inspect warning and driver differences side by side."
+          title="Lead-first scenario compare"
+          description="Rank lead cases and challengers by target, then move into the memo view for decision review."
           meta={(
             <div className="action-row">
               <span className="meta-chip">{comparison.entries.length} scenarios</span>
@@ -153,7 +153,7 @@ export default async function ScenarioComparePage({
                 Back to scenarios
               </Link>
               <Link className={buttonClasses()} href={reportHref}>
-                Open report
+                Open comparison memo
               </Link>
             </>
           )}

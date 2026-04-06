@@ -1,4 +1,4 @@
-import { ScenarioGovernanceStatus, type ParcelDto, type ScenarioDto } from "@repo/contracts";
+import { OptimizationTarget, ScenarioGovernanceStatus, type ParcelDto, type ScenarioDto } from "@repo/contracts";
 import { strategyTypeLabels } from "@/lib/ui/enum-labels";
 
 export type SuggestedLeadReason =
@@ -260,4 +260,47 @@ export function getLeadFirstComparisonDefaults(
     source: "FAMILY_LEADS" as const,
     familySummaries,
   };
+}
+
+export function buildScenarioReportHref(
+  orgSlug: string,
+  scenario: Pick<ScenarioDto, "id" | "latestRunId">,
+) {
+  if (!scenario.latestRunId) return null;
+  return `/${orgSlug}/scenarios/${scenario.id}/results/${scenario.latestRunId}/report`;
+}
+
+export function getFamilyComparisonScenarioIds(
+  family: Pick<ScenarioFamilyGovernanceSummary, "leadScenario" | "scenarios">,
+) {
+  const challengers = family.scenarios
+    .filter((scenario) => scenario.governanceStatus === ScenarioGovernanceStatus.ACTIVE_CANDIDATE && scenario.id !== family.leadScenario.id)
+    .sort((left, right) => {
+      const runDelta = new Date(right.latestRunAt ?? right.updatedAt).getTime() - new Date(left.latestRunAt ?? left.updatedAt).getTime();
+      if (runDelta !== 0) return runDelta;
+      return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+    })
+    .slice(0, 2);
+
+  return [family.leadScenario.id, ...challengers.map((scenario) => scenario.id)];
+}
+
+export function buildScenarioComparisonHref(
+  orgSlug: string,
+  scenarioIds: string[],
+  options?: {
+    rankingTarget?: OptimizationTarget | null;
+    report?: boolean;
+  },
+) {
+  const uniqueIds = Array.from(new Set(scenarioIds.filter(Boolean)));
+  const search = new URLSearchParams();
+
+  uniqueIds.forEach((scenarioId) => search.append("scenarioId", scenarioId));
+  if (options?.rankingTarget) search.set("rankingTarget", options.rankingTarget);
+
+  const basePath = options?.report ? `/${orgSlug}/scenarios/compare/report` : `/${orgSlug}/scenarios/compare`;
+  const searchString = search.toString();
+
+  return searchString ? `${basePath}?${searchString}` : basePath;
 }

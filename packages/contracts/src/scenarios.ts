@@ -122,6 +122,7 @@ export interface ScenarioDto {
   assumptionSet: ScenarioAssumptionSetDto | null;
   assumptionSummary: ScenarioAssumptionSummaryDto;
   inputsJson: Record<string, unknown> | null;
+  latestRunId: Id | null;
   latestRunAt: IsoDateTime | null;
   readinessSnapshot: ScenarioReadinessSnapshotDto | null;
   fundingVariants: ScenarioFundingVariantDto[];

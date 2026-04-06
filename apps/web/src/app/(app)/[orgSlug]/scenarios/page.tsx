@@ -24,6 +24,11 @@ import { isApiUnavailableError } from "@/lib/api/errors";
 import { getParcels } from "@/lib/api/parcels";
 import { getScenarios } from "@/lib/api/scenarios";
 import {
+  buildScenarioComparisonHref,
+  buildScenarioReportHref,
+  getFamilyComparisonScenarioIds,
+} from "@/lib/scenarios/family-governance";
+import {
   humanizeTokenLabel,
   optimizationTargetLabels,
   scenarioGovernanceStatusLabels,
@@ -504,6 +509,8 @@ export default async function ScenariosPage({
     const workspaceGroupedSiteCount = parcels.items.filter((parcel) => isGroupedSite(parcel)).length;
     const groupedSiteAnchorGap = workspaceGroupedSiteCount > 0 && groupedSiteAnchoredCount === 0;
     const healthyFamilyCount = familySummaries.length - unresolvedFamilies.length;
+    const reportReadyLeadCount = familySummaries.filter((family) => Boolean(family.leadScenario.latestRunId)).length;
+    const familyChallengeCount = familySummaries.filter((family) => getFamilyComparisonScenarioIds(family).length >= 2).length;
     const filterHref = buildBoardHref(orgSlug, {
       q: searchQuery,
       lifecycle,
@@ -514,6 +521,8 @@ export default async function ScenariosPage({
       runHistory,
       funding,
     });
+    const leadCompareHref = `/${orgSlug}/scenarios/compare`;
+    const leadCompareReportHref = `/${orgSlug}/scenarios/compare/report`;
 
     return (
       <div className="workspace-page content-stack">
@@ -537,8 +546,11 @@ export default async function ScenariosPage({
               <Link className={buttonClasses()} href={`/${orgSlug}/scenarios/new`}>
                 New scenario
               </Link>
-              <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/scenarios/compare`}>
-                Compare
+              <Link className={buttonClasses({ variant: "secondary" })} href={leadCompareHref}>
+                Compare board
+              </Link>
+              <Link className={buttonClasses({ variant: "secondary" })} href={leadCompareReportHref}>
+                Lead comparison memo
               </Link>
             </>
           )}
@@ -597,6 +609,17 @@ export default async function ScenariosPage({
               <div className="ops-summary-item__value">{unresolvedFamilies.length}</div>
               <div className="ops-summary-item__detail">Families still missing a clear lead or carrying too many active variants.</div>
             </div>
+          </div>
+          <div className="action-row">
+            <Link className={buttonClasses()} href={leadCompareReportHref}>
+              Open lead comparison memo
+            </Link>
+            <Link className={buttonClasses({ variant: "secondary" })} href={leadCompareHref}>
+              Open compare board
+            </Link>
+            <span className="field-help">
+              {reportReadyLeadCount} lead memo{reportReadyLeadCount === 1 ? "" : "s"} ready now / {familyChallengeCount} family comparison set{familyChallengeCount === 1 ? "" : "s"} ready for leader-vs-challenger review.
+            </span>
           </div>
         </SectionCard>
 
@@ -701,6 +724,14 @@ export default async function ScenariosPage({
               {unresolvedFamilies.map((family) => {
                 const suggestedScenario = family.suggestedLeadScenario;
                 const suggestedLinkedParcel = suggestedScenario.parcelId ? parcelById.get(suggestedScenario.parcelId) ?? null : null;
+                const suggestedReportHref = buildScenarioReportHref(orgSlug, suggestedScenario);
+                const familyComparisonIds = getFamilyComparisonScenarioIds(family);
+                const familyCompareReportHref = familyComparisonIds.length >= 2
+                  ? buildScenarioComparisonHref(orgSlug, familyComparisonIds, {
+                    rankingTarget: suggestedScenario.optimizationTarget,
+                    report: true,
+                  })
+                  : null;
                 const adoptSuggestedLeadAction = setScenarioCurrentBestAction.bind(null, orgSlug, suggestedScenario.id, filterHref);
                 const archiveOlderAction = archiveScenarioVariantsAction.bind(null, orgSlug, filterHref);
                 const resolveAction = resolveScenarioFamilyAction.bind(null, orgSlug, filterHref);
@@ -753,11 +784,25 @@ export default async function ScenariosPage({
 
                     <div className="ops-table__actions ops-table__actions--dense">
                       <div className="action-row">
-                        <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/${suggestedScenario.id}/builder`}>
-                          Review suggestion
+                        {suggestedReportHref ? (
+                          <Link className={buttonClasses({ size: "sm" })} href={suggestedReportHref}>
+                            Suggested memo
+                          </Link>
+                        ) : (
+                          <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/${suggestedScenario.id}/builder`}>
+                            Review suggestion
+                          </Link>
+                        )}
+                        <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/scenarios/${suggestedScenario.id}/builder`}>
+                          Builder
                         </Link>
+                        {familyCompareReportHref ? (
+                          <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={familyCompareReportHref}>
+                            Compare family
+                          </Link>
+                        ) : null}
                         {suggestedLinkedParcel ? (
-                          <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/parcels/${suggestedLinkedParcel.id}`}>
+                          <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${suggestedLinkedParcel.id}`}>
                             Open site
                           </Link>
                         ) : null}
@@ -811,6 +856,14 @@ export default async function ScenariosPage({
               {familySummaries.map((family) => {
                 const leadScenario = family.leadScenario;
                 const linkedParcel = leadScenario.parcelId ? parcelById.get(leadScenario.parcelId) ?? null : null;
+                const leadReportHref = buildScenarioReportHref(orgSlug, leadScenario);
+                const familyComparisonIds = getFamilyComparisonScenarioIds(family);
+                const familyCompareReportHref = familyComparisonIds.length >= 2
+                  ? buildScenarioComparisonHref(orgSlug, familyComparisonIds, {
+                    rankingTarget: leadScenario.optimizationTarget,
+                    report: true,
+                  })
+                  : null;
                 const nextAction = getGovernanceNextAction(leadScenario);
                 const suggestedScenario = family.suggestedLeadScenario;
                 const activateAction = setScenarioGovernanceAction.bind(
@@ -899,11 +952,25 @@ export default async function ScenariosPage({
 
                     <div className="ops-table__actions ops-table__actions--dense">
                       <div className="action-row">
-                        <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/${leadScenario.id}/builder`}>
-                          Open lead
+                        {leadReportHref ? (
+                          <Link className={buttonClasses({ size: "sm" })} href={leadReportHref}>
+                            Lead memo
+                          </Link>
+                        ) : (
+                          <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/${leadScenario.id}/builder`}>
+                            Open lead
+                          </Link>
+                        )}
+                        <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/scenarios/${leadScenario.id}/builder`}>
+                          Builder
                         </Link>
+                        {familyCompareReportHref ? (
+                          <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={familyCompareReportHref}>
+                            Compare family
+                          </Link>
+                        ) : null}
                         {linkedParcel ? (
-                          <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/parcels/${linkedParcel.id}`}>
+                          <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${linkedParcel.id}`}>
                             Open site
                           </Link>
                         ) : null}
@@ -997,6 +1064,14 @@ export default async function ScenariosPage({
                 const family = familySummariesByKey.get(scenario.familyKey) ?? null;
                 const isFamilyLead = family?.leadScenario.id === scenario.id;
                 const isSuggestedLead = family?.suggestedLeadScenario.id === scenario.id;
+                const scenarioReportHref = buildScenarioReportHref(orgSlug, scenario);
+                const familyComparisonIds = family ? getFamilyComparisonScenarioIds(family) : [];
+                const familyCompareReportHref = family && familyComparisonIds.length >= 2
+                  ? buildScenarioComparisonHref(orgSlug, familyComparisonIds, {
+                    rankingTarget: scenario.optimizationTarget,
+                    report: true,
+                  })
+                  : null;
                 const activateAction = setScenarioGovernanceAction.bind(
                   null,
                   orgSlug,
@@ -1087,9 +1162,23 @@ export default async function ScenariosPage({
 
                     <div className="ops-table__actions ops-table__actions--dense">
                       <div className="action-row action-row--compact">
-                        <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/${scenario.id}/builder`}>
-                          Open
+                        {scenarioReportHref ? (
+                          <Link className={buttonClasses({ size: "sm" })} href={scenarioReportHref}>
+                            Memo
+                          </Link>
+                        ) : (
+                          <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/${scenario.id}/builder`}>
+                            Open
+                          </Link>
+                        )}
+                        <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/scenarios/${scenario.id}/builder`}>
+                          Builder
                         </Link>
+                        {(scenario.isCurrentBest || isFamilyLead) && familyCompareReportHref ? (
+                          <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={familyCompareReportHref}>
+                            Compare family
+                          </Link>
+                        ) : null}
                         {scenario.governanceStatus !== ScenarioGovernanceStatus.ACTIVE_CANDIDATE ? (
                           <form action={activateAction}>
                             <button type="submit" className={buttonClasses({ variant: "secondary", size: "sm" })}>Activate</button>

@@ -3,7 +3,12 @@ import { isApiUnavailableError } from "@/lib/api/errors";
 import { isApiResponseError } from "@/lib/api/errors";
 import { getParcels } from "@/lib/api/parcels";
 import { getScenario, getScenarioRun, getScenarios } from "@/lib/api/scenarios";
-import { buildScenarioFamilySummaries, getSuggestedLeadReasonLabel } from "@/lib/scenarios/family-governance";
+import {
+  buildScenarioComparisonHref,
+  buildScenarioFamilySummaries,
+  getFamilyComparisonScenarioIds,
+  getSuggestedLeadReasonLabel,
+} from "@/lib/scenarios/family-governance";
 import { assumptionProfileLabels, humanizeTokenLabel } from "@/lib/ui/enum-labels";
 import { getRunVerdict } from "@/lib/ui/verdicts";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
@@ -88,6 +93,13 @@ export default async function ScenarioResultPage({
     const familySummaries = buildScenarioFamilySummaries(scenarios.items, parcelById);
     const family = familySummaries.find((item) => item.familyKey === scenario.familyKey) ?? null;
     const unresolvedFamily = result && family && family.healthStatus !== "HEALTHY" ? family : null;
+    const familyComparisonIds = family ? getFamilyComparisonScenarioIds(family) : [];
+    const familyCompareReportHref = familyComparisonIds.length >= 2
+      ? buildScenarioComparisonHref(orgSlug, familyComparisonIds, {
+        rankingTarget: scenario.optimizationTarget,
+        report: true,
+      })
+      : null;
     const familySearch = new URLSearchParams();
     if (scenario.parcelId) familySearch.set("siteId", scenario.parcelId);
     familySearch.set("strategy", scenario.strategyType);
@@ -99,7 +111,7 @@ export default async function ScenarioResultPage({
         <PageHeader
           eyebrow="Feasibility result"
           title={scenario.name}
-          description="Verdict first. Weaknesses, next move, and diagnostics right after."
+          description="Operational result view with a direct path into the memo-style report for internal review."
           meta={(
             <div className="action-row">
               <StatusBadge tone={getRunStatusTone(run.status)}>{humanizeTokenLabel(run.status)}</StatusBadge>
@@ -114,7 +126,7 @@ export default async function ScenarioResultPage({
               </Link>
               {result ? (
                 <Link className={buttonClasses()} href={reportHref}>
-                  Open report
+                  Open memo
                 </Link>
               ) : null}
             </>
@@ -261,6 +273,11 @@ export default async function ScenarioResultPage({
                     <Link className={buttonClasses()} href={familyBoardHref}>
                       Open family board
                     </Link>
+                    {familyCompareReportHref ? (
+                      <Link className={buttonClasses({ variant: "secondary" })} href={familyCompareReportHref}>
+                        Compare family
+                      </Link>
+                    ) : null}
                     {!scenario.isCurrentBest ? (
                       <form action={setScenarioCurrentBestAction.bind(null, orgSlug, scenario.id, familyBoardHref)}>
                         <button type="submit" className={buttonClasses({ variant: "secondary" })}>

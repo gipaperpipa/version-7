@@ -68,12 +68,16 @@ export class ScenariosService {
         },
       }),
     ]);
+    const latestRunIdByScenario = items.length
+      ? await this.buildLatestRunIdMap(items.map((item) => item.id))
+      : new Map<string, string>();
     const familyMetadata = this.buildFamilyMetadataMap(familyRows);
 
     return {
       items: items.map((item) => this.mapScenario(item, {
         workspaceDefaultTemplateKey: organization.defaultScenarioTemplateKey,
         familyMetadata,
+        latestRunId: latestRunIdByScenario.get(item.id) ?? null,
         readinessSnapshot: this.toReadinessSnapshot(this.scenarioValidationService.evaluateLoadedScenario(item).readiness),
       })),
       total,
@@ -199,10 +203,12 @@ export class ScenariosService {
         isCurrentBest: true,
       },
     });
+    const latestRunId = await this.getLatestRunIdForScenario(scenario.id);
 
     return this.mapScenario(scenario, {
       workspaceDefaultTemplateKey: resolvedWorkspaceDefaultTemplateKey,
       familyMetadata: this.buildFamilyMetadataMap(familyRows),
+      latestRunId,
       readinessSnapshot: this.toReadinessSnapshot(this.scenarioValidationService.evaluateLoadedScenario(scenario).readiness),
     });
   }
@@ -549,6 +555,7 @@ export class ScenariosService {
     options: {
       workspaceDefaultTemplateKey: string | null;
       familyMetadata: Map<string, { familyKey: string; familyVersion: number }>;
+      latestRunId: string | null;
       readinessSnapshot: ScenarioDto["readinessSnapshot"];
     },
   ): ScenarioDto {
@@ -596,6 +603,7 @@ export class ScenariosService {
         fallbackProfileKey: assumptionSet ? undefined : template?.profileKey,
       }),
       inputsJson: toApiJson(item.inputsJson),
+      latestRunId: options.latestRunId,
       latestRunAt: toApiDate(item.latestRunAt),
       readinessSnapshot: options.readinessSnapshot,
       fundingVariants: item.fundingVariants.map((variant) => ({
@@ -615,6 +623,42 @@ export class ScenariosService {
       createdAt: toApiDate(item.createdAt)!,
       updatedAt: toApiDate(item.updatedAt)!,
     };
+  }
+
+  private async buildLatestRunIdMap(scenarioIds: string[]) {
+    const rows = await this.prisma.scenarioRun.findMany({
+      where: {
+        organizationId: this.requestContext.organizationId,
+        scenarioId: { in: scenarioIds },
+      },
+      select: {
+        id: true,
+        scenarioId: true,
+      },
+      orderBy: [{ requestedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    });
+    const latestRunIdByScenario = new Map<string, string>();
+
+    for (const row of rows) {
+      if (!latestRunIdByScenario.has(row.scenarioId)) {
+        latestRunIdByScenario.set(row.scenarioId, row.id);
+      }
+    }
+
+    return latestRunIdByScenario;
+  }
+
+  private async getLatestRunIdForScenario(scenarioId: string) {
+    const latestRun = await this.prisma.scenarioRun.findFirst({
+      where: {
+        organizationId: this.requestContext.organizationId,
+        scenarioId,
+      },
+      orderBy: [{ requestedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+      select: { id: true },
+    });
+
+    return latestRun?.id ?? null;
   }
 
   private buildScenarioFamilyDefinition(
