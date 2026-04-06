@@ -297,9 +297,13 @@ export async function setScenarioGovernanceAction(
   returnTo: string,
 ) {
   try {
+    const payload: UpdateScenarioRequestDto = nextGovernanceStatus === ScenarioGovernanceStatus.ACTIVE_CANDIDATE
+      ? { governanceStatus: nextGovernanceStatus }
+      : { governanceStatus: nextGovernanceStatus, isCurrentBest: false };
+
     await apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}`, {
       method: "PATCH",
-      body: JSON.stringify({ governanceStatus: nextGovernanceStatus }),
+      body: JSON.stringify(payload),
     });
 
     revalidatePath(`/${orgSlug}/scenarios`);
@@ -359,11 +363,64 @@ export async function archiveScenarioVariantsAction(
     await Promise.all(
       scenarioIds.map((scenarioId) => apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}`, {
         method: "PATCH",
-        body: JSON.stringify({ governanceStatus: ScenarioGovernanceStatus.ARCHIVED }),
+        body: JSON.stringify({
+          governanceStatus: ScenarioGovernanceStatus.ARCHIVED,
+          isCurrentBest: false,
+        }),
       })),
     );
 
     revalidatePath(`/${orgSlug}/scenarios`);
+    redirect(returnTo);
+  } catch (error) {
+    if (isApiResponseError(error) || isApiUnavailableError(error)) {
+      redirect(buildErrorRedirect(returnTo, "status-request-failed", error.message));
+    }
+
+    throw error;
+  }
+}
+
+export async function resolveScenarioFamilyAction(
+  orgSlug: string,
+  returnTo: string,
+  formData: FormData,
+) {
+  const leadScenarioId = optionalString(formData, "leadScenarioId");
+  const archiveScenarioIds = Array.from(new Set(
+    formData
+      .getAll("archiveScenarioId")
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .filter((scenarioId) => scenarioId !== leadScenarioId),
+  ));
+
+  if (!leadScenarioId) {
+    redirect(returnTo);
+  }
+
+  try {
+    await apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${leadScenarioId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        governanceStatus: ScenarioGovernanceStatus.ACTIVE_CANDIDATE,
+        isCurrentBest: true,
+      }),
+    });
+
+    if (archiveScenarioIds.length) {
+      await Promise.all(
+        archiveScenarioIds.map((scenarioId) => apiFetch<ScenarioDto>(orgSlug, `/api/v1/scenarios/${scenarioId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            governanceStatus: ScenarioGovernanceStatus.ARCHIVED,
+            isCurrentBest: false,
+          }),
+        })),
+      );
+    }
+
+    revalidatePath(`/${orgSlug}/scenarios`);
+    revalidatePath(`/${orgSlug}/scenarios/${leadScenarioId}/builder`);
     redirect(returnTo);
   } catch (error) {
     if (isApiResponseError(error) || isApiUnavailableError(error)) {

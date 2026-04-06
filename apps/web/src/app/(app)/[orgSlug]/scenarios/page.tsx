@@ -32,6 +32,7 @@ import {
 } from "@/lib/ui/enum-labels";
 import {
   archiveScenarioVariantsAction,
+  resolveScenarioFamilyAction,
   setScenarioCurrentBestAction,
   setScenarioGovernanceAction,
 } from "./actions";
@@ -41,6 +42,14 @@ type AnchorScope = "ALL" | "GROUPED_SITE" | "STANDALONE" | "UNLINKED";
 type VariantView = "LEADS" | "ALL";
 type RunHistoryScope = "ANY" | "HAS_RUN" | "NO_RUN";
 type FundingScope = "ANY" | "HAS_ENABLED" | "NO_ENABLED";
+type SuggestedLeadReason =
+  | "CURRENT_BEST"
+  | "ONLY_ACTIVE_CANDIDATE"
+  | "LATEST_RUN"
+  | "LATEST_ACTIVE_VARIANT"
+  | "LATEST_DRAFT"
+  | "LATEST_ACTIVITY";
+type FamilyHealthStatus = "HEALTHY" | "NO_LEAD" | "TOO_MANY_ACTIVE" | "DRAFT_ONLY";
 
 type FamilySummary = {
   familyKey: string;
@@ -54,6 +63,16 @@ type FamilySummary = {
   activeCandidateCount: number;
   draftCount: number;
   archivedCount: number;
+  suggestedLeadScenario: ScenarioDto;
+  suggestedLeadReason: SuggestedLeadReason;
+  challengerScenario: ScenarioDto | null;
+  challengerCount: number;
+  explicitLeadExists: boolean;
+  healthStatus: FamilyHealthStatus;
+  healthTone: "success" | "warning" | "danger" | "neutral";
+  healthLabel: string;
+  healthDetail: string;
+  resolutionArchiveVariantIds: string[];
 };
 
 function formatScenarioSignal(value: string | null) {
@@ -178,6 +197,24 @@ function getLeadReasonLabel(reason: FamilySummary["leadReason"]) {
   }
 }
 
+function getSuggestedLeadReasonLabel(reason: SuggestedLeadReason) {
+  switch (reason) {
+    case "CURRENT_BEST":
+      return "Already current lead";
+    case "ONLY_ACTIVE_CANDIDATE":
+      return "Only active candidate";
+    case "LATEST_RUN":
+      return "Latest run among active variants";
+    case "LATEST_ACTIVE_VARIANT":
+      return "Most recently updated active variant";
+    case "LATEST_DRAFT":
+      return "Most recent draft";
+    case "LATEST_ACTIVITY":
+    default:
+      return "Latest activity in family";
+  }
+}
+
 function formatFundingState(scenario: ScenarioDto) {
   const enabledFundingCount = scenario.fundingVariants.filter((item) => item.isEnabled).length;
   return enabledFundingCount ? `${enabledFundingCount} lane${enabledFundingCount === 1 ? "" : "s"} enabled` : "No active stack";
@@ -198,6 +235,118 @@ function formatReadinessLine(scenario: ScenarioDto) {
       ? `${snapshot.confidenceBlockers} confidence blocker${snapshot.confidenceBlockers === 1 ? "" : "s"}`
       : `${snapshot.warningCount} warning${snapshot.warningCount === 1 ? "" : "s"}`;
   return `${humanizeTokenLabel(snapshot.status)} / ${blockerLine}`;
+}
+
+function getSuggestedLeadScenario(
+  scenarios: ScenarioDto[],
+  activeCandidates: ScenarioDto[],
+  drafts: ScenarioDto[],
+) {
+  const explicitLead = activeCandidates.find((scenario) => scenario.isCurrentBest) ?? null;
+  if (explicitLead) {
+    return {
+      scenario: explicitLead,
+      reason: "CURRENT_BEST" as const,
+    };
+  }
+
+  if (activeCandidates.length === 1) {
+    return {
+      scenario: activeCandidates[0],
+      reason: "ONLY_ACTIVE_CANDIDATE" as const,
+    };
+  }
+
+  const latestRunCandidate = [...activeCandidates]
+    .filter((scenario) => Boolean(scenario.latestRunAt))
+    .sort((left, right) => {
+      const runDelta = new Date(right.latestRunAt ?? right.updatedAt).getTime() - new Date(left.latestRunAt ?? left.updatedAt).getTime();
+      if (runDelta !== 0) return runDelta;
+      return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+    })[0] ?? null;
+
+  if (latestRunCandidate) {
+    return {
+      scenario: latestRunCandidate,
+      reason: "LATEST_RUN" as const,
+    };
+  }
+
+  if (activeCandidates.length) {
+    return {
+      scenario: [...activeCandidates].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())[0],
+      reason: "LATEST_ACTIVE_VARIANT" as const,
+    };
+  }
+
+  if (drafts.length) {
+    return {
+      scenario: [...drafts].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())[0],
+      reason: "LATEST_DRAFT" as const,
+    };
+  }
+
+  return {
+    scenario: [...scenarios].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())[0],
+    reason: "LATEST_ACTIVITY" as const,
+  };
+}
+
+function getFamilyHealth({
+  activeCandidateCount,
+  draftCount,
+  explicitLeadExists,
+  olderActiveVariantCount,
+}: {
+  activeCandidateCount: number;
+  draftCount: number;
+  explicitLeadExists: boolean;
+  olderActiveVariantCount: number;
+}) {
+  if (activeCandidateCount === 0 && draftCount > 0) {
+    return {
+      status: "DRAFT_ONLY" as const,
+      tone: "neutral" as const,
+      label: "Draft family",
+      detail: "This family is still exploratory. Promote a draft only when it becomes a real candidate.",
+    };
+  }
+
+  if (!explicitLeadExists && activeCandidateCount >= 3) {
+    return {
+      status: "NO_LEAD" as const,
+      tone: "danger" as const,
+      label: "No lead / too many active",
+      detail: `${activeCandidateCount} active variants are still competing without a current lead. Resolve this family before it gets noisier.`,
+    };
+  }
+
+  if (!explicitLeadExists && activeCandidateCount > 0) {
+    return {
+      status: "NO_LEAD" as const,
+      tone: "warning" as const,
+      label: "No current lead",
+      detail: "The family is in play, but nobody has marked which scenario the workspace is leaning toward.",
+    };
+  }
+
+  if (olderActiveVariantCount >= 2) {
+    return {
+      status: "TOO_MANY_ACTIVE" as const,
+      tone: "warning" as const,
+      label: "Too many active variants",
+      detail: `${olderActiveVariantCount} non-lead active variants are still cluttering the family. Keep a challenger if needed, but archive the rest.`,
+    };
+  }
+
+  return {
+    status: "HEALTHY" as const,
+    tone: "success" as const,
+    label: olderActiveVariantCount === 1 ? "Lead plus challenger" : "Healthy family",
+    detail: olderActiveVariantCount === 1
+      ? "The family has one clear lead and one active challenger still in play."
+      : "The family has one clear lead and no extra active clutter.",
+  };
 }
 
 function sortScenariosForBoard(
@@ -231,7 +380,16 @@ function buildFamilySummaries(scenarios: ScenarioDto[], parcelById: Map<string, 
     const activeCandidates = sorted.filter((scenario) => scenario.governanceStatus === ScenarioGovernanceStatus.ACTIVE_CANDIDATE);
     const drafts = sorted.filter((scenario) => scenario.governanceStatus === ScenarioGovernanceStatus.DRAFT);
     const explicitLead = activeCandidates.find((scenario) => scenario.isCurrentBest) ?? null;
-    const leadScenario = explicitLead ?? activeCandidates[0] ?? drafts[0] ?? sorted[0];
+    const suggestedLead = getSuggestedLeadScenario(sorted, activeCandidates, drafts);
+    const leadScenario = explicitLead ?? suggestedLead.scenario;
+    const challengerScenario = activeCandidates.find((scenario) => scenario.id !== leadScenario.id) ?? null;
+    const olderActiveVariantIds = activeCandidates.filter((scenario) => scenario.id !== leadScenario.id).map((scenario) => scenario.id);
+    const health = getFamilyHealth({
+      activeCandidateCount: activeCandidates.length,
+      draftCount: drafts.length,
+      explicitLeadExists: Boolean(explicitLead),
+      olderActiveVariantCount: olderActiveVariantIds.length,
+    });
     const linkedParcel = leadScenario.parcelId ? parcelById.get(leadScenario.parcelId) ?? null : null;
 
     return {
@@ -248,10 +406,20 @@ function buildFamilySummaries(scenarios: ScenarioDto[], parcelById: Map<string, 
       scenarios: sorted,
       groupedSiteAnchor: isGroupedSite(linkedParcel),
       anchorLabel: getSiteAnchorLabel(linkedParcel),
-      olderActiveVariantIds: activeCandidates.filter((scenario) => scenario.id !== leadScenario.id).map((scenario) => scenario.id),
+      olderActiveVariantIds,
       activeCandidateCount: activeCandidates.length,
       draftCount: drafts.length,
       archivedCount: sorted.filter((scenario) => scenario.governanceStatus === ScenarioGovernanceStatus.ARCHIVED).length,
+      suggestedLeadScenario: suggestedLead.scenario,
+      suggestedLeadReason: suggestedLead.reason,
+      challengerScenario,
+      challengerCount: olderActiveVariantIds.length,
+      explicitLeadExists: Boolean(explicitLead),
+      healthStatus: health.status,
+      healthTone: health.tone,
+      healthLabel: health.label,
+      healthDetail: health.detail,
+      resolutionArchiveVariantIds: activeCandidates.filter((scenario) => scenario.id !== suggestedLead.scenario.id).map((scenario) => scenario.id),
     } satisfies FamilySummary;
   }).sort((left, right) => {
     const anchorRank = Number(right.groupedSiteAnchor) - Number(left.groupedSiteAnchor);
@@ -313,6 +481,7 @@ export default async function ScenariosPage({
 
     const familySummaries = buildFamilySummaries(baseFilteredScenarios, parcelById);
     const familySummariesByKey = new Map(familySummaries.map((family) => [family.familyKey, family]));
+    const unresolvedFamilies = familySummaries.filter((family) => family.healthStatus !== "HEALTHY");
     const filteredScenarios = sortScenariosForBoard(
       baseFilteredScenarios.filter((scenario) => {
         if (variantView !== "LEADS") return true;
@@ -334,6 +503,7 @@ export default async function ScenariosPage({
     const withFundingEnabled = scenarios.items.filter((scenario) => scenario.fundingVariants.some((item) => item.isEnabled)).length;
     const workspaceGroupedSiteCount = parcels.items.filter((parcel) => isGroupedSite(parcel)).length;
     const groupedSiteAnchorGap = workspaceGroupedSiteCount > 0 && groupedSiteAnchoredCount === 0;
+    const healthyFamilyCount = familySummaries.length - unresolvedFamilies.length;
     const filterHref = buildBoardHref(orgSlug, {
       q: searchQuery,
       lifecycle,
@@ -391,6 +561,15 @@ export default async function ScenariosPage({
           </Alert>
         ) : null}
 
+        {unresolvedFamilies.length ? (
+          <Alert tone={unresolvedFamilies.some((family) => family.healthTone === "danger") ? "danger" : "warning"}>
+            <AlertTitle>{unresolvedFamilies.length} family{unresolvedFamilies.length === 1 ? "" : "ies"} need governance resolution</AlertTitle>
+            <AlertDescription>
+              Lead-first working view is active, but these families still need an explicit lead and/or active-variant cleanup before the workspace will feel disciplined.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
         <SectionCard
           className="index-surface index-surface--workspace"
           eyebrow="Governance posture"
@@ -404,19 +583,19 @@ export default async function ScenariosPage({
               <div className="ops-summary-item__detail">Explicit current-best scenarios across site-strategy families.</div>
             </div>
             <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Healthy families</div>
+              <div className="ops-summary-item__value">{healthyFamilyCount}</div>
+              <div className="ops-summary-item__detail">Families with a clear lead and controlled active clutter.</div>
+            </div>
+            <div className="ops-summary-item">
               <div className="ops-summary-item__label">Working families</div>
               <div className="ops-summary-item__value">{familySummaries.length}</div>
               <div className="ops-summary-item__detail">Families visible under the current lifecycle and filter scope.</div>
             </div>
             <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Grouped-site anchors</div>
-              <div className="ops-summary-item__value">{groupedSiteAnchoredCount}</div>
-              <div className="ops-summary-item__detail">Scenarios already grounded in grouped development sites.</div>
-            </div>
-            <div className="ops-summary-item">
-              <div className="ops-summary-item__label">Funding enabled</div>
-              <div className="ops-summary-item__value">{withFundingEnabled}</div>
-              <div className="ops-summary-item__detail">Cases with at least one active funding lane in the stack.</div>
+              <div className="ops-summary-item__label">Needs resolution</div>
+              <div className="ops-summary-item__value">{unresolvedFamilies.length}</div>
+              <div className="ops-summary-item__detail">Families still missing a clear lead or carrying too many active variants.</div>
             </div>
           </div>
         </SectionCard>
@@ -513,6 +692,116 @@ export default async function ScenariosPage({
         </SectionCard>
 
         <SectionCard
+          eyebrow="Family resolution"
+          title="Unhealthy families needing a decision"
+          description="Use this queue to adopt a lead, keep one challenger if needed, and archive uncontrolled active clutter. Suggestions are advisory and based on the current family evidence."
+        >
+          {unresolvedFamilies.length ? (
+            <div className="content-stack">
+              {unresolvedFamilies.map((family) => {
+                const suggestedScenario = family.suggestedLeadScenario;
+                const suggestedLinkedParcel = suggestedScenario.parcelId ? parcelById.get(suggestedScenario.parcelId) ?? null : null;
+                const adoptSuggestedLeadAction = setScenarioCurrentBestAction.bind(null, orgSlug, suggestedScenario.id, filterHref);
+                const archiveOlderAction = archiveScenarioVariantsAction.bind(null, orgSlug, filterHref);
+                const resolveAction = resolveScenarioFamilyAction.bind(null, orgSlug, filterHref);
+
+                return (
+                  <div key={`resolution-${family.familyKey}`} className="ops-table__row ops-table__row--parcels">
+                    <div className="ops-table__cell">
+                      <div className="list-row__body">
+                        <div className="list-row__title">
+                          <span className="list-row__title-text">{family.familyLabel}</span>
+                          <StatusBadge tone={family.healthTone}>{family.healthLabel}</StatusBadge>
+                          <StatusBadge tone={family.groupedSiteAnchor ? "accent" : "surface"}>
+                            {family.groupedSiteAnchor ? "Grouped-site family" : "Parcel family"}
+                          </StatusBadge>
+                        </div>
+                        <div className="inline-meta">
+                          <span className="meta-chip">{family.anchorLabel}</span>
+                          <span className="meta-chip">{optimizationTargetLabels[suggestedScenario.optimizationTarget]}</span>
+                          <span className="meta-chip">{family.activeCandidateCount} active candidate{family.activeCandidateCount === 1 ? "" : "s"}</span>
+                          {family.challengerCount ? <span className="meta-chip">{family.challengerCount} challenger{family.challengerCount === 1 ? "" : "s"}</span> : null}
+                        </div>
+                        <div className="list-row__meta list-row__meta--clamped">{family.healthDetail}</div>
+                      </div>
+                    </div>
+
+                    <div className="ops-table__cell">
+                      <div className="ops-cell-stack">
+                        <div className="ops-scan__label">Suggested lead</div>
+                        <div className="ops-scan__value">{suggestedScenario.name}</div>
+                        <div className="ops-scan__detail">
+                          {getSuggestedLeadReasonLabel(family.suggestedLeadReason)} / {formatReadinessLine(suggestedScenario)}
+                        </div>
+                        <div className="ops-scan__detail">{formatAssumptionLine(suggestedScenario)}</div>
+                      </div>
+                    </div>
+
+                    <div className="ops-table__cell">
+                      <div className="ops-cell-stack">
+                        <div className="ops-scan__label">Challenger posture</div>
+                        <div className="ops-scan__value">
+                          {family.challengerScenario ? family.challengerScenario.name : family.draftCount ? `${family.draftCount} draft variant${family.draftCount === 1 ? "" : "s"}` : "No active challenger"}
+                        </div>
+                        <div className="ops-scan__detail">
+                          {family.challengerScenario
+                            ? `${formatReadinessLine(family.challengerScenario)} / keep in play only if it is still a real alternative.`
+                            : "The family can be made cleaner without losing a live challenger."}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="ops-table__actions ops-table__actions--dense">
+                      <div className="action-row">
+                        <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/${suggestedScenario.id}/builder`}>
+                          Review suggestion
+                        </Link>
+                        {suggestedLinkedParcel ? (
+                          <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/parcels/${suggestedLinkedParcel.id}`}>
+                            Open site
+                          </Link>
+                        ) : null}
+                      </div>
+
+                      <div className="action-row action-row--compact">
+                        {!suggestedScenario.isCurrentBest ? (
+                          <form action={adoptSuggestedLeadAction}>
+                            <button type="submit" className={buttonClasses({ variant: "secondary", size: "sm" })}>Adopt suggested lead</button>
+                          </form>
+                        ) : null}
+                        {family.resolutionArchiveVariantIds.length ? (
+                          <form action={resolveAction}>
+                            <input type="hidden" name="leadScenarioId" value={suggestedScenario.id} />
+                            {family.resolutionArchiveVariantIds.map((scenarioId) => (
+                              <input key={scenarioId} type="hidden" name="archiveScenarioId" value={scenarioId} />
+                            ))}
+                            <button type="submit" className={buttonClasses({ size: "sm" })}>
+                              Resolve family
+                            </button>
+                          </form>
+                        ) : null}
+                        {family.olderActiveVariantIds.length ? (
+                          <form action={archiveOlderAction}>
+                            {family.olderActiveVariantIds.map((scenarioId) => (
+                              <input key={scenarioId} type="hidden" name="scenarioId" value={scenarioId} />
+                            ))}
+                            <button type="submit" className={buttonClasses({ variant: "ghost", size: "sm" })}>Archive non-lead actives</button>
+                          </form>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="field-help">
+              Every visible family already has a clear lead and controlled active clutter. Use the family board below for routine monitoring.
+            </div>
+          )}
+        </SectionCard>
+
+        <SectionCard
           eyebrow="Scenario families"
           title="Lead cases by site and strategy"
           description="Families help the board answer which case is the real candidate, which ones are exploratory drafts, and which older variants can leave the working set."
@@ -523,6 +812,7 @@ export default async function ScenariosPage({
                 const leadScenario = family.leadScenario;
                 const linkedParcel = leadScenario.parcelId ? parcelById.get(leadScenario.parcelId) ?? null : null;
                 const nextAction = getGovernanceNextAction(leadScenario);
+                const suggestedScenario = family.suggestedLeadScenario;
                 const activateAction = setScenarioGovernanceAction.bind(
                   null,
                   orgSlug,
@@ -545,7 +835,9 @@ export default async function ScenariosPage({
                   filterHref,
                 );
                 const makeLeadAction = setScenarioCurrentBestAction.bind(null, orgSlug, leadScenario.id, filterHref);
+                const adoptSuggestedLeadAction = setScenarioCurrentBestAction.bind(null, orgSlug, suggestedScenario.id, filterHref);
                 const archiveOlderAction = archiveScenarioVariantsAction.bind(null, orgSlug, filterHref);
+                const resolveAction = resolveScenarioFamilyAction.bind(null, orgSlug, filterHref);
 
                 return (
                   <div key={family.familyKey} className="ops-table__row ops-table__row--parcels">
@@ -556,6 +848,7 @@ export default async function ScenariosPage({
                           <StatusBadge tone={family.groupedSiteAnchor ? "accent" : "surface"}>
                             {family.groupedSiteAnchor ? "Grouped-site family" : "Parcel family"}
                           </StatusBadge>
+                          <StatusBadge tone={family.healthTone}>{family.healthLabel}</StatusBadge>
                           <StatusBadge tone={getScenarioGovernanceTone(leadScenario.governanceStatus)}>
                             {scenarioGovernanceStatusLabels[leadScenario.governanceStatus]}
                           </StatusBadge>
@@ -570,6 +863,11 @@ export default async function ScenariosPage({
                         <div className="list-row__meta list-row__meta--clamped">
                           {leadScenario.name} / {formatAssumptionLine(leadScenario)} / {formatReadinessLine(leadScenario)}
                         </div>
+                        {!family.explicitLeadExists ? (
+                          <div className="list-row__meta list-row__meta--clamped">
+                            Suggested lead: {suggestedScenario.name} / {getSuggestedLeadReasonLabel(family.suggestedLeadReason)}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
@@ -579,7 +877,7 @@ export default async function ScenariosPage({
                         <div className="action-row">
                           <StatusBadge tone={nextAction.tone}>{nextAction.label}</StatusBadge>
                         </div>
-                        <div className="ops-scan__detail">{nextAction.detail}</div>
+                        <div className="ops-scan__detail">{family.healthDetail}</div>
                       </div>
                     </div>
 
@@ -591,8 +889,10 @@ export default async function ScenariosPage({
                         </div>
                         <div className="ops-scan__detail">
                           {family.olderActiveVariantIds.length
-                            ? `${family.olderActiveVariantIds.length} older active variant${family.olderActiveVariantIds.length === 1 ? "" : "s"} can be archived from this family.`
-                            : "No extra active variants competing with the family lead right now."}
+                            ? `${family.olderActiveVariantIds.length} non-lead active variant${family.olderActiveVariantIds.length === 1 ? "" : "s"} still add clutter to this family.`
+                            : family.challengerScenario
+                              ? `One challenger remains active: ${family.challengerScenario.name}.`
+                              : "No extra active variants competing with the family lead right now."}
                         </div>
                       </div>
                     </div>
@@ -620,6 +920,11 @@ export default async function ScenariosPage({
                             <button type="submit" className={buttonClasses({ variant: "secondary", size: "sm" })}>Make lead</button>
                           </form>
                         ) : null}
+                        {!family.explicitLeadExists && suggestedScenario.id !== leadScenario.id ? (
+                          <form action={adoptSuggestedLeadAction}>
+                            <button type="submit" className={buttonClasses({ variant: "secondary", size: "sm" })}>Adopt suggestion</button>
+                          </form>
+                        ) : null}
                         {leadScenario.governanceStatus !== ScenarioGovernanceStatus.DRAFT ? (
                           <form action={draftAction}>
                             <button type="submit" className={buttonClasses({ variant: "ghost", size: "sm" })}>Move to draft</button>
@@ -635,7 +940,16 @@ export default async function ScenariosPage({
                             {family.olderActiveVariantIds.map((scenarioId) => (
                               <input key={scenarioId} type="hidden" name="scenarioId" value={scenarioId} />
                             ))}
-                            <button type="submit" className={buttonClasses({ variant: "secondary", size: "sm" })}>Archive older variants</button>
+                            <button type="submit" className={buttonClasses({ variant: "secondary", size: "sm" })}>Archive non-lead actives</button>
+                          </form>
+                        ) : null}
+                        {!family.explicitLeadExists && family.resolutionArchiveVariantIds.length ? (
+                          <form action={resolveAction}>
+                            <input type="hidden" name="leadScenarioId" value={suggestedScenario.id} />
+                            {family.resolutionArchiveVariantIds.map((scenarioId) => (
+                              <input key={scenarioId} type="hidden" name="archiveScenarioId" value={scenarioId} />
+                            ))}
+                            <button type="submit" className={buttonClasses({ size: "sm" })}>Resolve family</button>
                           </form>
                         ) : null}
                       </div>
@@ -682,6 +996,7 @@ export default async function ScenariosPage({
                 const linkedParcel = scenario.parcelId ? parcelById.get(scenario.parcelId) ?? null : null;
                 const family = familySummariesByKey.get(scenario.familyKey) ?? null;
                 const isFamilyLead = family?.leadScenario.id === scenario.id;
+                const isSuggestedLead = family?.suggestedLeadScenario.id === scenario.id;
                 const activateAction = setScenarioGovernanceAction.bind(
                   null,
                   orgSlug,
@@ -719,6 +1034,8 @@ export default async function ScenariosPage({
                           </StatusBadge>
                           {scenario.isCurrentBest ? <StatusBadge tone="accent">Current lead</StatusBadge> : null}
                           {!scenario.isCurrentBest && isFamilyLead ? <StatusBadge tone="info">Family lead</StatusBadge> : null}
+                          {!scenario.isCurrentBest && !isFamilyLead && isSuggestedLead ? <StatusBadge tone="warning">Suggested lead</StatusBadge> : null}
+                          {family && family.healthStatus !== "HEALTHY" ? <StatusBadge tone={family.healthTone}>{family.healthLabel}</StatusBadge> : null}
                         </div>
                         <div className="inline-meta">
                           <span className="meta-chip">v{scenario.familyVersion}</span>
@@ -727,7 +1044,9 @@ export default async function ScenariosPage({
                           <span className="meta-chip">Latest run {formatScenarioSignal(scenario.latestRunAt)}</span>
                         </div>
                         <div className="list-row__meta list-row__meta--clamped">
-                          {getGovernanceNextAction(scenario).detail}
+                          {isSuggestedLead && family && !family.explicitLeadExists
+                            ? `Advisory lead suggestion / ${getSuggestedLeadReasonLabel(family.suggestedLeadReason)}`
+                            : getGovernanceNextAction(scenario).detail}
                         </div>
                       </div>
                     </div>
