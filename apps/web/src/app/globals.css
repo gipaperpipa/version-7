@@ -92,10 +92,49 @@ body.app-root {
   gap: 10px;
 }
 
+.parcel-map-stage__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .parcel-map-badge-stack {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.parcel-map-style-toggle {
+  display: inline-flex;
+  padding: 4px;
+  border: 1px solid rgba(15, 22, 19, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-soft);
+}
+
+.parcel-map-style-toggle__button {
+  border: 0;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-strong);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.parcel-map-style-toggle__button.is-active {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.parcel-map-style-toggle__button:hover {
+  transform: translateY(-1px);
 }
 
 .parcel-map-canvas {
@@ -104,7 +143,7 @@ body.app-root {
   overflow: hidden;
   border: 1px solid rgba(15, 22, 19, 0.1);
   border-radius: 22px;
-  background: rgba(247, 249, 246, 0.9);
+  background: linear-gradient(180deg, #d9e4e0 0%, #c8d8d3 100%);
 }
 
 .parcel-map-canvas .maplibregl-map {
@@ -218,6 +257,10 @@ body.app-root {
 
   .parcel-map-stage {
     min-height: 0;
+  }
+
+  .parcel-map-stage__controls {
+    align-items: stretch;
   }
 }
 

@@ -31,7 +31,3 @@ export function getConfiguredApiBaseUrl() {
 
   return null;
 }
-
-export function getConfiguredMapStyleUrl() {
-  return process.env.NEXT_PUBLIC_MAP_STYLE_URL?.trim() || "https://demotiles.maplibre.org/style.json";
-}

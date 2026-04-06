@@ -36,6 +36,8 @@ type GeoJsonFeatureCollection = {
   features?: GeoJsonFeature[];
 };
 
+const HESSEN_ALLOWED_LIMITS = [1, 5, 10, 20, 50, 100, 200, 500] as const;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -195,6 +197,19 @@ function computeConfidenceScore(args: {
   return Math.max(72, Math.min(98, normalizeConfidenceScore(score) ?? 72));
 }
 
+function normalizeHessenLimit(limit: number) {
+  const safeLimit = Math.max(1, Math.min(Math.round(limit), HESSEN_ALLOWED_LIMITS[HESSEN_ALLOWED_LIMITS.length - 1]));
+  return HESSEN_ALLOWED_LIMITS.find((candidate) => candidate >= safeLimit) ?? HESSEN_ALLOWED_LIMITS[HESSEN_ALLOWED_LIMITS.length - 1];
+}
+
+function stripHtml(value: string) {
+  return value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export class SourceParcelHessenCadastreProvider implements SourceParcelProvider {
   readonly key = "hessen-alkis";
   readonly kind = "REAL" as const;
@@ -222,12 +237,15 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
 
     for (const seed of hessenSeeds) {
       const bbox = buildBbox(seed.centroid!, this.config.bboxRadiusMeters);
-      const url = new URL(`/collections/${encodeURIComponent(this.config.collectionId)}/items`, this.withTrailingSlash(this.config.baseUrl));
-      url.searchParams.set("f", "json");
-      url.searchParams.set("limit", String(Math.max(5, Math.min(limit * 2, 20))));
-      url.searchParams.set("bbox", [bbox.west, bbox.south, bbox.east, bbox.north].join(","));
+      const searchLimit = normalizeHessenLimit(Math.max(5, Math.min(limit * 2, 20)));
+      const urls = this.buildCollectionItemsUrlCandidates(null);
+      for (const url of urls) {
+        url.searchParams.set("f", "json");
+        url.searchParams.set("limit", String(searchLimit));
+        url.searchParams.set("bbox", [bbox.west, bbox.south, bbox.east, bbox.north].join(","));
+      }
 
-      const json = await this.fetchJson(url);
+      const json = await this.fetchJson(urls);
       if (!isFeatureCollection(json)) {
         throw new SourceParcelProviderError(
           "SOURCE_PROVIDER_LOOKUP_FAILED",
@@ -284,12 +302,14 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
     east: number;
     north: number;
   }, limit = 120) {
-    const url = new URL(`/collections/${encodeURIComponent(this.config.collectionId)}/items`, this.withTrailingSlash(this.config.baseUrl));
-    url.searchParams.set("f", "json");
-    url.searchParams.set("limit", String(Math.max(1, Math.min(limit, 200))));
-    url.searchParams.set("bbox", [bounds.west, bounds.south, bounds.east, bounds.north].join(","));
+    const urls = this.buildCollectionItemsUrlCandidates(null);
+    for (const url of urls) {
+      url.searchParams.set("f", "json");
+      url.searchParams.set("limit", String(normalizeHessenLimit(Math.max(1, Math.min(limit, 200)))));
+      url.searchParams.set("bbox", [bounds.west, bounds.south, bounds.east, bounds.north].join(","));
+    }
 
-    const json = await this.fetchJson(url);
+    const json = await this.fetchJson(urls);
     if (!isFeatureCollection(json)) {
       throw new SourceParcelProviderError(
         "SOURCE_PROVIDER_LOOKUP_FAILED",
@@ -320,12 +340,11 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
 
     const results: NormalizedSourceParcelRecord[] = [];
     for (const featureId of featureIds) {
-      const url = new URL(
-        `/collections/${encodeURIComponent(this.config.collectionId)}/items/${encodeURIComponent(featureId)}`,
-        this.withTrailingSlash(this.config.baseUrl),
-      );
-      url.searchParams.set("f", "json");
-      const json = await this.fetchJson(url);
+      const urls = this.buildCollectionItemsUrlCandidates(featureId);
+      for (const url of urls) {
+        url.searchParams.set("f", "json");
+      }
+      const json = await this.fetchJson(urls);
       if (!isFeature(json)) {
         throw new SourceParcelProviderError(
           "SOURCE_PROVIDER_LOOKUP_FAILED",
@@ -346,32 +365,95 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
       .filter((item): item is NormalizedSourceParcelRecord => Boolean(item));
   }
 
-  private withTrailingSlash(baseUrl: string) {
-    return baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  private buildCollectionItemsUrlCandidates(featureId: string | null) {
+    const baseUrl = this.config.baseUrl.trim().replace(/\/+$/, "");
+    const collectionPath = `/collections/${this.config.collectionId}`;
+    const encodedCollectionPath = `/collections/${encodeURIComponent(this.config.collectionId)}`;
+    const rootBase = baseUrl.replace(/\/collections\/[^/]+(?:\/items(?:\/[^/]+)?)?$/i, "");
+    const collectionBases = Array.from(new Set([
+      baseUrl,
+      `${baseUrl}${collectionPath}`,
+      `${baseUrl}${encodedCollectionPath}`,
+      `${rootBase}${collectionPath}`,
+      `${rootBase}${encodedCollectionPath}`,
+    ]))
+      .map((candidate) => candidate.replace(/\/+$/, ""))
+      .filter((candidate) => candidate.length > 0);
+
+    const itemSuffix = featureId ? `/items/${encodeURIComponent(featureId)}` : "/items";
+    return collectionBases.map((candidate) => new URL(`${candidate}${itemSuffix}`));
   }
 
-  private async fetchJson(url: URL) {
+  private async fetchJson(urls: URL[]) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    let lastError: SourceParcelProviderError | null = null;
 
     try {
-      const response = await fetch(url, {
-        headers: {
-          Accept: "application/geo+json,application/json",
-          "User-Agent": this.config.userAgent,
-        },
-        signal: controller.signal,
-      });
+      try {
+        for (const url of urls) {
+          const response = await fetch(url, {
+            headers: {
+              Accept: "application/geo+json,application/json",
+              "User-Agent": this.config.userAgent,
+            },
+            signal: controller.signal,
+          });
 
-      if (!response.ok) {
-        throw new SourceParcelProviderError(
-          response.status === 404 ? "SOURCE_PROVIDER_LOOKUP_FAILED" : "SOURCE_PROVIDER_UNAVAILABLE",
-          this.key,
-          `Hessen cadastre provider returned ${response.status} ${response.statusText}.`,
-        );
+          if (!response.ok) {
+            const messageBody = stripHtml(await response.text());
+            const providerError = new SourceParcelProviderError(
+              response.status === 404 ? "SOURCE_PROVIDER_LOOKUP_FAILED" : "SOURCE_PROVIDER_UNAVAILABLE",
+              this.key,
+              messageBody || `Hessen cadastre provider returned ${response.status} ${response.statusText}.`,
+            );
+            lastError = providerError;
+            if (response.status === 404) {
+              continue;
+            }
+            throw providerError;
+          }
+
+          const rawBody = await response.text();
+          const contentType = response.headers.get("content-type") ?? "";
+          if (contentType.includes("json")) {
+            try {
+              return JSON.parse(rawBody);
+            } catch {
+              const providerError = new SourceParcelProviderError(
+                "SOURCE_PROVIDER_LOOKUP_FAILED",
+                this.key,
+                "Hessen cadastre provider returned malformed JSON.",
+              );
+              lastError = providerError;
+              continue;
+            }
+          }
+
+          try {
+            return JSON.parse(rawBody);
+          } catch {
+            lastError = new SourceParcelProviderError(
+              "SOURCE_PROVIDER_LOOKUP_FAILED",
+              this.key,
+              stripHtml(rawBody) || "Hessen cadastre provider returned a non-JSON response.",
+            );
+            continue;
+          }
+        }
+      } catch (error) {
+        if (error instanceof SourceParcelProviderError) {
+          lastError = error;
+          throw error;
+        }
+        throw error;
       }
 
-      return await response.json();
+      throw lastError ?? new SourceParcelProviderError(
+        "SOURCE_PROVIDER_LOOKUP_FAILED",
+        this.key,
+        "Hessen cadastre provider could not resolve the requested collection URL.",
+      );
     } catch (error) {
       if (error instanceof SourceParcelProviderError) {
         throw error;

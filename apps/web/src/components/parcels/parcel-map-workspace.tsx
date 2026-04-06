@@ -8,12 +8,16 @@ import type {
   SourceParcelMapConfigDto,
 } from "@repo/contracts";
 import maplibregl from "maplibre-gl";
-import Map, { Layer, NavigationControl, Source, type MapRef, type ViewState } from "react-map-gl/maplibre";
+import Map, { Layer, NavigationControl, ScaleControl, Source, type MapRef, type ViewState } from "react-map-gl/maplibre";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { buttonClasses } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge, getConfidenceTone } from "@/components/ui/status-badge";
-import { getConfiguredMapStyleUrl } from "@/lib/local-dev";
+import {
+  getParcelMapBasemapLabel,
+  getParcelMapBasemapStyle,
+  type ParcelMapBasemapMode,
+} from "@/lib/maps/map-styles";
 import { getConfidenceBand, getSourceAuthorityDetail, getSourceAuthorityLabel } from "@/lib/ui/provenance";
 
 type SourceParcelItem = SearchSourceParcelsResponseDto["items"][number];
@@ -190,6 +194,14 @@ function getSelectionButtonLabel(item: SourceParcelItem, isSelected: boolean) {
 }
 
 function getCoverageMessage(previewState: PreviewState) {
+  if (previewState.error && previewState.activeRegion) {
+    return {
+      tone: "warning" as const,
+      title: `Parcel-grade provider unavailable in ${previewState.activeRegion.name}`,
+      description: "The configured cadastral provider did not return parcel geometry for this map view. Keep navigating for guidance, or use fallback intake until the provider recovers.",
+    };
+  }
+
   if (previewState.coverageState === "PARCEL_SELECTION_AVAILABLE") {
     return {
       tone: "success" as const,
@@ -347,7 +359,7 @@ function getMapPreviewUrl(orgSlug: string, bounds: SourceParcelMapBoundsDto, zoo
     east: String(bounds.east),
     north: String(bounds.north),
     zoom: zoom.toFixed(2),
-    limit: "90",
+    limit: "50",
   });
   return `/api/org/${orgSlug}/parcels/source/map/previews?${search.toString()}`;
 }
@@ -383,6 +395,7 @@ export default function ParcelMapWorkspace({
 }: ParcelMapWorkspaceProps) {
   const mapRef = useRef<MapRef | null>(null);
   const [viewState, setViewState] = useState<ViewState>(() => deriveInitialViewState(mapConfig, searchResults));
+  const [basemapMode, setBasemapMode] = useState<ParcelMapBasemapMode>("streets");
   const [mapLoaded, setMapLoaded] = useState(false);
   const [viewportBounds, setViewportBounds] = useState<SourceParcelMapBoundsDto | null>(null);
   const [previewState, setPreviewState] = useState<PreviewState>({
@@ -399,10 +412,9 @@ export default function ParcelMapWorkspace({
   const [siteName, setSiteName] = useState("");
   const [autoFocusedSearch, setAutoFocusedSearch] = useState(false);
 
-  const mapStyleUrl = getConfiguredMapStyleUrl();
+  const activeBasemapStyle = getParcelMapBasemapStyle(basemapMode);
   const regionFeatures = toRegionFeatureCollection(mapConfig.supportedRegions);
   const parcelFeatures = toParcelFeatureCollection(previewState.items);
-  const coverageMessage = getCoverageMessage(previewState);
   const selectedParcelIds = selectedParcels.map((item) => item.id);
   const selectedLockedCount = selectedParcels.filter((item) => item.workspaceState === "EXISTING_STANDALONE_LOCKED").length;
   const selectedIncompleteCount = selectedParcels.filter((item) => !item.hasGeometry || !item.hasLandArea).length;
@@ -411,6 +423,18 @@ export default function ParcelMapWorkspace({
     const numeric = Number(item.landAreaSqm ?? "");
     return Number.isFinite(numeric) ? total + numeric : total;
   }, 0);
+  const viewportSupportedRegion = viewportBounds
+    ? mapConfig.supportedRegions.find((region) => (
+      region.bounds.west <= viewportBounds.east
+      && region.bounds.east >= viewportBounds.west
+      && region.bounds.south <= viewportBounds.north
+      && region.bounds.north >= viewportBounds.south
+    )) ?? null
+    : null;
+  const coverageMessage = getCoverageMessage({
+    ...previewState,
+    activeRegion: previewState.activeRegion ?? viewportSupportedRegion,
+  });
 
   function updateViewportBounds() {
     const bounds = mapRef.current?.getBounds();
@@ -426,14 +450,22 @@ export default function ParcelMapWorkspace({
     });
   }
 
+  function focusOnBounds(bounds: BoundsTuple, maxZoom = 17.8) {
+    if (!mapRef.current) {
+      return;
+    }
+
+    mapRef.current.fitBounds(bounds, {
+      padding: 72,
+      maxZoom,
+      duration: 700,
+    });
+  }
+
   function focusOnParcel(item: SourceParcelItem) {
     const bounds = getGeometryBounds(item.geom);
-    if (bounds && mapRef.current) {
-      mapRef.current.fitBounds(bounds, {
-        padding: 72,
-        maxZoom: 17.8,
-        duration: 700,
-      });
+    if (bounds) {
+      focusOnBounds(bounds, 17.8);
     } else if (item.centroid && mapRef.current) {
       mapRef.current.easeTo({
         center: item.centroid.coordinates,
@@ -460,6 +492,30 @@ export default function ParcelMapWorkspace({
       return [...current, item];
     });
     setFocusedParcel(item);
+  }
+
+  function focusOnSupportedRegion() {
+    const region = previewState.activeRegion ?? mapConfig.supportedRegions[0] ?? null;
+    if (!region) {
+      return;
+    }
+
+    focusOnBounds([
+      [region.bounds.west, region.bounds.south],
+      [region.bounds.east, region.bounds.north],
+    ], 12.2);
+  }
+
+  function resetGermanyView() {
+    if (!mapRef.current) {
+      return;
+    }
+
+    mapRef.current.easeTo({
+      center: mapConfig.defaultCenter.coordinates,
+      zoom: mapConfig.defaultZoom,
+      duration: 700,
+    });
   }
 
   useEffect(() => {
@@ -915,8 +971,30 @@ export default function ParcelMapWorkspace({
                 <StatusBadge tone="info">Search-guided only elsewhere</StatusBadge>
                 <StatusBadge tone="accent">Zoom {mapConfig.minParcelSelectionZoom.toFixed(0)}+ for parcel click selection</StatusBadge>
               </div>
+              <div className="parcel-map-stage__controls">
+                <div className="parcel-map-style-toggle" role="tablist" aria-label="Basemap style">
+                  {(["streets", "satellite"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={mode === basemapMode ? "parcel-map-style-toggle__button is-active" : "parcel-map-style-toggle__button"}
+                      onClick={() => setBasemapMode(mode)}
+                    >
+                      {getParcelMapBasemapLabel(mode)}
+                    </button>
+                  ))}
+                </div>
+                <div className="action-row">
+                  <button type="button" className={buttonClasses({ variant: "secondary", size: "sm" })} onClick={focusOnSupportedRegion}>
+                    Zoom to Hessen support
+                  </button>
+                  <button type="button" className={buttonClasses({ variant: "ghost", size: "sm" })} onClick={resetGermanyView}>
+                    Reset Germany view
+                  </button>
+                </div>
+              </div>
               <div className="field-help">
-                Supported cadastral-grade region: {mapConfig.supportedRegions.map((region) => region.name).join(", ")}.
+                Basemap: {getParcelMapBasemapLabel(basemapMode)}. Supported cadastral-grade region: {mapConfig.supportedRegions.map((region) => region.name).join(", ")}.
               </div>
             </div>
 
@@ -938,7 +1016,7 @@ export default function ParcelMapWorkspace({
               <Map
                 ref={mapRef}
                 mapLib={maplibregl}
-                mapStyle={mapStyleUrl}
+                mapStyle={activeBasemapStyle}
                 initialViewState={viewState}
                 onLoad={() => {
                   setMapLoaded(true);
@@ -972,6 +1050,7 @@ export default function ParcelMapWorkspace({
                 reuseMaps
               >
                 <NavigationControl position="top-right" visualizePitch={false} />
+                <ScaleControl position="bottom-left" maxWidth={120} unit="metric" />
 
                 <Source id="supported-regions" type="geojson" data={regionFeatures}>
                   <Layer {...(supportedRegionFillLayer as any)} />
