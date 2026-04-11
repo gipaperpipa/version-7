@@ -69,15 +69,17 @@ export class SourceParcelProviderRegistryService {
       timeoutMs: toPositiveInt(this.configService.get<string>("SOURCE_PARCEL_REQUEST_TIMEOUT_MS"), 8000),
     });
     this.cadastralProvider = new SourceParcelHessenCadastreProvider({
-      baseUrl: this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_BASE_URL") ?? "https://www.geoportal.hessen.de/spatial-objects/696",
-      collectionId: this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_COLLECTION") ?? "adv:AX_Flurstueck",
+      apiBaseUrl: this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_BASE_URL") ?? "https://www.geoportal.hessen.de/spatial-objects/710",
+      collectionId: this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_COLLECTION") ?? "cp:CadastralParcel",
+      wfsBaseUrl: this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_WFS_BASE_URL") ?? "https://inspire-hessen.de/ows/services/org.2.d66ec21e-39e7-45c4-bf68-438e8baea882_wfs",
+      wfsTypeName: this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_WFS_TYPENAME") ?? "cp:CadastralParcel",
       userAgent: this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_USER_AGENT") ?? `FeasibilityOS/1.0 (+${apiPublicUrl})`,
       timeoutMs: toPositiveInt(this.configService.get<string>("SOURCE_PARCEL_REQUEST_TIMEOUT_MS"), 8000),
       bboxRadiusMeters: toPositiveInt(this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_BBOX_RADIUS_METERS"), 80),
-      bboxWest: toNumber(this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_BBOX_WEST"), 7.72773488253286),
-      bboxSouth: toNumber(this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_BBOX_SOUTH"), 49.3853352467796),
-      bboxEast: toNumber(this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_BBOX_EAST"), 10.250584394266),
-      bboxNorth: toNumber(this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_BBOX_NORTH"), 51.660323450879),
+      bboxWest: toNumber(this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_BBOX_WEST"), 7.772467),
+      bboxSouth: toNumber(this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_BBOX_SOUTH"), 49.395272),
+      bboxEast: toNumber(this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_BBOX_EAST"), 10.236414),
+      bboxNorth: toNumber(this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_BBOX_NORTH"), 51.657789),
       maxSeedCount: toPositiveInt(this.configService.get<string>("SOURCE_PARCEL_HESSEN_CADASTRE_MAX_SEED_COUNT"), 4),
     }, this.searchGradeProvider);
     this.realProviders = [this.cadastralProvider, this.searchGradeProvider];

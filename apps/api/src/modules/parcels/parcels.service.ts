@@ -34,6 +34,7 @@ import {
   normalizeConfidenceScore,
   toNullableDecimalString,
 } from "./source-parcel-model";
+import { SourceParcelCacheService } from "./source-parcel-cache.service";
 import { SourceParcelProviderRegistryService } from "./source-parcel-provider-registry.service";
 import { SourceParcelProviderError } from "./source-parcel-provider";
 
@@ -413,6 +414,7 @@ export class ParcelsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly requestContext: RequestContextService,
+    private readonly sourceParcelCache: SourceParcelCacheService,
     private readonly sourceParcelProviders: SourceParcelProviderRegistryService,
   ) {}
 
@@ -458,6 +460,7 @@ export class ParcelsService {
 
   async searchSource(query?: string | null, municipality?: string | null, limit = 12): Promise<SearchSourceParcelsResponseDto> {
     const results = await this.getSourceSearchResults(query, municipality, limit);
+    await this.sourceParcelCache.upsertMany(results.items);
     return {
       ...results,
       items: await this.enrichSourceSearchItems(results.items),
@@ -516,8 +519,25 @@ export class ParcelsService {
       };
     }
 
+    const freshCachedItems = await this.sourceParcelCache.getFreshByBounds(activeRegion.id, bounds, limit);
+    if (freshCachedItems.length) {
+      const enrichedItems = await this.enrichSourceSearchItems(freshCachedItems);
+      return {
+        items: enrichedItems,
+        total: enrichedItems.length,
+        page: 1,
+        pageSize: enrichedItems.length || limit,
+        bounds,
+        zoom,
+        minParcelSelectionZoom: MAP_MIN_PARCEL_SELECTION_ZOOM,
+        coverageState: "PARCEL_SELECTION_AVAILABLE",
+        activeRegion,
+      };
+    }
+
     try {
       const items = await this.sourceParcelProviders.searchByBounds(bounds, limit);
+      await this.sourceParcelCache.upsertMany(items);
       const enrichedItems = await this.enrichSourceSearchItems(items);
       return {
         items: enrichedItems,
@@ -531,6 +551,21 @@ export class ParcelsService {
         activeRegion,
       };
     } catch (error) {
+      const staleCachedItems = await this.sourceParcelCache.getAnyByBounds(activeRegion.id, bounds, limit);
+      if (staleCachedItems.length) {
+        const enrichedItems = await this.enrichSourceSearchItems(staleCachedItems);
+        return {
+          items: enrichedItems,
+          total: enrichedItems.length,
+          page: 1,
+          pageSize: enrichedItems.length || limit,
+          bounds,
+          zoom,
+          minParcelSelectionZoom: MAP_MIN_PARCEL_SELECTION_ZOOM,
+          coverageState: "PARCEL_SELECTION_AVAILABLE",
+          activeRegion,
+        };
+      }
       this.rethrowSourceProviderError(error, "Source parcel map previews are currently unavailable.");
     }
   }
@@ -1197,9 +1232,38 @@ export class ParcelsService {
   }
 
   private async getSourceParcelsByIds(sourceParcelIds: string[]) {
+    const freshCachedRecords = await this.sourceParcelCache.getFreshByIds(sourceParcelIds);
+    const cachedById = new Map(freshCachedRecords.map((item) => [item.id, item]));
+    const missingIds = sourceParcelIds.filter((item) => !cachedById.has(item));
+
+    if (!missingIds.length) {
+      return sourceParcelIds
+        .map((item) => cachedById.get(item) ?? null)
+        .filter((item): item is SourceParcelSearchResultDto => Boolean(item));
+    }
+
     try {
-      return await this.sourceParcelProviders.getByIds(sourceParcelIds);
+      const fetchedRecords = await this.sourceParcelProviders.getByIds(missingIds);
+      await this.sourceParcelCache.upsertMany(fetchedRecords);
+      const combinedById = new Map([
+        ...freshCachedRecords.map((item) => [item.id, item] as const),
+        ...fetchedRecords.map((item) => [item.id, item] as const),
+      ]);
+
+      return sourceParcelIds
+        .map((item) => combinedById.get(item) ?? null)
+        .filter((item): item is SourceParcelSearchResultDto => Boolean(item));
     } catch (error) {
+      const staleCachedRecords = await this.sourceParcelCache.getAnyByIds(sourceParcelIds);
+      const staleById = new Map(staleCachedRecords.map((item) => [item.id, item]));
+      const recovered = sourceParcelIds
+        .map((item) => cachedById.get(item) ?? staleById.get(item) ?? null)
+        .filter((item): item is SourceParcelSearchResultDto => Boolean(item));
+
+      if (recovered.length === sourceParcelIds.length) {
+        return recovered;
+      }
+
       this.rethrowSourceProviderError(error, "The configured source parcel provider is unavailable for parcel lookup.");
     }
   }

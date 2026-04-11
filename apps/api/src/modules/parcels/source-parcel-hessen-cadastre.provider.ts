@@ -13,8 +13,10 @@ import {
 } from "./source-parcel-provider";
 
 type HessenCadastreProviderConfig = {
-  baseUrl: string;
+  apiBaseUrl: string;
   collectionId: string;
+  wfsBaseUrl: string;
+  wfsTypeName: string;
   userAgent: string;
   timeoutMs: number;
   bboxRadiusMeters: number;
@@ -29,14 +31,13 @@ type GeoJsonFeature = {
   id?: string | number;
   geometry?: PolygonalGeometryDto | null;
   properties?: Record<string, unknown> | null;
+  bbox?: [number, number, number, number] | null;
 };
 
 type GeoJsonFeatureCollection = {
   type?: string;
   features?: GeoJsonFeature[];
 };
-
-const HESSEN_ALLOWED_LIMITS = [1, 5, 10, 20, 50, 100, 200, 500] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -124,50 +125,12 @@ function getScalarValue(properties: Record<string, unknown>, pattern: RegExp) {
   return null;
 }
 
-function parseArea(properties: Record<string, unknown>) {
-  const areaKeys = [
-    /amtliche.*flaeche/i,
-    /flaeche/i,
-    /landparcel.*area/i,
-    /area/i,
-  ];
-
-  for (const keyPattern of areaKeys) {
-    const raw = getScalarValue(properties, keyPattern);
-    if (!raw) continue;
-    const normalized = Number(String(raw).replace(",", ".").replace(/[^0-9.-]/g, ""));
-    if (Number.isFinite(normalized) && normalized > 0) {
-      return toNullableDecimalString(normalized);
-    }
+function getFeatureId(feature: GeoJsonFeature, properties: Record<string, unknown>) {
+  if (feature.id != null) {
+    return String(feature.id);
   }
 
-  return null;
-}
-
-function buildCadastralId(properties: Record<string, unknown>, featureId: string) {
-  const direct = [
-    /flurstueckskennzeichen/i,
-    /flurstueck.*kennzeichen/i,
-    /landparcelidentifier/i,
-    /flurstuecksnummer/i,
-  ]
-    .map((pattern) => getScalarValue(properties, pattern))
-    .find((value): value is string => Boolean(value));
-  if (direct) {
-    return direct;
-  }
-
-  const gemarkung = getScalarValue(properties, /gemarkung/i);
-  const flur = getScalarValue(properties, /flur/i);
-  const zaehler = getScalarValue(properties, /zaehler/i);
-  const nenner = getScalarValue(properties, /nenner/i);
-  if (gemarkung || flur || zaehler || nenner) {
-    const primary = [gemarkung, flur].filter(Boolean).join("-");
-    const parcelNumber = [zaehler, nenner].filter(Boolean).join("/");
-    return [primary, parcelNumber].filter(Boolean).join("-");
-  }
-
-  return featureId;
+  return getScalarValue(properties, /gml_id|localid|nationalcadastralreference/i);
 }
 
 function getMunicipality(properties: Record<string, unknown>) {
@@ -182,29 +145,59 @@ function getAddressLine(properties: Record<string, unknown>) {
   return getScalarValue(properties, /lagebezeichnung|anschrift|address|lage/i);
 }
 
+function getCadastralLabel(properties: Record<string, unknown>) {
+  return getScalarValue(properties, /label|flurstuecksnummer|cadastral/i);
+}
+
+function getStableParcelReference(properties: Record<string, unknown>, featureId: string) {
+  return getScalarValue(properties, /nationalcadastralreference|localid|gml_id/i) ?? featureId;
+}
+
+function parseArea(properties: Record<string, unknown>) {
+  const rawValue = getScalarValue(properties, /areavalue|flaeche|area/i);
+  if (!rawValue) {
+    return null;
+  }
+
+  const numeric = Number(String(rawValue).replace(",", ".").replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(numeric) && numeric > 0 ? toNullableDecimalString(numeric) : null;
+}
+
+function parsePositionPoint(properties: Record<string, unknown>) {
+  const rawPosition = getScalarValue(properties, /pos/i);
+  if (!rawPosition) {
+    return null;
+  }
+
+  const parts = rawPosition
+    .split(/\s+/)
+    .map((item) => Number(item))
+    .filter((item) => Number.isFinite(item));
+  if (parts.length !== 2) {
+    return null;
+  }
+
+  const [latitude, longitude] = parts;
+  return toPoint(longitude, latitude);
+}
+
 function computeConfidenceScore(args: {
   hasGeometry: boolean;
   hasLandArea: boolean;
   municipalityName: string | null;
   districtName: string | null;
-  cadastralId: string | null;
+  cadastralReference: string | null;
 }) {
-  let score = args.hasGeometry ? 94 : 74;
+  let score = args.hasGeometry ? 95 : 74;
   if (args.hasLandArea) score += 3;
-  if (args.municipalityName) score += 2;
+  if (args.municipalityName) score += 1;
   if (args.districtName) score += 1;
-  if (args.cadastralId) score += 2;
-  return Math.max(72, Math.min(98, normalizeConfidenceScore(score) ?? 72));
+  if (args.cadastralReference) score += 1;
+  return Math.max(74, Math.min(99, normalizeConfidenceScore(score) ?? 74));
 }
 
-function normalizeHessenLimit(limit: number) {
-  const safeLimit = Math.max(1, Math.min(Math.round(limit), HESSEN_ALLOWED_LIMITS[HESSEN_ALLOWED_LIMITS.length - 1]));
-  return HESSEN_ALLOWED_LIMITS.find((candidate) => candidate >= safeLimit) ?? HESSEN_ALLOWED_LIMITS[HESSEN_ALLOWED_LIMITS.length - 1];
-}
-
-function stripHtml(value: string) {
+function stripMarkup(value: string) {
   return value
-    .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -224,7 +217,11 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
   }
 
   async search(query?: string | null, municipality?: string | null, limit = 12) {
-    const seedResults = await this.searchSeedProvider.search(query, municipality, Math.max(1, Math.min(this.config.maxSeedCount, limit)));
+    const seedResults = await this.searchSeedProvider.search(
+      query,
+      municipality,
+      Math.max(1, Math.min(this.config.maxSeedCount, limit)),
+    );
     const hessenSeeds = seedResults
       .filter((item) => isPoint(item.centroid))
       .filter((item) => isInsideBounds(item.centroid!, this.config));
@@ -237,23 +234,7 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
 
     for (const seed of hessenSeeds) {
       const bbox = buildBbox(seed.centroid!, this.config.bboxRadiusMeters);
-      const searchLimit = normalizeHessenLimit(Math.max(5, Math.min(limit * 2, 20)));
-      const urls = this.buildCollectionItemsUrlCandidates(null);
-      for (const url of urls) {
-        url.searchParams.set("f", "json");
-        url.searchParams.set("limit", String(searchLimit));
-        url.searchParams.set("bbox", [bbox.west, bbox.south, bbox.east, bbox.north].join(","));
-      }
-
-      const json = await this.fetchJson(urls);
-      if (!isFeatureCollection(json)) {
-        throw new SourceParcelProviderError(
-          "SOURCE_PROVIDER_LOOKUP_FAILED",
-          this.key,
-          "Hessen cadastre provider returned an unexpected search payload.",
-        );
-      }
-
+      const json = await this.fetchWfsFeatureCollection(bbox, Math.max(5, Math.min(limit * 2, 20)));
       for (const feature of json.features ?? []) {
         const mapped = this.mapFeature(feature, seed);
         if (!mapped || !isPoint(mapped.centroid) || !isPoint(seed.centroid)) {
@@ -284,7 +265,7 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
         id: "hessen-alkis",
         name: "Hessen parcel-grade selection",
         providerName: "Hessen ALKIS Flurstueck",
-        description: "Parcel-grade map selection is supported inside the Hessen ALKIS coverage area only.",
+        description: "Parcel-grade map selection is supported inside the Hessen INSPIRE cadastral coverage area only.",
         sourceAuthority: "CADASTRAL_GRADE" as const,
         bounds: {
           west: this.config.bboxWest,
@@ -296,27 +277,16 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
     ];
   }
 
-  async searchByBounds(bounds: {
-    west: number;
-    south: number;
-    east: number;
-    north: number;
-  }, limit = 120) {
-    const urls = this.buildCollectionItemsUrlCandidates(null);
-    for (const url of urls) {
-      url.searchParams.set("f", "json");
-      url.searchParams.set("limit", String(normalizeHessenLimit(Math.max(1, Math.min(limit, 200)))));
-      url.searchParams.set("bbox", [bounds.west, bounds.south, bounds.east, bounds.north].join(","));
-    }
-
-    const json = await this.fetchJson(urls);
-    if (!isFeatureCollection(json)) {
-      throw new SourceParcelProviderError(
-        "SOURCE_PROVIDER_LOOKUP_FAILED",
-        this.key,
-        "Hessen cadastre provider returned an unexpected map preview payload.",
-      );
-    }
+  async searchByBounds(
+    bounds: {
+      west: number;
+      south: number;
+      east: number;
+      north: number;
+    },
+    limit = 120,
+  ) {
+    const json = await this.fetchWfsFeatureCollection(bounds, limit);
 
     return (json.features ?? [])
       .map((feature) => this.mapFeature(feature, null))
@@ -340,19 +310,7 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
 
     const results: NormalizedSourceParcelRecord[] = [];
     for (const featureId of featureIds) {
-      const urls = this.buildCollectionItemsUrlCandidates(featureId);
-      for (const url of urls) {
-        url.searchParams.set("f", "json");
-      }
-      const json = await this.fetchJson(urls);
-      if (!isFeature(json)) {
-        throw new SourceParcelProviderError(
-          "SOURCE_PROVIDER_LOOKUP_FAILED",
-          this.key,
-          "Hessen cadastre provider returned an unexpected parcel lookup payload.",
-        );
-      }
-
+      const json = await this.fetchApiFeature(featureId);
       const mapped = this.mapFeature(json, null);
       if (mapped) {
         results.push(mapped);
@@ -365,95 +323,98 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
       .filter((item): item is NormalizedSourceParcelRecord => Boolean(item));
   }
 
-  private buildCollectionItemsUrlCandidates(featureId: string | null) {
-    const baseUrl = this.config.baseUrl.trim().replace(/\/+$/, "");
-    const collectionPath = `/collections/${this.config.collectionId}`;
-    const encodedCollectionPath = `/collections/${encodeURIComponent(this.config.collectionId)}`;
-    const rootBase = baseUrl.replace(/\/collections\/[^/]+(?:\/items(?:\/[^/]+)?)?$/i, "");
-    const collectionBases = Array.from(new Set([
-      baseUrl,
-      `${baseUrl}${collectionPath}`,
-      `${baseUrl}${encodedCollectionPath}`,
-      `${rootBase}${collectionPath}`,
-      `${rootBase}${encodedCollectionPath}`,
-    ]))
-      .map((candidate) => candidate.replace(/\/+$/, ""))
-      .filter((candidate) => candidate.length > 0);
-
-    const itemSuffix = featureId ? `/items/${encodeURIComponent(featureId)}` : "/items";
-    return collectionBases.map((candidate) => new URL(`${candidate}${itemSuffix}`));
+  private buildApiItemUrl(featureId: string) {
+    const baseUrl = this.config.apiBaseUrl.trim().replace(/\/+$/, "");
+    const url = new URL(`${baseUrl}/collections/${this.config.collectionId}/items/${encodeURIComponent(featureId)}`);
+    url.searchParams.set("f", "json");
+    return url;
   }
 
-  private async fetchJson(urls: URL[]) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
-    let lastError: SourceParcelProviderError | null = null;
+  private buildWfsUrl(bounds: {
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+  }, limit: number) {
+    const url = new URL(this.config.wfsBaseUrl);
+    url.searchParams.set("service", "WFS");
+    url.searchParams.set("version", "2.0.0");
+    url.searchParams.set("request", "GetFeature");
+    url.searchParams.set("typeNames", this.config.wfsTypeName);
+    url.searchParams.set("count", String(Math.max(1, Math.min(limit, 200))));
+    url.searchParams.set("bbox", [bounds.west, bounds.south, bounds.east, bounds.north, "EPSG:4326"].join(","));
+    url.searchParams.set("srsName", "EPSG:4326");
+    url.searchParams.set("outputFormat", "application/geo+json");
+    return url;
+  }
 
-    try {
-      try {
-        for (const url of urls) {
-          const response = await fetch(url, {
-            headers: {
-              Accept: "application/geo+json,application/json",
-              "User-Agent": this.config.userAgent,
-            },
-            signal: controller.signal,
-          });
-
-          if (!response.ok) {
-            const messageBody = stripHtml(await response.text());
-            const providerError = new SourceParcelProviderError(
-              response.status === 404 ? "SOURCE_PROVIDER_LOOKUP_FAILED" : "SOURCE_PROVIDER_UNAVAILABLE",
-              this.key,
-              messageBody || `Hessen cadastre provider returned ${response.status} ${response.statusText}.`,
-            );
-            lastError = providerError;
-            if (response.status === 404) {
-              continue;
-            }
-            throw providerError;
-          }
-
-          const rawBody = await response.text();
-          const contentType = response.headers.get("content-type") ?? "";
-          if (contentType.includes("json")) {
-            try {
-              return JSON.parse(rawBody);
-            } catch {
-              const providerError = new SourceParcelProviderError(
-                "SOURCE_PROVIDER_LOOKUP_FAILED",
-                this.key,
-                "Hessen cadastre provider returned malformed JSON.",
-              );
-              lastError = providerError;
-              continue;
-            }
-          }
-
-          try {
-            return JSON.parse(rawBody);
-          } catch {
-            lastError = new SourceParcelProviderError(
-              "SOURCE_PROVIDER_LOOKUP_FAILED",
-              this.key,
-              stripHtml(rawBody) || "Hessen cadastre provider returned a non-JSON response.",
-            );
-            continue;
-          }
-        }
-      } catch (error) {
-        if (error instanceof SourceParcelProviderError) {
-          lastError = error;
-          throw error;
-        }
-        throw error;
-      }
-
-      throw lastError ?? new SourceParcelProviderError(
+  private async fetchApiFeature(featureId: string) {
+    const url = this.buildApiItemUrl(featureId);
+    const payload = await this.fetchJson(url, "Hessen cadastral parcel lookup is currently unavailable.");
+    if (!isFeature(payload)) {
+      throw new SourceParcelProviderError(
         "SOURCE_PROVIDER_LOOKUP_FAILED",
         this.key,
-        "Hessen cadastre provider could not resolve the requested collection URL.",
+        "Hessen cadastre provider returned an unexpected parcel lookup payload.",
       );
+    }
+
+    return payload;
+  }
+
+  private async fetchWfsFeatureCollection(
+    bounds: {
+      west: number;
+      south: number;
+      east: number;
+      north: number;
+    },
+    limit: number,
+  ) {
+    const url = this.buildWfsUrl(bounds, limit);
+    const payload = await this.fetchJson(url, "Hessen cadastral parcel preview is currently unavailable.");
+    if (!isFeatureCollection(payload)) {
+      throw new SourceParcelProviderError(
+        "SOURCE_PROVIDER_LOOKUP_FAILED",
+        this.key,
+        "Hessen cadastre provider returned an unexpected parcel preview payload.",
+      );
+    }
+
+    return payload;
+  }
+
+  private async fetchJson(url: URL, fallbackMessage: string) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/geo+json,application/json",
+          "User-Agent": this.config.userAgent,
+        },
+        signal: controller.signal,
+      });
+
+      const rawBody = await response.text();
+      if (!response.ok) {
+        throw new SourceParcelProviderError(
+          response.status === 404 ? "SOURCE_PROVIDER_LOOKUP_FAILED" : "SOURCE_PROVIDER_UNAVAILABLE",
+          this.key,
+          stripMarkup(rawBody) || `Hessen cadastre provider returned ${response.status} ${response.statusText}.`,
+        );
+      }
+
+      try {
+        return JSON.parse(rawBody);
+      } catch {
+        throw new SourceParcelProviderError(
+          "SOURCE_PROVIDER_LOOKUP_FAILED",
+          this.key,
+          stripMarkup(rawBody) || "Hessen cadastre provider returned malformed JSON.",
+        );
+      }
     } catch (error) {
       if (error instanceof SourceParcelProviderError) {
         throw error;
@@ -462,7 +423,7 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
       throw new SourceParcelProviderError(
         "SOURCE_PROVIDER_UNAVAILABLE",
         this.key,
-        "Hessen cadastre provider is currently unavailable.",
+        fallbackMessage,
         error,
       );
     } finally {
@@ -471,35 +432,36 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
   }
 
   private mapFeature(feature: GeoJsonFeature, searchSeed: NormalizedSourceParcelRecord | null) {
-    const featureId = feature.id != null ? String(feature.id) : null;
+    const properties = isRecord(feature.properties) ? feature.properties : {};
+    const featureId = getFeatureId(feature, properties);
     if (!featureId) {
       return null;
     }
 
-    const properties = isRecord(feature.properties) ? feature.properties : {};
     const geom = normalizeGeometry(feature.geometry);
-    const cadastralId = buildCadastralId(properties, featureId);
+    const stableReference = getStableParcelReference(properties, featureId);
+    const cadastralLabel = getCadastralLabel(properties) ?? stableReference;
     const sourceAreaSqm = parseArea(properties);
     const resolvedAreaSqm = sourceAreaSqm ?? toNullableDecimalString(calculateMultiPolygonAreaSqm(geom));
     const municipalityName = getMunicipality(properties) ?? searchSeed?.municipalityName ?? searchSeed?.city ?? null;
     const districtName = getDistrict(properties) ?? searchSeed?.districtName ?? null;
     const addressLine1 = getAddressLine(properties) ?? searchSeed?.addressLine1 ?? null;
-    const centroid = geom ? undefined : searchSeed?.centroid ?? null;
+    const centroid = geom ? undefined : parsePositionPoint(properties) ?? searchSeed?.centroid ?? null;
     const confidenceScore = computeConfidenceScore({
       hasGeometry: Boolean(geom),
       hasLandArea: Boolean(resolvedAreaSqm),
       municipalityName,
       districtName,
-      cadastralId,
+      cadastralReference: stableReference,
     });
 
     return buildNormalizedSourceSearchResult({
       id: buildSourceId(featureId),
       providerName: "Hessen ALKIS Flurstueck",
-      providerParcelId: cadastralId,
+      providerParcelId: stableReference,
       sourceAuthority: "CADASTRAL_GRADE",
-      displayName: municipalityName && cadastralId ? `${municipalityName} ${cadastralId}` : cadastralId,
-      cadastralId,
+      displayName: municipalityName && cadastralLabel ? `${municipalityName} ${cadastralLabel}` : cadastralLabel,
+      cadastralId: cadastralLabel,
       addressLine1,
       city: municipalityName,
       postalCode: searchSeed?.postalCode ?? null,
@@ -512,16 +474,21 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
       geom,
       centroid: centroid ?? undefined,
       rawMetadata: {
-        sourceSystem: "hessen-alkis-ogc-api-features",
+        sourceSystem: "hessen-inspire-cadastralparcel",
         providerKind: "REAL",
         sourceAuthority: "CADASTRAL_GRADE",
         providerFeatureId: featureId,
         providerCollection: this.config.collectionId,
-        providerBaseUrl: this.config.baseUrl,
+        providerBaseUrl: this.config.apiBaseUrl,
+        wfsBaseUrl: this.config.wfsBaseUrl,
         sourceAreaSqm,
         resolvedAreaSource: sourceAreaSqm ? "PROVIDER_AREA_FIELD" : resolvedAreaSqm ? "GEOMETRY_DERIVED" : null,
         geometryResolution: geom ? "CADASTRAL_FEATURE_GEOMETRY" : "GEOMETRY_NOT_RETURNED",
         geometryAuthority: geom ? "PARCEL_GRADE" : "NONE",
+        inspireIdentifier: getScalarValue(properties, /identifier/i),
+        localId: getScalarValue(properties, /localid/i),
+        nationalCadastralReference: getScalarValue(properties, /nationalcadastralreference/i),
+        label: getScalarValue(properties, /label/i),
         searchSeed: searchSeed
           ? {
               id: searchSeed.id,
@@ -532,12 +499,6 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
           : null,
         coverage: "HESSEN_ONLY",
         providerPropertyKeys: Object.keys(properties).sort(),
-        providerParcelAttributes: {
-          cadastralId,
-          municipalityName,
-          districtName,
-          addressLine1,
-        },
       },
     });
   }

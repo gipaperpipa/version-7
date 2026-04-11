@@ -203,6 +203,26 @@ model ParcelGroup {
   scenarios         Scenario[]
 }
 
+model SourceParcelCache {
+  id               String   @id @default(uuid())
+  providerKey      String
+  sourceParcelId   String   @unique
+  providerName     String
+  providerParcelId String
+  sourceAuthority  String
+  bboxWest         Float?
+  bboxSouth        Float?
+  bboxEast         Float?
+  bboxNorth        Float?
+  recordJson       Json
+  fetchedAt        DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([providerKey, fetchedAt])
+  @@index([providerKey, providerParcelId])
+}
+
 model PlanningParameter {
   id                String               @id @default(uuid())
   organizationId    String
