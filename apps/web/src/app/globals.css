@@ -92,6 +92,27 @@ body.app-root {
   gap: 10px;
 }
 
+.parcel-map-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.parcel-map-guide-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid rgba(15, 22, 19, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.parcel-map-guide-card strong {
+  font-size: 0.94rem;
+  letter-spacing: -0.02em;
+}
+
 .parcel-map-stage__controls {
   display: flex;
   flex-wrap: wrap;
@@ -167,6 +188,7 @@ body.app-root {
   box-shadow: var(--shadow-soft);
   font-size: 0.84rem;
   font-weight: 700;
+  max-width: min(420px, calc(100% - 32px));
 }
 
 .parcel-map-search-results,
@@ -261,6 +283,10 @@ body.app-root {
 
   .parcel-map-stage__controls {
     align-items: stretch;
+  }
+
+  .parcel-map-guide-grid {
+    grid-template-columns: 1fr;
   }
 }
 

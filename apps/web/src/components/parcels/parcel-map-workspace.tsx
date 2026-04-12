@@ -129,6 +129,94 @@ function formatArea(area: string | null | undefined) {
   return `${numeric.toLocaleString("en-US", { maximumFractionDigits: 0 })} sqm`;
 }
 
+function joinReadableParts(parts: Array<string | null | undefined>) {
+  return parts
+    .map((part) => part?.trim())
+    .filter((part, index, array): part is string => Boolean(part) && array.indexOf(part) === index);
+}
+
+function getParcelTitle(item: SourceParcelItem) {
+  const label = item.cadastralId ?? item.displayName ?? item.providerParcelId;
+  if (!label) {
+    return "Parcel";
+  }
+
+  return /^parcel\b/i.test(label) ? label : `Parcel ${label}`;
+}
+
+function getParcelLocationLabel(item: SourceParcelItem) {
+  const postalLocality = item.postalCode
+    ? `${item.postalCode} ${item.municipalityName ?? item.city ?? ""}`.trim()
+    : null;
+  const locality = joinReadableParts([
+    item.addressLine1,
+    postalLocality,
+    item.municipalityName ?? item.city,
+    item.districtName,
+    item.stateCode === "HE" ? "Hessen" : null,
+  ]);
+
+  if (locality.length) {
+    return locality.join(" | ");
+  }
+
+  if (item.sourceAuthority === "CADASTRAL_GRADE" && item.stateCode === "HE") {
+    return "Supported Hessen parcel-grade area";
+  }
+
+  if (item.sourceAuthority === "SEARCH_GRADE") {
+    return "Search-guided location in Germany";
+  }
+
+  return item.countryCode === "DE" ? "Germany" : item.countryCode ?? "Location unresolved";
+}
+
+function getParcelReferenceLabel(item: SourceParcelItem) {
+  const details = joinReadableParts([
+    item.providerName,
+    item.providerParcelId && item.providerParcelId !== item.cadastralId ? `Ref ${item.providerParcelId}` : null,
+  ]);
+
+  return details.length ? details.join(" | ") : "Provider reference unavailable";
+}
+
+function getHumanReadableCompleteness(item: SourceParcelItem) {
+  if (item.hasGeometry && item.hasLandArea) {
+    return "Geometry and area are source resolved.";
+  }
+
+  const gaps = [];
+  if (!item.hasGeometry) gaps.push("geometry");
+  if (!item.hasLandArea) gaps.push("area");
+  return `Still waiting on ${gaps.join(" and ")} from source.`;
+}
+
+function roundPreviewCoordinate(value: number, precision = 5) {
+  return Number(value.toFixed(precision));
+}
+
+function normalizePreviewBounds(bounds: SourceParcelMapBoundsDto): SourceParcelMapBoundsDto {
+  return {
+    west: roundPreviewCoordinate(bounds.west),
+    south: roundPreviewCoordinate(bounds.south),
+    east: roundPreviewCoordinate(bounds.east),
+    north: roundPreviewCoordinate(bounds.north),
+  };
+}
+
+function getViewportPreviewLimit(zoom: number) {
+  if (zoom < 15.4) {
+    return 18;
+  }
+  if (zoom < 16.2) {
+    return 24;
+  }
+  if (zoom < 17) {
+    return 32;
+  }
+  return 40;
+}
+
 function getWorkspaceStateLabel(workspaceState: SourceParcelItem["workspaceState"]) {
   switch (workspaceState) {
     case "EXISTING_STANDALONE_REUSABLE":
@@ -197,8 +285,8 @@ function getCoverageMessage(previewState: PreviewState) {
   if (previewState.error && previewState.activeRegion) {
     return {
       tone: "warning" as const,
-      title: `Parcel-grade provider unavailable in ${previewState.activeRegion.name}`,
-      description: "The configured cadastral provider did not return parcel geometry for this map view. Keep navigating for guidance, or use fallback intake until the provider recovers.",
+      title: `Parcel previews are unavailable in ${previewState.activeRegion.name}`,
+      description: "The cadastral provider did not return parcel geometry for this view. Keep the map for guidance, or use fallback intake until the provider recovers.",
     };
   }
 
@@ -206,26 +294,26 @@ function getCoverageMessage(previewState: PreviewState) {
     return {
       tone: "success" as const,
       title: previewState.activeRegion
-        ? `Parcel-grade selection available in ${previewState.activeRegion.name}`
-        : "Parcel-grade selection available",
-      description: "The visible parcel geometry is coming from the supported cadastral provider. Click a parcel to inspect and select it.",
+        ? `Parcel click selection is live in ${previewState.activeRegion.name}`
+        : "Parcel click selection is live",
+      description: "The visible polygons are source-fetched cadastral parcels. Click one to inspect it, or multi-select to assemble a grouped site.",
     };
   }
 
   if (previewState.coverageState === "ZOOM_IN_REQUIRED") {
     return {
       tone: "warning" as const,
-      title: "Zoom in to load parcel geometry",
+      title: "Zoom closer to parcel level",
       description: previewState.activeRegion
-        ? `Parcel-grade map selection is supported in ${previewState.activeRegion.name}, but you need to zoom to ${previewState.minParcelSelectionZoom.toFixed(0)}+ before parcel polygons will load.`
+        ? `You are inside ${previewState.activeRegion.name}, but parcel polygons only load from zoom ${previewState.minParcelSelectionZoom.toFixed(0)} and closer.`
         : `Zoom to ${previewState.minParcelSelectionZoom.toFixed(0)}+ to load supported parcel geometry.`,
     };
   }
 
   return {
     tone: "info" as const,
-    title: "Search-guided only here",
-    description: "Map navigation and search guidance work across Germany, but parcel-grade click selection is currently limited to supported Hessen coverage.",
+    title: "Search-guided only in this view",
+    description: "You can search and navigate anywhere in Germany, but parcel-grade click selection is only available inside supported Hessen coverage for now.",
   };
 }
 
@@ -352,14 +440,15 @@ function deriveInitialViewState(
   };
 }
 
-function getMapPreviewUrl(orgSlug: string, bounds: SourceParcelMapBoundsDto, zoom: number) {
+function getMapPreviewUrl(orgSlug: string, bounds: SourceParcelMapBoundsDto, zoom: number, limit: number) {
+  const normalizedBounds = normalizePreviewBounds(bounds);
   const search = new URLSearchParams({
-    west: String(bounds.west),
-    south: String(bounds.south),
-    east: String(bounds.east),
-    north: String(bounds.north),
+    west: String(normalizedBounds.west),
+    south: String(normalizedBounds.south),
+    east: String(normalizedBounds.east),
+    north: String(normalizedBounds.north),
     zoom: zoom.toFixed(2),
-    limit: "50",
+    limit: String(limit),
   });
   return `/api/org/${orgSlug}/parcels/source/map/previews?${search.toString()}`;
 }
@@ -394,6 +483,7 @@ export default function ParcelMapWorkspace({
   searchErrorMessage,
 }: ParcelMapWorkspaceProps) {
   const mapRef = useRef<MapRef | null>(null);
+  const previewCacheRef = useRef(new globalThis.Map<string, Omit<PreviewState, "loading" | "error">>());
   const [viewState, setViewState] = useState<ViewState>(() => deriveInitialViewState(mapConfig, searchResults));
   const [basemapMode, setBasemapMode] = useState<ParcelMapBasemapMode>("streets");
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -423,6 +513,9 @@ export default function ParcelMapWorkspace({
     const numeric = Number(item.landAreaSqm ?? "");
     return Number.isFinite(numeric) ? total + numeric : total;
   }, 0);
+  const previewLimit = getViewportPreviewLimit(viewState.zoom);
+  const roundedZoom = Number(viewState.zoom.toFixed(1));
+  const zoomShortfall = Math.max(0, mapConfig.minParcelSelectionZoom - roundedZoom);
   const viewportSupportedRegion = viewportBounds
     ? mapConfig.supportedRegions.find((region) => (
       region.bounds.west <= viewportBounds.east
@@ -435,6 +528,9 @@ export default function ParcelMapWorkspace({
     ...previewState,
     activeRegion: previewState.activeRegion ?? viewportSupportedRegion,
   });
+  const loadingMessage = previewState.items.length
+    ? "Refreshing parcel previews for the current map window..."
+    : "Loading parcel previews. The first request in a new Hessen area can take longer while the provider and cache warm up.";
 
   function updateViewportBounds() {
     const bounds = mapRef.current?.getBounds();
@@ -532,17 +628,30 @@ export default function ParcelMapWorkspace({
       return;
     }
 
+    const normalizedBounds = normalizePreviewBounds(viewportBounds);
+    const previewRequestKey = JSON.stringify({
+      ...normalizedBounds,
+      zoom: Number(viewState.zoom.toFixed(2)),
+      limit: previewLimit,
+    });
+    const cachedPreview = previewCacheRef.current.get(previewRequestKey);
     const controller = new AbortController();
     const timeout = window.setTimeout(async () => {
-      setPreviewState((current) => ({
-        ...current,
-        loading: true,
-        error: null,
-      }));
+      setPreviewState((current) => cachedPreview
+        ? {
+            ...cachedPreview,
+            loading: false,
+            error: null,
+          }
+        : {
+            ...current,
+            loading: true,
+            error: null,
+          });
 
       try {
         const response = await fetch(
-          getMapPreviewUrl(orgSlug, viewportBounds, viewState.zoom),
+          getMapPreviewUrl(orgSlug, normalizedBounds, viewState.zoom, previewLimit),
           {
             signal: controller.signal,
             cache: "no-store",
@@ -558,11 +667,15 @@ export default function ParcelMapWorkspace({
           return;
         }
 
-        setPreviewState({
+        const nextPreviewState = {
           items: nextItems,
           coverageState: payload.coverageState ?? "SEARCH_GUIDANCE_ONLY",
           activeRegion: payload.activeRegion ?? null,
           minParcelSelectionZoom: payload.minParcelSelectionZoom ?? mapConfig.minParcelSelectionZoom,
+        };
+        previewCacheRef.current.set(previewRequestKey, nextPreviewState);
+        setPreviewState({
+          ...nextPreviewState,
           loading: false,
           error: null,
         });
@@ -592,7 +705,7 @@ export default function ParcelMapWorkspace({
       controller.abort();
       clearTimeout(timeout);
     };
-  }, [mapConfig.minParcelSelectionZoom, orgSlug, viewportBounds, viewState.zoom]);
+  }, [mapConfig.minParcelSelectionZoom, orgSlug, previewLimit, viewportBounds, viewState.zoom]);
 
   return (
     <div className="parcel-map-workspace">
@@ -657,8 +770,8 @@ export default function ParcelMapWorkspace({
                       <div key={item.id} className="parcel-map-result-card">
                         <div className="parcel-map-result-card__header">
                           <div>
-                            <h3>{item.displayName}</h3>
-                            <p>{item.providerName} / {item.providerParcelId}</p>
+                            <h3>{getParcelTitle(item)}</h3>
+                            <p>{getParcelLocationLabel(item)}</p>
                           </div>
                           <div className="parcel-map-badge-stack">
                             <StatusBadge tone={getWorkspaceStateTone(item.workspaceState)}>
@@ -671,7 +784,7 @@ export default function ParcelMapWorkspace({
                         </div>
                         <div className="parcel-map-detail-list">
                           <span>{getSourceAuthorityLabel(item.sourceAuthority) ?? "Source-backed"}</span>
-                          <span>{item.municipalityName ?? item.city ?? "Germany"}</span>
+                          <span>{getParcelReferenceLabel(item)}</span>
                           <span>{formatArea(item.landAreaSqm)}</span>
                         </div>
                         <p className="field-help">
@@ -720,7 +833,7 @@ export default function ParcelMapWorkspace({
 
         <SectionCard
           eyebrow="Focused parcel"
-          title={focusedParcel ? focusedParcel.displayName : "Click a parcel to inspect it"}
+          title={focusedParcel ? getParcelTitle(focusedParcel) : "Click a parcel to inspect it"}
           description={focusedParcel
             ? "The parcel preview below is coming from the provider layer, not from manual drawing."
             : "When you click a parcel in supported Hessen coverage, its provider, authority, completeness, and workspace state show up here."}
@@ -730,8 +843,9 @@ export default function ParcelMapWorkspace({
               <div className="parcel-map-preview-header">
                 <div>
                   <div className="section-kicker">{focusedParcel.providerName}</div>
-                  <h3>{focusedParcel.providerParcelId}</h3>
-                  <p>{focusedParcel.addressLine1 ?? focusedParcel.municipalityName ?? focusedParcel.city ?? "Germany"}</p>
+                  <h3>{getParcelTitle(focusedParcel)}</h3>
+                  <p>{getParcelLocationLabel(focusedParcel)}</p>
+                  <div className="field-help">{getParcelReferenceLabel(focusedParcel)}</div>
                 </div>
                 <div className="parcel-map-badge-stack">
                   <StatusBadge tone={getWorkspaceStateTone(focusedParcel.workspaceState)}>
@@ -757,7 +871,7 @@ export default function ParcelMapWorkspace({
                 <div>
                   <div className="section-kicker">Completeness</div>
                   <div>{focusedParcel.hasGeometry && focusedParcel.hasLandArea ? "Source primary" : "Source incomplete"}</div>
-                  <div className="field-help">{focusedParcel.hasGeometry ? "Geometry ready." : "Geometry unresolved."} {focusedParcel.hasLandArea ? "Area ready." : "Area unresolved."}</div>
+                  <div className="field-help">{getHumanReadableCompleteness(focusedParcel)}</div>
                 </div>
                 <div>
                   <div className="section-kicker">Workspace</div>
@@ -857,8 +971,9 @@ export default function ParcelMapWorkspace({
                 {selectedParcels.map((item) => (
                   <div key={item.id} className="parcel-map-selected-item">
                     <div>
-                      <strong>{item.displayName}</strong>
-                      <div className="field-help">{item.providerName} / {item.providerParcelId} / {formatArea(item.landAreaSqm)}</div>
+                      <strong>{getParcelTitle(item)}</strong>
+                      <div className="field-help">{getParcelLocationLabel(item)}</div>
+                      <div className="field-help">{getParcelReferenceLabel(item)} / {formatArea(item.landAreaSqm)}</div>
                     </div>
                     <div className="action-row">
                       <StatusBadge tone={getWorkspaceStateTone(item.workspaceState)}>
@@ -994,7 +1109,7 @@ export default function ParcelMapWorkspace({
                 </div>
               </div>
               <div className="field-help">
-                Basemap: {getParcelMapBasemapLabel(basemapMode)}. Supported cadastral-grade region: {mapConfig.supportedRegions.map((region) => region.name).join(", ")}.
+                Basemap: {getParcelMapBasemapLabel(basemapMode)}. Supported cadastral-grade region: {mapConfig.supportedRegions.map((region) => region.name).join(", ")}. Preview limit: {previewLimit} parcels per map request.
               </div>
             </div>
 
@@ -1003,6 +1118,35 @@ export default function ParcelMapWorkspace({
                 <AlertTitle>{coverageMessage.title}</AlertTitle>
                 <AlertDescription>{coverageMessage.description}</AlertDescription>
               </Alert>
+              <div className="parcel-map-guide-grid">
+                <div className="parcel-map-guide-card">
+                  <div className="section-kicker">Support state</div>
+                  <strong>{viewportSupportedRegion ? `Inside ${viewportSupportedRegion.name}` : "Outside parcel-grade coverage"}</strong>
+                  <div className="field-help">
+                    {viewportSupportedRegion
+                      ? "Parcel click selection is available here once you are zoomed in enough."
+                      : "Use search and the map for location guidance here. Parcel clicking is not implied outside supported Hessen coverage."}
+                  </div>
+                </div>
+                <div className="parcel-map-guide-card">
+                  <div className="section-kicker">Zoom state</div>
+                  <strong>{roundedZoom.toFixed(1)} current zoom</strong>
+                  <div className="field-help">
+                    {zoomShortfall > 0
+                      ? `Zoom about ${zoomShortfall.toFixed(1)} level${zoomShortfall >= 1.5 ? "s" : ""} closer to reach parcel selection at ${mapConfig.minParcelSelectionZoom.toFixed(0)}+.`
+                      : "You are close enough for parcel clicking in supported coverage."}
+                  </div>
+                </div>
+                <div className="parcel-map-guide-card">
+                  <div className="section-kicker">Loading expectation</div>
+                  <strong>{previewState.loading ? "Refreshing live previews" : "Ready for parcel inspection"}</strong>
+                  <div className="field-help">
+                    {previewState.loading
+                      ? loadingMessage
+                      : "If the map still looks empty, move into Hessen and zoom to parcel level before expecting clickable polygons."}
+                  </div>
+                </div>
+              </div>
               {previewState.error ? (
                 <Alert tone="warning">
                   <AlertTitle>Map previews unavailable</AlertTitle>
@@ -1012,7 +1156,7 @@ export default function ParcelMapWorkspace({
             </div>
 
             <div className="parcel-map-canvas">
-              {previewState.loading ? <div className="parcel-map-loading">Loading parcel previews...</div> : null}
+              {previewState.loading ? <div className="parcel-map-loading">{loadingMessage}</div> : null}
               <Map
                 ref={mapRef}
                 mapLib={maplibregl}

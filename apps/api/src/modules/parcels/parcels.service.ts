@@ -535,6 +535,23 @@ export class ParcelsService {
       };
     }
 
+    const staleCachedItems = await this.sourceParcelCache.getAnyByBounds(activeRegion.id, bounds, limit);
+    if (staleCachedItems.length) {
+      void this.refreshSourceMapPreviewCache(bounds, limit);
+      const enrichedItems = await this.enrichSourceSearchItems(staleCachedItems);
+      return {
+        items: enrichedItems,
+        total: enrichedItems.length,
+        page: 1,
+        pageSize: enrichedItems.length || limit,
+        bounds,
+        zoom,
+        minParcelSelectionZoom: MAP_MIN_PARCEL_SELECTION_ZOOM,
+        coverageState: "PARCEL_SELECTION_AVAILABLE",
+        activeRegion,
+      };
+    }
+
     try {
       const items = await this.sourceParcelProviders.searchByBounds(bounds, limit);
       await this.sourceParcelCache.upsertMany(items);
@@ -551,22 +568,18 @@ export class ParcelsService {
         activeRegion,
       };
     } catch (error) {
-      const staleCachedItems = await this.sourceParcelCache.getAnyByBounds(activeRegion.id, bounds, limit);
-      if (staleCachedItems.length) {
-        const enrichedItems = await this.enrichSourceSearchItems(staleCachedItems);
-        return {
-          items: enrichedItems,
-          total: enrichedItems.length,
-          page: 1,
-          pageSize: enrichedItems.length || limit,
-          bounds,
-          zoom,
-          minParcelSelectionZoom: MAP_MIN_PARCEL_SELECTION_ZOOM,
-          coverageState: "PARCEL_SELECTION_AVAILABLE",
-          activeRegion,
-        };
-      }
       this.rethrowSourceProviderError(error, "Source parcel map previews are currently unavailable.");
+    }
+  }
+
+  private async refreshSourceMapPreviewCache(bounds: SourceParcelMapBoundsDto, limit: number) {
+    try {
+      const refreshedItems = await this.sourceParcelProviders.searchByBounds(bounds, limit);
+      if (refreshedItems.length) {
+        await this.sourceParcelCache.upsertMany(refreshedItems);
+      }
+    } catch {
+      // Keep stale cache results usable even if the upstream provider is slow or unavailable.
     }
   }
 

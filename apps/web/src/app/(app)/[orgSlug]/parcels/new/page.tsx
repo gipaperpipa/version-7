@@ -126,6 +126,11 @@ export default async function NewParcelPage({
               <div className="ops-summary-item__detail">Supported cadastral geometry appears only where the provider can actually serve it.</div>
             </div>
             <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Zoom threshold</div>
+              <div className="ops-summary-item__value">{mapConfig.minParcelSelectionZoom.toFixed(0)}+</div>
+              <div className="ops-summary-item__detail">If the map looks empty inside Hessen, zoom to parcel level before expecting clickable polygons.</div>
+            </div>
+            <div className="ops-summary-item">
               <div className="ops-summary-item__label">Elsewhere in Germany</div>
               <div className="ops-summary-item__value">Search-guided</div>
               <div className="ops-summary-item__detail">Search can move the map anywhere, but parcel-grade click selection is not implied outside supported coverage.</div>
@@ -134,6 +139,11 @@ export default async function NewParcelPage({
               <div className="ops-summary-item__label">Downstream continuity</div>
               <div className="ops-summary-item__value">Unchanged</div>
               <div className="ops-summary-item__detail">Single parcel reuse, grouped-site reuse, safe migration, and grouped-site anchor rules all stay intact.</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">First parcel load</div>
+              <div className="ops-summary-item__value">May be slower</div>
+              <div className="ops-summary-item__detail">The first request in a new supported area can take longer while the source and cache warm up. Repeat views should feel faster.</div>
             </div>
           </div>
         </SectionCard>
