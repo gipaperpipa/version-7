@@ -13,6 +13,7 @@ import type { OptimizationTarget, ScenarioReadinessDto, ScenarioRunDto } from ".
 import { toApiDate, toApiDecimal, toApiJson, toPrismaDecimal, toPrismaJson } from "../../common/prisma/api-mappers";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { RequestContextService } from "../../common/request-context/request-context.service";
+import { ProjectsService } from "../projects/projects.service";
 import { mapScenarioRunDto } from "../scenario-runs/scenario-run.mapper";
 import { scenarioRunWithResultArgs } from "../scenario-runs/scenario-run.types";
 import { ScenarioValidationService } from "./scenario-validation.service";
@@ -33,6 +34,7 @@ export class ScenariosService {
     private readonly prisma: PrismaService,
     private readonly requestContext: RequestContextService,
     private readonly scenarioValidationService: ScenarioValidationService,
+    private readonly projectsService: ProjectsService,
   ) {}
 
   async list(params: { page: number; pageSize: number }): Promise<ListScenariosResponseDto> {
@@ -58,6 +60,7 @@ export class ScenariosService {
         where: { organizationId: this.requestContext.organizationId },
         select: {
           id: true,
+          projectId: true,
           parcelId: true,
           parcelGroupId: true,
           strategyType: true,
@@ -116,10 +119,16 @@ export class ScenariosService {
   }
 
   async create(dto: CreateScenarioRequestDto): Promise<ScenarioDto> {
-    const parcelAnchor = await this.resolveScenarioParcelAnchor(dto.parcelId ?? null, dto.parcelGroupId ?? null, true);
+    const projectContext = await this.resolveScenarioProjectContext(
+      dto.projectId ?? null,
+      dto.parcelId ?? null,
+      dto.parcelGroupId ?? null,
+      true,
+    );
     const familyDefinition = this.buildScenarioFamilyDefinition(
-      parcelAnchor.parcelId ?? null,
-      parcelAnchor.parcelGroupId ?? null,
+      projectContext.projectId,
+      projectContext.parcelId,
+      projectContext.parcelGroupId,
       dto.strategyType,
       dto.optimizationTarget,
     );
@@ -142,8 +151,9 @@ export class ScenariosService {
       data: {
         organizationId: this.requestContext.organizationId,
         createdById: this.requestContext.userId,
-        parcelId: parcelAnchor.parcelId,
-        parcelGroupId: parcelAnchor.parcelGroupId,
+        projectId: projectContext.projectId,
+        parcelId: projectContext.parcelId,
+        parcelGroupId: projectContext.parcelGroupId,
         name: this.buildScenarioName(dto.name, nextFamilyVersion),
         description: dto.description ?? null,
         strategyType: dto.strategyType,
@@ -194,6 +204,7 @@ export class ScenariosService {
       where: { organizationId: this.requestContext.organizationId },
       select: {
         id: true,
+        projectId: true,
         parcelId: true,
         parcelGroupId: true,
         strategyType: true,
@@ -215,16 +226,25 @@ export class ScenariosService {
 
   async update(scenarioId: string, dto: UpdateScenarioRequestDto): Promise<ScenarioDto> {
     const existing = await this.assertScenarioAccess(scenarioId);
-    const parcelAnchor = await this.resolveScenarioParcelAnchor(
-      dto.parcelId === undefined ? undefined : dto.parcelId,
-      dto.parcelGroupId === undefined ? undefined : dto.parcelGroupId,
-      true,
-    );
-    const nextParcelId = parcelAnchor.parcelId === undefined ? existing.parcelId : parcelAnchor.parcelId;
-    const nextParcelGroupId = parcelAnchor.parcelGroupId === undefined ? existing.parcelGroupId : parcelAnchor.parcelGroupId;
+    const hasAnchorOverride = dto.projectId !== undefined || dto.parcelId !== undefined || dto.parcelGroupId !== undefined;
+    const nextProjectContext = hasAnchorOverride
+      ? await this.resolveScenarioProjectContext(
+          dto.projectId ?? null,
+          dto.parcelId === undefined ? existing.parcelId : dto.parcelId,
+          dto.parcelGroupId === undefined ? existing.parcelGroupId : dto.parcelGroupId,
+          true,
+        )
+      : {
+          projectId: existing.projectId ?? null,
+          parcelId: existing.parcelId,
+          parcelGroupId: existing.parcelGroupId,
+        };
+    const nextParcelId = nextProjectContext.parcelId;
+    const nextParcelGroupId = nextProjectContext.parcelGroupId;
     const nextStrategyType = dto.strategyType ?? existing.strategyType;
     const nextOptimizationTarget = dto.optimizationTarget ?? existing.optimizationTarget;
     const nextFamilyDefinition = this.buildScenarioFamilyDefinition(
+      nextProjectContext.projectId,
       nextParcelId ?? null,
       nextParcelGroupId ?? null,
       nextStrategyType,
@@ -248,8 +268,9 @@ export class ScenariosService {
     await this.prisma.scenario.update({
       where: { id: scenarioId },
       data: {
-        parcelId: parcelAnchor.parcelId,
-        parcelGroupId: parcelAnchor.parcelGroupId,
+        projectId: nextProjectContext.projectId,
+        parcelId: nextProjectContext.parcelId,
+        parcelGroupId: nextProjectContext.parcelGroupId,
         name: dto.name,
         description: dto.description === undefined ? undefined : dto.description,
         strategyType: dto.strategyType,
@@ -463,6 +484,7 @@ export class ScenariosService {
       },
       select: {
         id: true,
+        projectId: true,
         parcelId: true,
         parcelGroupId: true,
         strategyType: true,
@@ -478,6 +500,41 @@ export class ScenariosService {
     }
 
     return scenario;
+  }
+
+  private async resolveScenarioProjectContext(
+    projectId: string | null,
+    parcelId: string | null | undefined,
+    parcelGroupId: string | null | undefined,
+    rejectGroupedMemberWrite = false,
+  ) {
+    if (projectId) {
+      const project = await this.projectsService.getAccessibleProjectAnchor(projectId);
+      return {
+        projectId: project.id,
+        parcelId: project.anchorParcelId,
+        parcelGroupId: project.anchorParcelGroupId ?? null,
+      };
+    }
+
+    const parcelAnchor = await this.resolveScenarioParcelAnchor(parcelId, parcelGroupId, rejectGroupedMemberWrite);
+    if (!parcelAnchor.parcelId) {
+      return {
+        projectId: null,
+        parcelId: parcelAnchor.parcelId ?? null,
+        parcelGroupId: parcelAnchor.parcelGroupId ?? null,
+      };
+    }
+
+    const project = await this.projectsService.ensureProjectForAnchor(parcelAnchor.parcelId, {
+      anchorParcelGroupId: parcelAnchor.parcelGroupId ?? null,
+    });
+
+    return {
+      projectId: project.id,
+      parcelId: parcelAnchor.parcelId,
+      parcelGroupId: parcelAnchor.parcelGroupId ?? null,
+    };
   }
 
   private async resolveScenarioParcelAnchor(
@@ -562,7 +619,7 @@ export class ScenariosService {
     const assumptionSet = extractScenarioAssumptionSet(toApiJson(item.inputsJson));
     const template = getScenarioAssumptionTemplateByKey(assumptionSet?.templateKey ?? options.workspaceDefaultTemplateKey);
     const family = options.familyMetadata.get(item.id) ?? {
-      familyKey: this.buildScenarioFamilyKey(item.parcelId, item.parcelGroupId, item.strategyType, item.optimizationTarget),
+      familyKey: this.buildScenarioFamilyKey(item.projectId ?? null, item.parcelId, item.parcelGroupId, item.strategyType, item.optimizationTarget),
       familyVersion: 1,
     };
 
@@ -570,6 +627,53 @@ export class ScenariosService {
       id: item.id,
       organizationId: item.organizationId,
       createdById: item.createdById,
+      projectId: item.projectId ?? null,
+      project: item.project
+        ? {
+            id: item.project.id,
+            name: item.project.name,
+            status: item.project.status,
+            anchorParcelId: item.project.anchorParcelId,
+            anchorParcelGroupId: item.project.anchorParcelGroupId ?? null,
+            anchorParcel: {
+              id: item.project.anchorParcel.id,
+              parcelGroupId: item.project.anchorParcel.parcelGroupId ?? null,
+              isGroupSite: Boolean(item.project.anchorParcel.isGroupSite),
+              name: item.project.anchorParcel.name,
+              cadastralId: item.project.anchorParcel.cadastralId,
+              municipalityName: item.project.anchorParcel.municipalityName,
+              city: item.project.anchorParcel.city,
+              landAreaSqm: toApiDecimal(item.project.anchorParcel.landAreaSqm),
+              confidenceScore: item.project.anchorParcel.confidenceScore ?? null,
+              confidenceBand: item.project.anchorParcel.confidenceScore == null
+                ? "UNSCORED"
+                : item.project.anchorParcel.confidenceScore >= 80
+                  ? "HIGH"
+                  : item.project.anchorParcel.confidenceScore >= 60
+                    ? "MEDIUM"
+                    : "LOW",
+              sourceAuthority: (() => {
+                const provenance = toApiJson<Record<string, unknown>>(item.project.anchorParcel.provenanceJson as never);
+                const sourceAuthority = provenance && typeof provenance.sourceAuthority === "string"
+                  ? provenance.sourceAuthority
+                  : null;
+                if (sourceAuthority === "DEMO" || sourceAuthority === "SEARCH_GRADE" || sourceAuthority === "CADASTRAL_GRADE") {
+                  return sourceAuthority;
+                }
+                switch (item.project.anchorParcel.sourceType) {
+                  case "GIS_CADASTRE":
+                    return "CADASTRAL_GRADE";
+                  case "THIRD_PARTY_API":
+                    return "SEARCH_GRADE";
+                  case "IMPORT":
+                    return "DEMO";
+                  default:
+                    return null;
+                }
+              })(),
+            },
+          }
+        : null,
       parcelId: item.parcelId,
       parcelGroupId: item.parcelGroupId,
       name: item.name,
@@ -662,27 +766,30 @@ export class ScenariosService {
   }
 
   private buildScenarioFamilyDefinition(
+    projectId: string | null,
     parcelId: string | null,
     parcelGroupId: string | null,
     strategyType: CreateScenarioRequestDto["strategyType"],
     optimizationTarget: CreateScenarioRequestDto["optimizationTarget"],
   ) {
     return {
+      projectId,
       parcelId,
       parcelGroupId,
       strategyType,
       optimizationTarget,
-      familyKey: this.buildScenarioFamilyKey(parcelId, parcelGroupId, strategyType, optimizationTarget),
+      familyKey: this.buildScenarioFamilyKey(projectId, parcelId, parcelGroupId, strategyType, optimizationTarget),
     };
   }
 
   private buildScenarioFamilyKey(
+    projectId: string | null,
     parcelId: string | null,
     parcelGroupId: string | null,
     strategyType: CreateScenarioRequestDto["strategyType"],
     optimizationTarget: CreateScenarioRequestDto["optimizationTarget"],
   ) {
-    const anchorKey = parcelGroupId ?? parcelId ?? "unlinked";
+    const anchorKey = projectId ?? parcelGroupId ?? parcelId ?? "unlinked";
     return `${anchorKey}::${strategyType}::${optimizationTarget}`;
   }
 
@@ -690,6 +797,7 @@ export class ScenariosService {
     return this.prisma.scenario.findMany({
       where: {
         organizationId: this.requestContext.organizationId,
+        projectId: family.projectId,
         parcelId: family.parcelId,
         parcelGroupId: family.parcelGroupId,
         strategyType: family.strategyType,
@@ -712,6 +820,7 @@ export class ScenariosService {
     await this.prisma.scenario.updateMany({
       where: {
         organizationId: this.requestContext.organizationId,
+        projectId: family.projectId,
         parcelId: family.parcelId,
         parcelGroupId: family.parcelGroupId,
         strategyType: family.strategyType,
@@ -727,6 +836,7 @@ export class ScenariosService {
   private buildFamilyMetadataMap(
     rows: Array<{
       id: string;
+      projectId: string | null;
       parcelId: string | null;
       parcelGroupId: string | null;
       strategyType: CreateScenarioRequestDto["strategyType"];
@@ -737,7 +847,7 @@ export class ScenariosService {
     const families = new Map<string, typeof rows>();
 
     for (const row of rows) {
-      const familyKey = this.buildScenarioFamilyKey(row.parcelId, row.parcelGroupId, row.strategyType, row.optimizationTarget);
+      const familyKey = this.buildScenarioFamilyKey(row.projectId, row.parcelId, row.parcelGroupId, row.strategyType, row.optimizationTarget);
       const bucket = families.get(familyKey) ?? [];
       bucket.push(row);
       families.set(familyKey, bucket);

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getParcels } from "@/lib/api/parcels";
 import { getPlanningParameters } from "@/lib/api/planning";
+import { getProjects } from "@/lib/api/projects";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { getFundingPrograms, getScenario, getScenarioAssumptionTemplates, getScenarioReadiness } from "@/lib/api/scenarios";
 import {
@@ -35,12 +36,13 @@ export default async function ScenarioBuilderPage({
 
   try {
     const scenario = await getScenario(orgSlug, scenarioId);
-    const [readiness, fundingPrograms, parcels, planningParameters, assumptionTemplates] = await Promise.all([
+    const [readiness, fundingPrograms, parcels, planningParameters, assumptionTemplates, projects] = await Promise.all([
       getScenarioReadiness(orgSlug, scenarioId),
       getFundingPrograms(orgSlug),
       getParcels(orgSlug),
       scenario.parcelId ? getPlanningParameters(orgSlug, scenario.parcelId) : Promise.resolve({ items: [], total: 0, page: 1, pageSize: 0 }),
       getScenarioAssumptionTemplates(orgSlug),
+      getProjects(orgSlug),
     ]);
 
     const updateAction = updateScenarioAction.bind(null, orgSlug, scenarioId);
@@ -86,6 +88,7 @@ export default async function ScenarioBuilderPage({
           meta={(
             <div className="action-row">
               {linkedParcel ? <span className="meta-chip">{linkedParcel.name ?? linkedParcel.cadastralId ?? "Linked parcel"}</span> : <StatusBadge tone="warning">Parcel missing</StatusBadge>}
+              {scenario.project ? <span className="meta-chip">{scenario.project.name}</span> : null}
               <span className="meta-chip">{strategyTypeLabels[scenario.strategyType]}</span>
               <span className="meta-chip">
                 {assumptionSummary.templateName ?? assumptionProfileLabels[assumptionSummary.profileKey]}
@@ -103,6 +106,11 @@ export default async function ScenarioBuilderPage({
               {scenario.parcelId ? (
                 <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/parcels/${scenario.parcelId}/planning`}>
                   Review planning
+                </Link>
+              ) : null}
+              {scenario.project ? (
+                <Link className={buttonClasses({ variant: "secondary" })} href={`/${orgSlug}/projects/${scenario.project.id}`}>
+                  Open project
                 </Link>
               ) : null}
               <Link className={buttonClasses({ variant: "ghost" })} href={`/${orgSlug}/scenarios`}>
@@ -152,9 +160,20 @@ export default async function ScenarioBuilderPage({
           <div className="content-stack">
             <div className="ops-summary-grid ops-summary-grid--builder">
               <div className="ops-summary-item">
-                <div className="ops-summary-item__label">Parcel</div>
+                <div className="ops-summary-item__label">Project</div>
+                <div className="ops-summary-item__value">{scenario.project?.name ?? "Not linked"}</div>
+                <div className="ops-summary-item__detail">
+                  {scenario.project
+                    ? scenario.project.anchorParcel.isGroupSite
+                      ? "Project anchored to grouped site."
+                      : "Project anchored to parcel."
+                    : "This case will auto-reuse a project once anchored."}
+                </div>
+              </div>
+              <div className="ops-summary-item">
+                <div className="ops-summary-item__label">Site anchor</div>
                 <div className="ops-summary-item__value">{linkedParcel?.name ?? linkedParcel?.cadastralId ?? "Not linked"}</div>
-                <div className="ops-summary-item__detail">{linkedParcel ? "Site anchor" : "Link parcel to ground the case."}</div>
+                <div className="ops-summary-item__detail">{linkedParcel ? "Land anchor for source truth and planning continuity." : "Link parcel to ground the case."}</div>
               </div>
               <div className="ops-summary-item">
                 <div className="ops-summary-item__label">Strategy</div>
@@ -240,9 +259,11 @@ export default async function ScenarioBuilderPage({
           <ScenarioEditorForm
             action={updateAction}
             parcels={parcels.items}
+            projects={projects.items}
             templates={assumptionTemplates.items}
             workspaceDefaultTemplateKey={assumptionTemplates.workspaceDefaultTemplateKey}
             initialScenario={scenario}
+            initialProjectId={scenario.projectId}
             submitLabel="Save scenario"
             mode="builder"
           />

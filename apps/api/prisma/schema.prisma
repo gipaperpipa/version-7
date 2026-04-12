@@ -62,6 +62,12 @@ enum ScenarioGovernanceStatus {
   ARCHIVED
 }
 
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  ARCHIVED
+}
+
 enum ScenarioRunStatus {
   QUEUED
   RUNNING
@@ -133,6 +139,7 @@ model Organization {
   memberships OrganizationMembership[]
   parcels     Parcel[]
   parcelGroups ParcelGroup[]
+  projects    Project[]
   planningParameters PlanningParameter[]
   scenarios   Scenario[]
   runs        ScenarioRun[]
@@ -177,6 +184,7 @@ model Parcel {
   organization     Organization        @relation(fields: [organizationId], references: [id])
   parcelGroup      ParcelGroup?        @relation("ParcelGroupMembers", fields: [parcelGroupId], references: [id])
   siteParcelForGroup ParcelGroup?      @relation("ParcelGroupSiteParcel")
+  anchoredProjects Project[]           @relation("ProjectAnchorParcel")
   planningParameters PlanningParameter[]
   scenarios        Scenario[]
 }
@@ -201,6 +209,25 @@ model ParcelGroup {
   parcels           Parcel[]     @relation("ParcelGroupMembers")
   planningParameters PlanningParameter[]
   scenarios         Scenario[]
+}
+
+model Project {
+  id                 String        @id @default(uuid())
+  organizationId     String
+  anchorParcelId     String
+  anchorParcelGroupId String?
+  name               String
+  description        String?
+  status             ProjectStatus @default(ACTIVE)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  organization       Organization  @relation(fields: [organizationId], references: [id])
+  anchorParcel       Parcel        @relation("ProjectAnchorParcel", fields: [anchorParcelId], references: [id])
+  scenarios          Scenario[]
+
+  @@unique([organizationId, anchorParcelId])
+  @@index([organizationId, status])
+  @@index([organizationId, anchorParcelGroupId])
 }
 
 model SourceParcelCache {
@@ -293,6 +320,7 @@ model Scenario {
   id                        String                   @id @default(uuid())
   organizationId            String
   createdById               String
+  projectId                 String?
   parcelId                  String?
   parcelGroupId             String?
   name                      String
@@ -320,6 +348,7 @@ model Scenario {
   updatedAt                 DateTime                 @updatedAt
   organization              Organization             @relation(fields: [organizationId], references: [id])
   createdBy                 User                     @relation(fields: [createdById], references: [id])
+  project                   Project?                 @relation(fields: [projectId], references: [id])
   parcel                    Parcel?                  @relation(fields: [parcelId], references: [id])
   parcelGroup               ParcelGroup?             @relation(fields: [parcelGroupId], references: [id])
   fundingVariants           ScenarioFundingVariant[]

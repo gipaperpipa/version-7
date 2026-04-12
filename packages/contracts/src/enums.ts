@@ -84,6 +84,14 @@ export const ScenarioGovernanceStatus = {
 export type ScenarioGovernanceStatus =
   (typeof ScenarioGovernanceStatus)[keyof typeof ScenarioGovernanceStatus];
 
+export const ProjectStatus = {
+  ACTIVE: "ACTIVE",
+  ON_HOLD: "ON_HOLD",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type ProjectStatus =
+  (typeof ProjectStatus)[keyof typeof ProjectStatus];
+
 export const ScenarioRunStatus = {
   QUEUED: "QUEUED",
   RUNNING: "RUNNING",

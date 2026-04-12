@@ -5,12 +5,14 @@ import type {
   AssumptionTemplateScope,
   FinancingSourceType,
   OptimizationTarget,
+  ProjectStatus,
   ScenarioGovernanceStatus,
   ScenarioReadinessStatus,
   ScenarioStatus,
   StrategyType,
 } from "./enums";
 import type { ScenarioRunDto } from "./feasibility";
+import type { ProjectAnchorParcelDto } from "./projects";
 import type { ScenarioReadinessDto } from "./readiness";
 
 export interface ScenarioFundingVariantDto {
@@ -92,10 +94,21 @@ export interface ScenarioReadinessSnapshotDto {
   warningCount: number;
 }
 
+export interface ScenarioProjectSummaryDto {
+  id: Id;
+  name: string;
+  status: ProjectStatus;
+  anchorParcelId: Id;
+  anchorParcelGroupId: Id | null;
+  anchorParcel: ProjectAnchorParcelDto;
+}
+
 export interface ScenarioDto {
   id: Id;
   organizationId: Id;
   createdById: Id;
+  projectId: Id | null;
+  project: ScenarioProjectSummaryDto | null;
   parcelId: Id | null;
   parcelGroupId: Id | null;
   name: string;
@@ -131,6 +144,7 @@ export interface ScenarioDto {
 }
 
 export interface CreateScenarioRequestDto {
+  projectId?: Id | null;
   parcelId?: Id | null;
   parcelGroupId?: Id | null;
   name: string;

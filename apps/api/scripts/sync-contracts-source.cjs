@@ -13,6 +13,7 @@ const files = [
   "parcels.ts",
   "planning-keys.ts",
   "planning.ts",
+  "projects.ts",
   "readiness.ts",
   "scenarios.ts",
 ];

@@ -14,6 +14,8 @@ import { SourceParcelCacheService } from "./modules/parcels/source-parcel-cache.
 import { SourceParcelProviderRegistryService } from "./modules/parcels/source-parcel-provider-registry.service";
 import { PlanningParametersController } from "./modules/planning-parameters/planning-parameters.controller";
 import { PlanningParametersService } from "./modules/planning-parameters/planning-parameters.service";
+import { ProjectsController } from "./modules/projects/projects.controller";
+import { ProjectsService } from "./modules/projects/projects.service";
 import { ScenarioRunsController } from "./modules/scenario-runs/scenario-runs.controller";
 import { ScenarioRunsProcessor } from "./modules/scenario-runs/scenario-runs.processor";
 import { ScenarioRunsService } from "./modules/scenario-runs/scenario-runs.service";
@@ -48,6 +50,7 @@ const bullProviders = bullDisabled ? [] : [ScenarioRunsService, ScenarioRunsProc
   controllers: [
     HealthController,
     ParcelsController,
+    ProjectsController,
     PlanningParametersController,
     FundingProgramsController,
     ScenariosController,
@@ -55,6 +58,7 @@ const bullProviders = bullDisabled ? [] : [ScenarioRunsService, ScenarioRunsProc
   ],
   providers: [
     ParcelsService,
+    ProjectsService,
     PlanningParametersService,
     FundingProgramsService,
     ScenariosService,

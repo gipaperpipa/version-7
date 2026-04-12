@@ -7,6 +7,7 @@ import {
   ScenarioGovernanceStatus,
   StrategyType,
   type ParcelDto,
+  type ProjectDto,
   type ScenarioAssumptionTemplateDto,
   type ScenarioDto,
 } from "@repo/contracts";
@@ -97,6 +98,13 @@ function getParcelSelectionLabel(parcel: ParcelDto) {
   return `${base} / ${authorityLabel ?? "source-backed"}`;
 }
 
+function getProjectSelectionLabel(project: ProjectDto) {
+  const anchorLabel = project.anchorParcel.name ?? project.anchorParcel.cadastralId ?? project.anchorParcel.id;
+  const anchorKind = project.anchorParcel.isGroupSite ? "grouped-site anchor" : "parcel anchor";
+  const location = project.anchorParcel.municipalityName ?? project.anchorParcel.city ?? "location pending";
+  return `${project.name} / ${anchorKind} / ${anchorLabel} / ${location}`;
+}
+
 function getParcelSelectionRank(parcel: ParcelDto) {
   if (parcel.isGroupSite) return 0;
   if (parcel.provenance?.sourceAuthority === "CADASTRAL_GRADE") return 1;
@@ -136,11 +144,12 @@ function getDefaultTemplate(
 }
 
 function getSuggestedScenarioName(
+  project: ProjectDto | null,
   parcel: ParcelDto | null,
   strategyType: StrategyType,
   templateName: string,
 ) {
-  const siteLabel = parcel?.name ?? parcel?.cadastralId ?? "Selected site";
+  const siteLabel = project?.name ?? parcel?.name ?? parcel?.cadastralId ?? "Selected site";
   const strategyLabel = strategyTypeLabels[strategyType];
   return `${siteLabel} / ${strategyLabel} / ${templateName}`;
 }
@@ -148,23 +157,28 @@ function getSuggestedScenarioName(
 export function ScenarioEditorForm({
   action,
   parcels,
+  projects,
   templates,
   workspaceDefaultTemplateKey,
   initialScenario,
   initialParcelId,
+  initialProjectId,
   submitLabel,
   mode = initialScenario ? "builder" : "create",
 }: {
   action: (formData: FormData) => void | Promise<void>;
   parcels: ParcelDto[];
+  projects: ProjectDto[];
   templates: ScenarioAssumptionTemplateDto[];
   workspaceDefaultTemplateKey?: string | null;
   initialScenario?: ScenarioDto;
   initialParcelId?: string | null;
+  initialProjectId?: string | null;
   submitLabel: string;
   mode?: FormMode;
 }) {
   const initialStrategy = initialScenario?.strategyType ?? StrategyType.FREE_MARKET_RENTAL;
+  const initialSelectedProjectId = initialScenario?.projectId ?? initialProjectId ?? "";
   const initialSelectedParcelId = useMemo(() => {
     const requestedParcelId = initialScenario?.parcelId ?? initialParcelId ?? "";
     if (!requestedParcelId) return "";
@@ -175,6 +189,7 @@ export function ScenarioEditorForm({
   const initialAssumptionSet = initialScenario?.assumptionSet ?? null;
   const defaultTemplate = getDefaultTemplate(templates, workspaceDefaultTemplateKey, initialScenario);
   const [strategyType, setStrategyType] = useState<StrategyType>(initialStrategy);
+  const [selectedProjectId, setSelectedProjectId] = useState(initialSelectedProjectId);
   const [selectedParcelId, setSelectedParcelId] = useState(initialSelectedParcelId);
   const [governanceStatus, setGovernanceStatus] = useState<ScenarioGovernanceStatus>(
     initialScenario?.governanceStatus ?? ScenarioGovernanceStatus.DRAFT,
@@ -186,9 +201,13 @@ export function ScenarioEditorForm({
     () => parcels.filter((parcel) => parcel.isGroupSite || !parcel.parcelGroupId),
     [parcels],
   );
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId) ?? null,
+    [projects, selectedProjectId],
+  );
   const selectedParcel = useMemo(
-    () => selectableParcels.find((parcel) => parcel.id === selectedParcelId) ?? null,
-    [selectableParcels, selectedParcelId],
+    () => selectableParcels.find((parcel) => parcel.id === (selectedProject?.anchorParcelId ?? selectedParcelId)) ?? null,
+    [selectableParcels, selectedParcelId, selectedProject],
   );
   const [selectedTemplateKey, setSelectedTemplateKey] = useState(defaultTemplate?.key ?? "");
   const sortedParcels = useMemo(
@@ -210,8 +229,8 @@ export function ScenarioEditorForm({
   const assumptionProfileKey = selectedTemplate?.profileKey ?? initialAssumptionSet?.profileKey ?? "BASELINE";
   const [nameEdited, setNameEdited] = useState(Boolean(initialScenario?.name));
   const suggestedScenarioName = useMemo(
-    () => getSuggestedScenarioName(selectedParcel, strategyType, selectedTemplateName),
-    [selectedParcel, strategyType, selectedTemplateName],
+    () => getSuggestedScenarioName(selectedProject, selectedParcel, strategyType, selectedTemplateName),
+    [selectedParcel, selectedProject, strategyType, selectedTemplateName],
   );
   const [nameValue, setNameValue] = useState(initialScenario?.name ?? suggestedScenarioName);
   useEffect(() => {
@@ -219,6 +238,11 @@ export function ScenarioEditorForm({
       setNameValue(suggestedScenarioName);
     }
   }, [nameEdited, suggestedScenarioName]);
+  useEffect(() => {
+    if (selectedProject?.anchorParcelId && selectedProject.anchorParcelId !== selectedParcelId) {
+      setSelectedParcelId(selectedProject.anchorParcelId);
+    }
+  }, [selectedParcelId, selectedProject]);
   useEffect(() => {
     if (governanceStatus !== ScenarioGovernanceStatus.ACTIVE_CANDIDATE) {
       setIsCurrentBest(false);
@@ -231,6 +255,11 @@ export function ScenarioEditorForm({
         ? "Manual fallback"
         : "Source-backed"
     : "Select parcel";
+  const selectedProjectSignal = selectedProject
+    ? selectedProject.anchorParcel.isGroupSite
+      ? "Project / grouped-site anchor"
+      : "Project / parcel anchor"
+    : "No project selected";
   const selectedTemplateIsWorkspaceDefault = selectedTemplate?.key === workspaceDefaultTemplateKey;
 
   const revenueFields: FieldConfig[] = [
@@ -461,14 +490,43 @@ export function ScenarioEditorForm({
 
             <div className="field-stack">
               <div className="field-row">
+                <Label htmlFor="projectId">Project</Label>
+                <FieldTag requiredNow={false} />
+              </div>
+              <select
+                id="projectId"
+                name="projectId"
+                value={selectedProjectId}
+                onChange={(event) => setSelectedProjectId(event.target.value)}
+                className="ui-select"
+              >
+                <option value="">No existing project selected</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {getProjectSelectionLabel(project)}
+                  </option>
+                ))}
+              </select>
+              <input type="hidden" name="selectedProjectLabel" value={selectedProject?.name ?? ""} />
+              <div className="field-help">
+                Projects are the higher-level business object. If you leave this blank, the app will create or reuse a project from the selected parcel/site anchor automatically.
+              </div>
+            </div>
+
+            <div className="field-stack">
+              <div className="field-row">
                 <Label htmlFor="parcelId">Linked site</Label>
                 <FieldTag requiredNow />
               </div>
               <select
                 id="parcelId"
                 name="parcelId"
-                defaultValue={initialSelectedParcelId}
-                onChange={(event) => setSelectedParcelId(event.target.value)}
+                value={selectedProject?.anchorParcelId ?? selectedParcelId}
+                disabled={Boolean(selectedProject)}
+                onChange={(event) => {
+                  setSelectedProjectId("");
+                  setSelectedParcelId(event.target.value);
+                }}
                 className="ui-select"
               >
                 <option value="">Select parcel or grouped site</option>
@@ -480,7 +538,11 @@ export function ScenarioEditorForm({
               </select>
               <input type="hidden" name="parcelGroupId" value={selectedParcel?.parcelGroupId ?? initialScenario?.parcelGroupId ?? ""} />
               <input type="hidden" name="selectedParcelLabel" value={selectedParcel?.name ?? selectedParcel?.cadastralId ?? ""} />
-              <div className="field-help">Grouped sites and source-backed parcels are listed first so the case stays tied to sourced site identity before feasibility work begins.</div>
+              <div className="field-help">
+                {selectedProject
+                  ? "This site anchor is locked to the selected project."
+                  : "Grouped sites and source-backed parcels are listed first so the case stays tied to sourced site identity before feasibility work begins."}
+              </div>
             </div>
 
             <div className="field-stack">
@@ -576,13 +638,14 @@ export function ScenarioEditorForm({
                 <FieldTag requiredNow={false} />
               </div>
               <div className="chip-row">
+                <Badge variant={selectedProject ? "accent" : "surface"}>{selectedProjectSignal}</Badge>
                 <Badge variant={selectedParcel?.isGroupSite ? "accent" : "surface"}>{selectedParcelSignal}</Badge>
                 <Badge variant="surface">{strategyTypeLabels[strategyType]}</Badge>
                 {initialScenario?.familyVersion ? <Badge variant="surface">v{initialScenario.familyVersion}</Badge> : null}
                 {initialScenario?.isCurrentBest ? <Badge variant="accent">Current lead</Badge> : null}
               </div>
               <div className="field-help">
-                Families group scenarios by site anchor, strategy, and decision target so variants stay understandable as the workspace grows.
+                Families group scenarios by project, strategy, and decision target so variants stay understandable as the workspace grows.
               </div>
             </div>
           </div>

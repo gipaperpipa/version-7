@@ -12,6 +12,11 @@ export type ScenarioWithFunding = Prisma.ScenarioGetPayload<typeof scenarioWithF
 
 export const scenarioForValidationArgs = Prisma.validator<Prisma.ScenarioDefaultArgs>()({
   include: {
+    project: {
+      include: {
+        anchorParcel: true,
+      },
+    },
     parcel: {
       include: {
         planningParameters: true,

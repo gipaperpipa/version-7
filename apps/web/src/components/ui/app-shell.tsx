@@ -9,10 +9,11 @@ import { buttonClasses } from "./button";
 import { WorkflowSteps } from "./workflow-steps";
 
 function getActiveStep(pathname: string) {
-  if (pathname.includes("/results/")) return 5;
-  if (pathname.includes("/builder")) return 4;
-  if (pathname.includes("/scenarios")) return 3;
-  if (pathname.includes("/planning")) return 2;
+  if (pathname.includes("/results/")) return 6;
+  if (pathname.includes("/builder")) return 5;
+  if (pathname.includes("/scenarios")) return 4;
+  if (pathname.includes("/planning")) return 3;
+  if (pathname.includes("/projects")) return 2;
   if (pathname.includes("/parcels")) return 1;
   return 1;
 }
@@ -29,6 +30,11 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
       href: `/${orgSlug}/parcels`,
     },
     {
+      title: "Projects",
+      description: "Business object above site anchors.",
+      href: `/${orgSlug}/projects`,
+    },
+    {
       title: "Scenarios",
       description: "Strategy, funding, verdicts.",
       href: `/${orgSlug}/scenarios`,
@@ -37,7 +43,8 @@ export function AppShell({ children, orgSlug }: { children: ReactNode; orgSlug: 
 
   const steps = [
     { label: "Parcel intake", description: "Ground the case in a site record.", href: `/${orgSlug}/parcels` },
-    { label: "Planning inputs", description: "Interpret buildability for the parcel.", href: `/${orgSlug}/parcels` },
+    { label: "Project anchor", description: "Separate project from parcel identity.", href: `/${orgSlug}/projects` },
+    { label: "Planning inputs", description: "Interpret buildability for the anchor site.", href: `/${orgSlug}/parcels` },
     { label: "Scenario setup", description: "Frame the case and assumptions.", href: `/${orgSlug}/scenarios` },
     { label: "Readiness and run", description: "Resolve blockers and launch.", href: `/${orgSlug}/scenarios` },
     { label: "Decision result", description: "Review verdict, KPIs, and next move.", href: `/${orgSlug}/scenarios` },

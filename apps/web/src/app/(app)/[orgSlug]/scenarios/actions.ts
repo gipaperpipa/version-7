@@ -55,8 +55,9 @@ function humanizeToken(value: string) {
 }
 
 function generateScenarioName(formData: FormData) {
+  const selectedProjectLabel = optionalString(formData, "selectedProjectLabel");
   const selectedParcelLabel = optionalString(formData, "selectedParcelLabel");
-  const siteLabel = selectedParcelLabel?.split(" / ")[0] ?? "Selected site";
+  const siteLabel = selectedProjectLabel ?? selectedParcelLabel?.split(" / ")[0] ?? "Selected site";
   const strategyLabel = humanizeToken(String(formData.get("strategyType") ?? StrategyType.FREE_MARKET_RENTAL));
   const templateLabel = optionalString(formData, "assumptionTemplateName")
     ?? humanizeToken(String(formData.get("assumptionProfileKey") ?? AssumptionProfileKey.BASELINE));
@@ -120,6 +121,7 @@ function safeParseOptionalJsonField(formData: FormData, key: string) {
 function buildScenarioPayload(formData: FormData, strategyMixJson: Record<string, unknown> | null): CreateScenarioRequestDto {
   const generatedName = generateScenarioName(formData);
   return {
+    projectId: optionalString(formData, "projectId"),
     parcelId: optionalString(formData, "parcelId"),
     parcelGroupId: optionalString(formData, "parcelGroupId"),
     name: optionalString(formData, "name") ?? generatedName,
@@ -172,9 +174,10 @@ function buildErrorRedirect(pathname: string, code: string, message?: string, ex
 export async function createScenarioAction(orgSlug: string, formData: FormData) {
   const parsedMix = safeParseOptionalJsonField(formData, "strategyMixJson");
   const parcelId = optionalString(formData, "parcelId");
+  const projectId = optionalString(formData, "projectId");
 
   if (!parsedMix.ok) {
-    redirect(`/${orgSlug}/scenarios/new?error=invalid-strategy-mix-json${parcelId ? `&parcelId=${parcelId}` : ""}`);
+    redirect(`/${orgSlug}/scenarios/new?error=invalid-strategy-mix-json${projectId ? `&projectId=${projectId}` : parcelId ? `&parcelId=${parcelId}` : ""}`);
   }
 
   try {
@@ -187,7 +190,7 @@ export async function createScenarioAction(orgSlug: string, formData: FormData) 
     redirect(`/${orgSlug}/scenarios/${scenario.id}/builder`);
   } catch (error) {
     if (isApiResponseError(error) || isApiUnavailableError(error)) {
-      redirect(buildErrorRedirect(`/${orgSlug}/scenarios/new`, "create-request-failed", error.message, { parcelId }));
+      redirect(buildErrorRedirect(`/${orgSlug}/scenarios/new`, "create-request-failed", error.message, { parcelId, projectId }));
     }
 
     throw error;

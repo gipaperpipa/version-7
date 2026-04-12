@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { type ParcelDto, type PlanningParameterDto, type ScenarioDto } from "@repo/contracts";
+import { type ParcelDto, type PlanningParameterDto, type ProjectDto, type ScenarioDto } from "@repo/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ApiUnreachableState } from "@/components/ui/api-unreachable-state";
 import { buttonClasses } from "@/components/ui/button";
@@ -10,11 +10,13 @@ import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { getParcels } from "@/lib/api/parcels";
+import { getProjects } from "@/lib/api/projects";
 import { getPlanningParameters } from "@/lib/api/planning";
 import { getScenarios } from "@/lib/api/scenarios";
 import { buildParcelCompletenessSummary } from "@/lib/ui/parcel-completeness";
 import { getSourceAuthorityLabel } from "@/lib/ui/provenance";
 import { createGroupedSiteFromWorkspaceAction } from "./actions";
+import { createProjectFromParcelAction } from "../projects/actions";
 
 function hasStoredPlanningValue(item: PlanningParameterDto) {
   return item.valueNumber !== null || item.valueBoolean !== null || item.geom !== null;
@@ -62,11 +64,13 @@ function ParcelRow({
   parcel,
   planningItems,
   linkedScenarios,
+  project,
 }: {
   orgSlug: string;
   parcel: ParcelDto;
   planningItems: PlanningParameterDto[];
   linkedScenarios: ScenarioDto[];
+  project: ProjectDto | null;
 }) {
   const summary = buildParcelCompletenessSummary({
     parcel,
@@ -97,6 +101,7 @@ function ParcelRow({
             <span className="list-row__title-text">{parcel.name ?? parcel.cadastralId ?? "Untitled parcel"}</span>
             <StatusBadge tone={summary.sourceStatus.tone}>{sourceBadge}</StatusBadge>
             {linkedScenarios.length ? <StatusBadge tone="accent">{linkedScenarios.length} scenario(s)</StatusBadge> : null}
+            {project ? <StatusBadge tone="info">Project attached</StatusBadge> : null}
           </div>
           <div className="inline-meta">
             <span className="meta-chip">{parcelReference}</span>
@@ -160,6 +165,18 @@ function ParcelRow({
           <StatusBadge tone={summary.nextBestAction.tone}>{summary.nextBestAction.label}</StatusBadge>
         </div>
         <div className="action-row action-row--compact">
+          {project ? (
+            <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/projects/${project.id}`}>
+              Project
+            </Link>
+          ) : (
+            <form action={createProjectFromParcelAction.bind(null, orgSlug)}>
+              <input type="hidden" name="parcelId" value={parcel.id} />
+              <button className={buttonClasses({ variant: "secondary", size: "sm" })} type="submit">
+                Create project
+              </button>
+            </form>
+          )}
           <Link className={buttonClasses({ variant: "ghost", size: "sm" })} href={`/${orgSlug}/parcels/${parcel.id}`}>
             Site
           </Link>
@@ -186,7 +203,7 @@ export default async function ParcelsPage({
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
   try {
-    const [parcels, scenarios] = await Promise.all([getParcels(orgSlug), getScenarios(orgSlug)]);
+    const [parcels, scenarios, projects] = await Promise.all([getParcels(orgSlug), getScenarios(orgSlug), getProjects(orgSlug)]);
     const planningEntries = await Promise.all(
       parcels.items.map(async (parcel) => ({
         parcelId: parcel.id,
@@ -209,6 +226,7 @@ export default async function ParcelsPage({
       return parcel.provenance?.trustMode === "SOURCE_PRIMARY" || parcel.provenance?.trustMode === "SOURCE_INCOMPLETE";
     }).length;
     const groupedSiteCount = parcels.items.filter((parcel) => parcel.isGroupSite || parcel.provenance?.trustMode === "GROUP_DERIVED").length;
+    const projectCount = projects.items.length;
     const planningStartedCount = parcels.items.filter((parcel) => {
       return (planningByParcel.get(parcel.id) ?? []).some(hasStoredPlanningValue);
     }).length;
@@ -219,6 +237,7 @@ export default async function ParcelsPage({
       hasDownstreamContinuity(planningByParcel.get(parcel.id) ?? [], scenariosByParcel.get(parcel.id) ?? [])).length;
     const directReuseCandidateCount = sourceStandaloneCandidates.length - safeMigrationCandidateCount;
     const groupedSiteAction = createGroupedSiteFromWorkspaceAction.bind(null, orgSlug);
+    const projectByAnchorParcelId = new Map(projects.items.map((project) => [project.anchorParcelId, project]));
 
     return (
       <div className="workspace-page content-stack">
@@ -231,6 +250,7 @@ export default async function ParcelsPage({
               <span className="meta-chip">{parcels.total} top-level sites</span>
               <span className="meta-chip">{sourceBackedCount} source-backed</span>
               <span className="meta-chip">{groupedSiteCount} grouped sites</span>
+              <span className="meta-chip">{projectCount} projects</span>
               <span className="meta-chip">{sourceStandaloneCandidates.length} site-ready standalones</span>
               <span className="meta-chip">{planningStartedCount} planning started</span>
               <span className="meta-chip">{manualCount} fallback manual</span>
@@ -282,6 +302,13 @@ export default async function ParcelsPage({
           </Alert>
         ) : null}
 
+        {resolvedSearchParams?.error === "project-create-failed" ? (
+          <Alert tone="danger">
+            <AlertTitle>Project creation failed</AlertTitle>
+            <AlertDescription>{resolvedSearchParams.message ?? "The project could not be created or reused for that parcel/site anchor."}</AlertDescription>
+          </Alert>
+        ) : null}
+
         <SectionCard
           className="summary-band summary-band--ledger"
           eyebrow="Operating summary"
@@ -305,6 +332,11 @@ export default async function ParcelsPage({
               <div className="ops-summary-item__label">Grouped sites</div>
               <div className="ops-summary-item__value">{groupedSiteCount}</div>
               <div className="ops-summary-item__detail">Multi-parcel site foundations already assembled.</div>
+            </div>
+            <div className="ops-summary-item">
+              <div className="ops-summary-item__label">Projects</div>
+              <div className="ops-summary-item__value">{projectCount}</div>
+              <div className="ops-summary-item__detail">Higher-level business objects now sit above parcel/site anchors.</div>
             </div>
             <div className="ops-summary-item">
               <div className="ops-summary-item__label">Site-ready standalones</div>
@@ -435,6 +467,7 @@ export default async function ParcelsPage({
                   parcel={parcel}
                   planningItems={planningByParcel.get(parcel.id) ?? []}
                   linkedScenarios={scenariosByParcel.get(parcel.id) ?? []}
+                  project={projectByAnchorParcelId.get(parcel.id) ?? null}
                 />
               ))}
             </div>
@@ -480,6 +513,7 @@ export default async function ParcelsPage({
                   parcel={parcel}
                   planningItems={planningByParcel.get(parcel.id) ?? []}
                   linkedScenarios={scenariosByParcel.get(parcel.id) ?? []}
+                  project={projectByAnchorParcelId.get(parcel.id) ?? null}
                 />
               ))}
             </div>

@@ -12,6 +12,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ScenarioEditorForm } from "@/components/scenarios/scenario-editor-form";
 import { isApiUnavailableError } from "@/lib/api/errors";
 import { getParcels } from "@/lib/api/parcels";
+import { getProjects } from "@/lib/api/projects";
 import { getScenarioAssumptionTemplates } from "@/lib/api/scenarios";
 import { createScenarioAction } from "../actions";
 
@@ -34,22 +35,30 @@ export default async function NewScenarioPage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string }>;
-  searchParams?: Promise<{ error?: string; parcelId?: string; message?: string }>;
+  searchParams?: Promise<{ error?: string; parcelId?: string; projectId?: string; message?: string }>;
 }) {
   const { orgSlug } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
   try {
-    const [parcels, assumptionTemplates] = await Promise.all([
+    const [parcels, projects, assumptionTemplates] = await Promise.all([
       getParcels(orgSlug),
+      getProjects(orgSlug),
       getScenarioAssumptionTemplates(orgSlug),
     ]);
     const action = createScenarioAction.bind(null, orgSlug);
+    const defaultProject = !resolvedSearchParams?.projectId && !resolvedSearchParams?.parcelId && projects.items.length === 1
+      ? projects.items[0]
+      : null;
+    const effectiveProjectId = resolvedSearchParams?.projectId ?? defaultProject?.id ?? null;
+    const selectedProject = effectiveProjectId
+      ? projects.items.find((project) => project.id === effectiveProjectId) ?? null
+      : null;
     const groupedSites = parcels.items
       .filter((parcel) => isGroupedSite(parcel))
       .sort((left, right) => getParcelLabel(left).localeCompare(getParcelLabel(right)));
-    const defaultGroupedSite = !resolvedSearchParams?.parcelId && groupedSites.length === 1 ? groupedSites[0] : null;
-    const effectiveParcelId = resolvedSearchParams?.parcelId ?? defaultGroupedSite?.id ?? null;
+    const defaultGroupedSite = !resolvedSearchParams?.projectId && !resolvedSearchParams?.parcelId && !defaultProject && groupedSites.length === 1 ? groupedSites[0] : null;
+    const effectiveParcelId = selectedProject?.anchorParcelId ?? resolvedSearchParams?.parcelId ?? defaultGroupedSite?.id ?? null;
     const requestedParcel = effectiveParcelId
       ? parcels.items.find((parcel) => parcel.id === effectiveParcelId) ?? null
       : null;
@@ -61,25 +70,32 @@ export default async function NewScenarioPage({
     }).length;
     const groupedSiteCount = parcels.items.filter((parcel) => parcel.isGroupSite || parcel.provenance?.trustMode === "GROUP_DERIVED").length;
     const manualFallbackCount = parcels.items.filter((parcel) => parcel.provenance?.trustMode === "MANUAL_FALLBACK").length;
+    const projectCount = projects.items.length;
+    const projectSelectionMessage = defaultProject
+      ? `${defaultProject.name} was preselected because projects are now the higher-level working object above parcel/site anchors.`
+      : null;
     const groupedSiteSelectionMessage = defaultGroupedSite
       ? `${getParcelLabel(defaultGroupedSite)} was preselected because grouped sites are the primary downstream scenario anchor once parcel assembly is complete.`
       : null;
     const selectedParcelMessage = selectedParcel
-      ? selectedParcel.isGroupSite
+      ? selectedProject
+        ? `${selectedProject.name} is anchored to ${selectedParcel.name ?? selectedParcel.cadastralId ?? "this site"} and will carry its own project identity into the scenario workspace.`
+        : selectedParcel.isGroupSite
         ? `${selectedParcel.name ?? selectedParcel.cadastralId ?? "This grouped site"} already aggregates ${selectedParcel.parcelGroup?.memberCount ?? selectedParcel.constituentParcels.length} sourced parcels and is ready to carry into case setup.`
         : selectedParcel.provenance?.trustMode === "MANUAL_FALLBACK"
           ? `${selectedParcel.name ?? selectedParcel.cadastralId ?? "This parcel"} remains usable for scenario work, but source-backed parcel identity should stay the default path when available.`
           : `${selectedParcel.name ?? selectedParcel.cadastralId ?? "This parcel"} will carry straight into funding, readiness, and run.`
-      : "Choose the parcel or grouped site you want to test, save the case, then continue in the builder.";
+      : "Choose the project or parcel/site anchor you want to test, save the case, then continue in the builder.";
 
     return (
       <div className="workspace-page content-stack">
         <PageHeader
           eyebrow="Scenario studio"
           title="Create a scenario"
-          description="Open a parcel-linked case from a sourced parcel or grouped site, then continue in the builder."
+          description="Open a project-linked case from a sourced parcel or grouped site anchor, then continue in the builder."
           meta={(
             <div className="action-row">
+              <span className="meta-chip">{projectCount} project{projectCount === 1 ? "" : "s"}</span>
               <span className="meta-chip">{parcels.total} parcel option{parcels.total === 1 ? "" : "s"}</span>
               <span className="meta-chip">{sourceBackedCount} source-backed</span>
               <span className="meta-chip">{groupedSiteCount} grouped sites</span>
@@ -114,6 +130,13 @@ export default async function NewScenarioPage({
           </Alert>
         ) : null}
 
+        {projectSelectionMessage ? (
+          <Alert tone="info">
+            <AlertTitle>Project preselected</AlertTitle>
+            <AlertDescription>{projectSelectionMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+
         {!parcels.items.length ? (
           <EmptyState
             eyebrow="Parcel dependency"
@@ -136,9 +159,91 @@ export default async function NewScenarioPage({
           <div className="content-stack">
             <SectionCard
               className="index-surface index-surface--workspace"
+              eyebrow="Project workflow"
+              title="Start from a project when the site already has working context"
+              description="Projects are now the higher-level working object above parcel and grouped-site anchors. Use an existing project when repeated scenario work is already clustered there."
+            >
+              {projects.items.length ? (
+                <div className="ops-table">
+                  <div className="ops-table__header ops-table__header--parcels">
+                    <div>Project</div>
+                    <div>Anchor</div>
+                    <div>Scenario set</div>
+                    <div>Start</div>
+                  </div>
+                  {projects.items.map((project) => (
+                    <div key={project.id} className="ops-table__row ops-table__row--parcels">
+                      <div className="ops-table__cell">
+                        <div className="list-row__body">
+                          <div className="list-row__title">
+                            <span className="list-row__title-text">{project.name}</span>
+                            <StatusBadge tone={selectedProject?.id === project.id ? "accent" : "neutral"}>
+                              {selectedProject?.id === project.id ? "Selected" : project.status === "ACTIVE" ? "Active" : project.status === "ON_HOLD" ? "On hold" : "Archived"}
+                            </StatusBadge>
+                          </div>
+                          <div className="inline-meta">
+                            <span className="meta-chip">{project.anchorParcel.isGroupSite ? "Grouped-site anchor" : "Parcel anchor"}</span>
+                            <span className="meta-chip">{project.anchorParcel.landAreaSqm ?? "n/a"} sqm</span>
+                            <span className="meta-chip">{project.anchorParcel.municipalityName ?? project.anchorParcel.city ?? "Location pending"}</span>
+                          </div>
+                          <div className="list-row__meta list-row__meta--clamped">
+                            {project.description ?? "Project identity lives above the land anchor so repeated scenario work can stay organized without weakening parcel/site source truth."}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="ops-table__cell">
+                        <div className="ops-cell-stack">
+                          <div className="ops-scan__label">Site anchor</div>
+                          <div className="ops-scan__value">{project.anchorParcel.name ?? project.anchorParcel.cadastralId ?? "Unnamed anchor"}</div>
+                          <div className="ops-scan__detail">
+                            {project.anchorParcel.isGroupSite
+                              ? "Grouped-site anchor already assembled from multiple parcels."
+                              : "Single-parcel anchor ready to carry project context forward."}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="ops-table__cell">
+                        <div className="ops-cell-stack">
+                          <div className="ops-scan__label">Scenario set</div>
+                          <div className="ops-scan__value">{project.activeScenarioCount} active</div>
+                          <div className="ops-scan__detail">{project.scenarioCount} total scenario{project.scenarioCount === 1 ? "" : "s"} linked to this project.</div>
+                        </div>
+                      </div>
+
+                      <div className="ops-table__actions ops-table__actions--dense">
+                        <div className="action-row action-row--compact">
+                          <Link className={buttonClasses({ size: "sm" })} href={`/${orgSlug}/scenarios/new?projectId=${project.id}`}>
+                            Use project
+                          </Link>
+                          <Link className={buttonClasses({ variant: "secondary", size: "sm" })} href={`/${orgSlug}/projects/${project.id}`}>
+                            Review project
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  eyebrow="No projects yet"
+                  title="Projects appear once a parcel or grouped site is promoted into repeated work"
+                  description="You can still start from a grouped site or standalone parcel below. The app will create or reuse a project automatically once you open a new scenario."
+                  actions={(
+                    <Link className={buttonClasses()} href={`/${orgSlug}/parcels`}>
+                      Open parcel board
+                    </Link>
+                  )}
+                />
+              )}
+            </SectionCard>
+
+            <SectionCard
+              className="index-surface index-surface--workspace"
               eyebrow="Grouped-site workflow"
               title="Start from a development site"
-              description="Grouped sites are the intended scenario anchor once parcel assembly is complete. Pick one below or keep working from a standalone sourced parcel when a site has not been assembled yet."
+              description="Grouped sites remain the primary land anchor once parcel assembly is complete. Pair them with a project when you want a higher-level business object above the site."
             >
               {groupedSites.length ? (
                 <div className="ops-table">
@@ -234,9 +339,11 @@ export default async function NewScenarioPage({
               <ScenarioEditorForm
                 action={action}
                 parcels={parcels.items}
+                projects={projects.items}
                 templates={assumptionTemplates.items}
                 workspaceDefaultTemplateKey={assumptionTemplates.workspaceDefaultTemplateKey}
                 initialParcelId={effectiveParcelId}
+                initialProjectId={effectiveProjectId}
                 submitLabel="Create scenario"
                 mode="create"
               />

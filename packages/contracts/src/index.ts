@@ -3,6 +3,7 @@ export * from "./local-dev";
 export * from "./enums";
 export * from "./planning-keys";
 export * from "./parcels";
+export * from "./projects";
 export * from "./planning";
 export * from "./funding";
 export * from "./readiness";
