@@ -24,6 +24,7 @@ export class SourceParcelProviderError extends Error {
     public readonly code: SourceParcelProviderErrorCode,
     public readonly providerKey: string,
     message: string,
+    public readonly statusCode?: number,
     public readonly cause?: unknown,
   ) {
     super(message);

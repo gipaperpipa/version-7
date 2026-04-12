@@ -120,6 +120,7 @@ export class SourceParcelProviderRegistryService {
               "SOURCE_PROVIDER_UNAVAILABLE",
               provider.key,
               "Real source parcel provider is currently unavailable.",
+              undefined,
               error,
             );
       }
@@ -237,6 +238,7 @@ export class SourceParcelProviderRegistryService {
               "SOURCE_PROVIDER_UNAVAILABLE",
               provider.key,
               "Real source parcel provider is currently unavailable for map previews.",
+              undefined,
               error,
             );
       }

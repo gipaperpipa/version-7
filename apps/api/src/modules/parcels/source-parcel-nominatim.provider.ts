@@ -284,6 +284,7 @@ export class SourceParcelNominatimProvider implements SourceParcelProvider {
         "SOURCE_PROVIDER_UNAVAILABLE",
         this.key,
         "Real source parcel provider is currently unavailable.",
+        undefined,
         error,
       );
     } finally {

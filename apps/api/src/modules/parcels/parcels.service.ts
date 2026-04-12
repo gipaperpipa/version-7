@@ -1273,6 +1273,7 @@ export class ParcelsService {
       throw new ServiceUnavailableException({
         code: error.code,
         provider: error.providerKey,
+        upstreamStatus: error.statusCode ?? null,
         message: error.message || fallbackMessage,
       });
     }

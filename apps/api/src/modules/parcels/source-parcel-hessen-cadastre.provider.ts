@@ -330,12 +330,16 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
     return url;
   }
 
-  private buildWfsUrl(bounds: {
-    west: number;
-    south: number;
-    east: number;
-    north: number;
-  }, limit: number) {
+  private buildWfsUrl(
+    bounds: {
+      west: number;
+      south: number;
+      east: number;
+      north: number;
+    },
+    limit: number,
+    outputFormat?: string | null,
+  ) {
     const url = new URL(this.config.wfsBaseUrl);
     url.searchParams.set("service", "WFS");
     url.searchParams.set("version", "2.0.0");
@@ -344,7 +348,9 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
     url.searchParams.set("count", String(Math.max(1, Math.min(limit, 200))));
     url.searchParams.set("bbox", [bounds.west, bounds.south, bounds.east, bounds.north, "EPSG:4326"].join(","));
     url.searchParams.set("srsName", "EPSG:4326");
-    url.searchParams.set("outputFormat", "application/geo+json");
+    if (outputFormat) {
+      url.searchParams.set("outputFormat", outputFormat);
+    }
     return url;
   }
 
@@ -371,27 +377,65 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
     },
     limit: number,
   ) {
-    const url = this.buildWfsUrl(bounds, limit);
-    const payload = await this.fetchJson(url, "Hessen cadastral parcel preview is currently unavailable.");
-    if (!isFeatureCollection(payload)) {
-      throw new SourceParcelProviderError(
-        "SOURCE_PROVIDER_LOOKUP_FAILED",
-        this.key,
-        "Hessen cadastre provider returned an unexpected parcel preview payload.",
-      );
+    const candidates = [
+      {
+        outputFormat: "application/json",
+        accept: "application/json,application/geo+json",
+      },
+      {
+        outputFormat: "application/geo+json",
+        accept: "application/geo+json,application/json",
+      },
+      {
+        outputFormat: null,
+        accept: "application/json,application/geo+json,application/gml+xml;q=0.5",
+      },
+    ] as const;
+
+    let lastError: SourceParcelProviderError | null = null;
+    for (const candidate of candidates) {
+      try {
+        const payload = await this.fetchJson(
+          this.buildWfsUrl(bounds, limit, candidate.outputFormat),
+          "Hessen cadastral parcel preview is currently unavailable.",
+          candidate.accept,
+        );
+        if (!isFeatureCollection(payload)) {
+          throw new SourceParcelProviderError(
+            "SOURCE_PROVIDER_LOOKUP_FAILED",
+            this.key,
+            "Hessen cadastre provider returned an unexpected parcel preview payload.",
+          );
+        }
+
+        return payload;
+      } catch (error) {
+        if (!(error instanceof SourceParcelProviderError)) {
+          throw error;
+        }
+
+        lastError = error;
+      }
     }
 
-    return payload;
+    throw (
+      lastError
+      ?? new SourceParcelProviderError(
+        "SOURCE_PROVIDER_UNAVAILABLE",
+        this.key,
+        "Hessen cadastral parcel preview is currently unavailable.",
+      )
+    );
   }
 
-  private async fetchJson(url: URL, fallbackMessage: string) {
+  private async fetchJson(url: URL, fallbackMessage: string, accept = "application/json,application/geo+json") {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
     try {
       const response = await fetch(url, {
         headers: {
-          Accept: "application/geo+json,application/json",
+          Accept: accept,
           "User-Agent": this.config.userAgent,
         },
         signal: controller.signal,
@@ -403,6 +447,7 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
           response.status === 404 ? "SOURCE_PROVIDER_LOOKUP_FAILED" : "SOURCE_PROVIDER_UNAVAILABLE",
           this.key,
           stripMarkup(rawBody) || `Hessen cadastre provider returned ${response.status} ${response.statusText}.`,
+          response.status,
         );
       }
 
@@ -413,6 +458,7 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
           "SOURCE_PROVIDER_LOOKUP_FAILED",
           this.key,
           stripMarkup(rawBody) || "Hessen cadastre provider returned malformed JSON.",
+          response.status,
         );
       }
     } catch (error) {
@@ -424,6 +470,7 @@ export class SourceParcelHessenCadastreProvider implements SourceParcelProvider 
         "SOURCE_PROVIDER_UNAVAILABLE",
         this.key,
         fallbackMessage,
+        undefined,
         error,
       );
     } finally {
